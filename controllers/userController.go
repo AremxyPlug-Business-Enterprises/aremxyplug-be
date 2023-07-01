@@ -71,7 +71,7 @@ func SignUp() gin.HandlerFunc {
         count, err := userCollection.CountDocuments(ctx, bson.M{"email": user.Email})
         defer cancel()
         if err != nil {
-            log.Panic(err)
+            log.Print(err)
             c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for the email"})
             return
         }
