@@ -54,8 +54,8 @@ func VerifyPassword(userPassword string, providedPassword string) (bool, string)
 func SignUp() gin.HandlerFunc {
     return func(c *gin.Context) {
         var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+        defer cancel()
         var user models.User
-
         if err := c.BindJSON(&user); err != nil {
             c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
             return
@@ -67,9 +67,9 @@ func SignUp() gin.HandlerFunc {
             c.JSON(http.StatusBadRequest, gin.H{"error": validationErr.Error()})
             return
         }
-
         count, err := userCollection.CountDocuments(ctx, bson.M{"email": user.Email})
-        defer cancel()
+        fmt.Println("count results", count)
+       
         if err != nil {
             log.Print(err)
             c.JSON(http.StatusInternalServerError, gin.H{"error": "error occured while checking for the email"})
