@@ -18,11 +18,9 @@ func main() {
     }
 
     router := gin.Default()
+    router.Use(corsMiddleware())
     router.Use(gin.Logger())
     routes.UserRoutes(router)
-    router.Use(CORSMiddleware())
-    
-
     router.Use(middleware.Authentication())
 
 
@@ -52,39 +50,39 @@ func main() {
 }
 
 // corsMiddleware handles the CORS middleware
-// func corsMiddleware() gin.HandlerFunc {
-//     return func(c *gin.Context) {
-//         c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-//         c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-//         c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Authorization, Content-Type")
-//         c.Writer.Header().Set("Access-control-Allow-Redirect", "true")
-//         c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-
-//         if c.Request.Method == "OPTIONS" {
-//             c.AbortWithStatus(http.StatusNoContent)
-//             return 
-
-//         }
-//     }
-// }
-
-func CORSMiddleware() gin.HandlerFunc {
+func corsMiddleware() gin.HandlerFunc {
     return func(c *gin.Context) {
-
-        c.Header("Access-Control-Allow-Origin", "*")
-        c.Header("Access-Control-Allow-Headers", "*")
-        /*
-            c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-            c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-            c.Writer.Header().Set("Access-Control-Allow-Headers", "access-control-allow-origin, access-control-allow-headers")
-            c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, DELETE, OPTIONS, PATCH")
-        */
+        c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+        c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        c.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization", "Origin, Accept", "Content-Type", "X-Requested-With", "Access-Control-Request-Method", "Access-Control-Request-Headers")
+        c.Writer.Header().Set("Access-control-Allow-Credentials", "true")
 
         if c.Request.Method == "OPTIONS" {
             c.AbortWithStatus(204)
             return
-        }
 
+        }
         c.Next()
     }
 }
+
+// func CORSMiddleware() gin.HandlerFunc {
+//     return func(c *gin.Context) {
+
+//         c.Header("Access-Control-Allow-Origin", "*")
+//         c.Header("Access-Control-Allow-Headers", "*")
+//         /*
+//             c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+//             c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+//             c.Writer.Header().Set("Access-Control-Allow-Headers", "access-control-allow-origin, access-control-allow-headers")
+//             c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, DELETE, OPTIONS, PATCH")
+//         */
+
+//         if c.Request.Method == "OPTIONS" {
+//             c.AbortWithStatus(204)
+//             return
+//         }
+
+//         c.Next()
+//     }
+// }
