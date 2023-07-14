@@ -5,7 +5,6 @@ import (
 
 	middleware "github.com/aremxyplug-be/middleware"
 	routes "github.com/aremxyplug-be/routes"
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,11 +15,12 @@ func main() {
         port = "8000"
     }
 
-    router := gin.New()
+    router := gin.Default()
     router.Use(gin.Logger())
     routes.UserRoutes(router)
 
     router.Use(middleware.Authentication())
+    router.Use(corsMiddleware())
 
 
     // API-1
@@ -38,12 +38,19 @@ func main() {
     router.Run(":" + port)
 }
 
-// cors
-func corsConfig() gin.HandlerFunc {
-    return cors.New(cors.Config{
-        AllowOrigins:     []string{"*"},
-        AllowMethods:     []string{"PUT", "PATCH", "POST", "GET", "DELETE"},
-        AllowHeaders:     []string{"Origin", "Content-Type", "Content-Length", "Accept-Encoding", "X-CSRF-Token", "Authorization"},
-        AllowCredentials: true,
-    })
+// corsMiddleware handles the CORS middleware
+func corsMiddleware() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+        c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Authorization, Content-Type")
+
+        if c.Request.Method == "OPTIONS" {
+            c.Writer.WriteHeader(200)
+            return
+        }
+
+        c.Next()
+    }
 }
+
