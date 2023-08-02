@@ -1,19 +1,25 @@
 package dto
 
-import "go.mongodb.org/mongo-driver/bson/primitive"
-
-type SignUpResponse struct {
-	Id            primitive.ObjectID `bson:"_id"`
-	Fullname      string             `json:"fullname"`
-	Username      string             `json:"username"`
-	Email         string             `json:"email"`
-	Token         string             `json:"token"`
-	Refresh_token string             `json:"refresh_token"`
+type Claims struct {
+	PersonId string `json:"person_id"`
+	Email    string `json:"email"`
 }
 
-type LoginResponse struct {
-	Id            primitive.ObjectID `bson:"_id"`
-	Email         string             `json:"email"`
-	Token         string             `json:"token"`
-	Refresh_token string             `json:"refresh_token"`
+type LoginInput struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type TokenInput struct {
+	Token string `json:"token"`
+}
+
+type UserResponse struct {
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
+	Phone    string `json:"phone"`
+}
+
+type PasswordResetInput struct {
+	Email string `json:"email"`
 }

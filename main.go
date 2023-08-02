@@ -1,40 +1,41 @@
 package main
 
 import (
-	"os"
-
-	middleware "github.com/aremxyplug-be/middleware"
-	routes "github.com/aremxyplug-be/routes"
-	"github.com/gin-gonic/gin"
+	"context"
+	"fmt"
+	"github.com/aremxyplug-be/config"
+	"github.com/aremxyplug-be/db/mongo"
+	"github.com/aremxyplug-be/lib/emailclient/postmark"
+	zapLogger "github.com/aremxyplug-be/lib/logger"
+	httpSrv "github.com/aremxyplug-be/server/http"
+	"go.uber.org/zap"
+	"net/http"
 )
 
 func main() {
-    port := os.Getenv("PORT")
+	logger := zapLogger.New()
+	secrets := config.GetSecrets()
 
-    if port == "" {
-        port = "8000"
-    }
+	// Get data store
+	store, client, err := mongo.New(secrets.MongdbUrl, secrets.DbName, logger)
+	if err != nil {
+		logger.Fatal("failed to open mongodb", zap.Error(err))
+	}
 
-    router := gin.Default()
-    router.Use(middleware.CorsMiddleware())
-    router.Use(gin.Logger())
-    routes.UserRoutes(router)
-    router.Use(middleware.Authentication())
+	// setup email client
+	emailClient := postmark.New(secrets)
 
-
-    // API-1
-    router.GET("/api-1", func(c *gin.Context) {
-
-        c.JSON(200, gin.H{"success": "Access granted for api-1"})
-
-    })
-
-    // API-2
-    router.GET("/api-2", func(c *gin.Context) {
-        c.JSON(200, gin.H{"success": "Access granted for api-2"})
-    })
-
-    router.Run(":" + port)
+	httpRouter := httpSrv.MountServer(logger, store, secrets, emailClient)
+	// Start HTTP server
+	httpAddr := fmt.Sprintf(":%s", secrets.AppPort)
+	logger.Info(fmt.Sprintf("HTTP service running on %v.", httpAddr))
+	if err := http.ListenAndServe(httpAddr, httpRouter); err != nil {
+		logger.With(zap.Error(err)).Fatal("start http server")
+	}
+	logger.Info("closing application...")
+	if err := client.Disconnect(context.Background()); err != nil {
+		logger.Fatal("failed to disconnect from database", zap.Error(err))
+	}
 }
 
 // corsMiddleware handles the CORS middleware
