@@ -57,8 +57,14 @@ func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets
 		router.Post("/login", httpHandler.Login)
 		// password reset
 		router.Post("/password-reset", httpHandler.PasswordReset)
+
+		router.Post("/send-otp", httpHandler.SendOTP)
+
+		router.Post("/verify-otp", httpHandler.VerifyOTP)
+
 		// test
 		router.Post("/test", httpHandler.Testtoken)
+
 	})
 
 	return router

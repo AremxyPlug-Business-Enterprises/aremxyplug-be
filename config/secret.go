@@ -19,6 +19,9 @@ type Secrets struct {
 	AppPort              string `json:"PORT"`
 	PlatformEmail        string `json:"PLATFORM_EMAIL"`
 	PostmarkKey          string `json:"POSTMARK_KEY"`
+	accountsid           string `json:"TWILIO_ACCOUNT_SID"`
+	authtoken            string `json:"TWILIO_AUTH_TOKEN"`
+	ServiceID            string `json:"TWILIO_SERVICES_ID"`
 }
 
 var ss Secrets
