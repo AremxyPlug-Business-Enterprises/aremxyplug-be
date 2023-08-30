@@ -1,9 +1,11 @@
 package http
 
 import (
-	"github.com/aremxyplug-be/lib/emailclient"
-	"github.com/aremxyplug-be/server/http/handlers"
 	"net/http"
+
+	"github.com/aremxyplug-be/lib/emailclient"
+	"github.com/aremxyplug-be/lib/telcom/data"
+	"github.com/aremxyplug-be/server/http/handlers"
 
 	"github.com/aremxyplug-be/config"
 	"github.com/aremxyplug-be/db"
@@ -14,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets, emailClient emailclient.EmailClient) *chi.Mux {
+func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets, emailClient emailclient.EmailClient, dataClient *data.RestyConn) *chi.Mux {
 	router := chi.NewRouter()
 
 	// Middlewares
@@ -41,6 +43,7 @@ func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets
 		Store:       store,
 		Secrets:     secrets,
 		EmailClient: emailClient,
+		Data:        dataClient,
 	})
 
 	// Routes
@@ -64,6 +67,16 @@ func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets
 
 		// test
 		router.Post("/test", httpHandler.Testtoken)
+
+		// buy data
+		router.Post("/data", httpHandler.Data)
+		// get user's transaction history
+		router.Get("/data", httpHandler.Data)
+		// get's  details of a transaction
+		router.Get("/data/{id}", httpHandler.GetDataInfo)
+
+		// returns all transactions: to be used by admins
+		router.Get("/transactions", httpHandler.GetTransactions)
 
 	})
 

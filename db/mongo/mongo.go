@@ -2,12 +2,15 @@ package mongo
 
 import (
 	"context"
+	"log"
+	"strconv"
 	"time"
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/errorvalues"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -94,4 +97,74 @@ func (d *mongoStore) CreateMessage(message *models.Message) error {
 	}
 
 	return nil
+}
+
+// SaveTransaction saves a data transaction to the database.
+func (d *mongoStore) SaveTransaction(details *models.DataResult) error {
+	ctx := context.Background()
+
+	_, err := d.mongoClient.Database(d.databaseName).Collection("data").InsertOne(ctx, details)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetTransactionDetails returns a data transaction detail.
+func (d *mongoStore) GetTransactionDetails(id string) (result models.DataResult, err error) {
+	ctx := context.Background()
+	res := models.DataResult{}
+	oID, err := strconv.Atoi(id)
+	if err != nil {
+		return models.DataResult{}, err
+	}
+
+	filter := bson.D{primitive.E{Key: "order_id", Value: oID}}
+
+	coll := d.mongoClient.Database(d.databaseName).Collection("data")
+	e := coll.FindOne(ctx, filter).Decode(&res)
+	if e != nil {
+		if e == mongo.ErrNoDocuments {
+			return models.DataResult{}, nil
+		}
+		// write for errors
+		log.Println(e)
+	}
+
+	return res, nil
+
+}
+
+// GetAllTransaction returns all the data transactions associated to a user, if an empty string is passed it returns all data transactions.
+func (d *mongoStore) GetAllTransactions(user string) ([]models.DataResult, error) {
+	ctx := context.Background()
+	res := []models.DataResult{}
+
+	var filter bson.D
+
+	if user == "" {
+		filter = bson.D{}
+	} else {
+		filter = bson.D{primitive.E{Key: "username", Value: user}}
+	}
+
+	coll := d.mongoClient.Database(d.databaseName).Collection("data")
+	cur, err := coll.Find(ctx, filter)
+	if err != nil {
+		// write for errors
+		log.Println(err)
+	}
+
+	if cur.Next(ctx) {
+		resp := models.DataResult{}
+		if err := cur.Decode(&resp); err != nil {
+			return nil, err
+		}
+		res = append(res, resp)
+	}
+	defer cur.Close(ctx)
+
+	return res, nil
+
 }
