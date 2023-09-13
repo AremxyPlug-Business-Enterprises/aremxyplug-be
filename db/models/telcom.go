@@ -34,3 +34,29 @@ type APIResponse struct {
 	Ident         string `json:"ident"`
 	Status        string `json:"Status"`
 }
+
+type EduInfo struct {
+	Exam_Type    string
+	Phone_Number string
+	Amount       string
+	Email        string
+	Quantity     int
+	Wallet_Type  string
+}
+
+type EduApiResponse struct {
+}
+
+type EduResponse struct {
+	OrderID         int
+	Email           string
+	Phone           string
+	TransactionID   string
+	ReferenceNumber string
+	Product         string
+	Amount          string
+	Exam_Type       string
+	Description     string
+	Status          string
+	Pin_Generated   []string
+}

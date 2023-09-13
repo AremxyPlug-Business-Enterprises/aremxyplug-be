@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets, emailClient emailclient.EmailClient, dataClient *data.RestyConn) *chi.Mux {
+func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets, emailClient emailclient.EmailClient, dataClient *data.DataConn) *chi.Mux {
 	router := chi.NewRouter()
 
 	// Middlewares
@@ -76,7 +76,7 @@ func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets
 		router.Get("/data/{id}", httpHandler.GetDataInfo)
 
 		// returns all transactions: to be used by admins
-		router.Get("/transactions", httpHandler.GetTransactions)
+		router.Get("/transactions", httpHandler.GetDataTransactions)
 
 	})
 

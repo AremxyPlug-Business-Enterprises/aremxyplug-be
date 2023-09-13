@@ -37,6 +37,11 @@ func New(connectURI, databaseName string, logger *zap.Logger) (db.DataStore, *mo
 
 var _ db.DataStore = &mongoStore{}
 
+var (
+	dataColl = "data"
+	eduColl  = "edu"
+)
+
 type mongoStore struct {
 	mongoClient  *mongo.Client
 	databaseName string
@@ -100,10 +105,9 @@ func (d *mongoStore) CreateMessage(message *models.Message) error {
 }
 
 // SaveTransaction saves a data transaction to the database.
-func (d *mongoStore) SaveTransaction(details *models.DataResult) error {
-	ctx := context.Background()
+func (m *mongoStore) SaveDataTransaction(details *models.DataResult) error {
 
-	_, err := d.mongoClient.Database(d.databaseName).Collection("data").InsertOne(ctx, details)
+	err := m.saveTransaction(dataColl, details)
 	if err != nil {
 		return err
 	}
@@ -112,24 +116,19 @@ func (d *mongoStore) SaveTransaction(details *models.DataResult) error {
 }
 
 // GetTransactionDetails returns a data transaction detail.
-func (d *mongoStore) GetTransactionDetails(id string) (result models.DataResult, err error) {
-	ctx := context.Background()
+func (m *mongoStore) GetDataTransactionDetails(id string) (models.DataResult, error) {
 	res := models.DataResult{}
-	oID, err := strconv.Atoi(id)
+
+	findResult := m.getTransaction(id, dataColl)
+	err := findResult.Decode(&res)
+
 	if err != nil {
-		return models.DataResult{}, err
-	}
-
-	filter := bson.D{primitive.E{Key: "order_id", Value: oID}}
-
-	coll := d.mongoClient.Database(d.databaseName).Collection("data")
-	e := coll.FindOne(ctx, filter).Decode(&res)
-	if e != nil {
-		if e == mongo.ErrNoDocuments {
+		if err == mongo.ErrNoDocuments {
 			return models.DataResult{}, nil
 		}
 		// write for errors
-		log.Println(e)
+		log.Println(err)
+		return models.DataResult{}, err
 	}
 
 	return res, nil
@@ -137,23 +136,13 @@ func (d *mongoStore) GetTransactionDetails(id string) (result models.DataResult,
 }
 
 // GetAllTransaction returns all the data transactions associated to a user, if an empty string is passed it returns all data transactions.
-func (d *mongoStore) GetAllTransactions(user string) ([]models.DataResult, error) {
+func (m *mongoStore) GetAllDataTransactions(user string) ([]models.DataResult, error) {
 	ctx := context.Background()
 	res := []models.DataResult{}
 
-	var filter bson.D
-
-	if user == "" {
-		filter = bson.D{}
-	} else {
-		filter = bson.D{primitive.E{Key: "username", Value: user}}
-	}
-
-	coll := d.mongoClient.Database(d.databaseName).Collection("data")
-	cur, err := coll.Find(ctx, filter)
+	cur, err := m.getAllTransaction(dataColl, user)
 	if err != nil {
-		// write for errors
-		log.Println(err)
+		return []models.DataResult{}, err
 	}
 
 	if cur.Next(ctx) {
@@ -167,4 +156,92 @@ func (d *mongoStore) GetAllTransactions(user string) ([]models.DataResult, error
 
 	return res, nil
 
+}
+
+// SaveEduTransactions saves the result of the edu transaction to the database.
+func (m *mongoStore) SaveEduTransaction(details *models.EduResponse) error {
+	err := m.saveTransaction(eduColl, details)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *mongoStore) GetEduTransactionDetails(id string) (models.EduResponse, error) {
+	res := models.EduResponse{}
+
+	result := m.getTransaction(id, eduColl)
+
+	err := result.Decode(&res)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return models.EduResponse{}, nil
+		}
+		// return error
+		return models.EduResponse{}, err
+	}
+
+	return res, nil
+
+}
+
+func (m *mongoStore) GetAllEduTransactions(user string) ([]models.EduResponse, error) {
+	ctx := context.Background()
+	res := []models.EduResponse{}
+
+	cur, err := m.getAllTransaction(dataColl, user)
+	if err != nil {
+		return []models.EduResponse{}, err
+	}
+
+	if cur.Next(ctx) {
+		resp := models.EduResponse{}
+		if err := cur.Decode(&resp); err != nil {
+			return nil, err
+		}
+		res = append(res, resp)
+	}
+	defer cur.Close(ctx)
+
+	return res, nil
+}
+
+func (m *mongoStore) getTransaction(id, collectionName string) *mongo.SingleResult {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	oID, err := strconv.Atoi(id)
+	if err != nil {
+		return &mongo.SingleResult{}
+	}
+
+	filter := bson.D{primitive.E{Key: "order_id", Value: oID}}
+
+	result := m.col(collectionName).FindOne(ctx, filter)
+
+	return result
+
+}
+
+func (m *mongoStore) saveTransaction(collectionName string, details interface{}) error {
+	ctx := context.Background()
+
+	_, err := m.col(collectionName).InsertOne(ctx, details)
+
+	return err
+}
+
+func (m *mongoStore) getAllTransaction(collectionName, user string) (*mongo.Cursor, error) {
+	ctx := context.Background()
+	var filter bson.D
+
+	if user == "" {
+		filter = bson.D{}
+	} else {
+		filter = bson.D{primitive.E{Key: "username", Value: user}}
+	}
+
+	cur, err := m.col(collectionName).Find(ctx, filter)
+	return cur, err
 }

@@ -10,7 +10,10 @@ type AremxyStore interface {
 	SaveUser(user models.User) error
 	GetUserByEmail(email string) (*models.User, error)
 	CreateMessage(message *models.Message) error
-	SaveTransaction(details *models.DataResult) error
-	GetTransactionDetails(id string) (result models.DataResult, err error)
-	GetAllTransactions(user string) ([]models.DataResult, error)
+	SaveDataTransaction(details *models.DataResult) error
+	GetDataTransactionDetails(id string) (models.DataResult, error)
+	GetAllDataTransactions(user string) ([]models.DataResult, error)
+	SaveEduTransaction(details *models.EduResponse) error
+	GetEduTransactionDetails(id string) (models.EduResponse, error)
+	GetAllEduTransactions(user string) ([]models.EduResponse, error)
 }

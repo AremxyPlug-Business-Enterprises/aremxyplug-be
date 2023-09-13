@@ -11,6 +11,7 @@ import (
 	"github.com/aremxyplug-be/lib/errorvalues"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/aremxyplug-be/lib/telcom/data"
+	"github.com/aremxyplug-be/lib/telcom/edu"
 	"github.com/aremxyplug-be/types/dto"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/go-chi/chi/v5"
@@ -46,13 +47,15 @@ type HttpHandler struct {
 	authTokenDuration    time.Duration
 	uuidGenerator        uuidgenerator.UUIDGenerator
 	emailClient          emailclient.EmailClient
-	dataClient           *data.RestyConn
+	dataClient           *data.DataConn
+	eduClient            *edu.EduConn
 }
 
 type HandlerOptions struct {
 	Logger      *zap.Logger
 	Store       db.DataStore
-	Data        *data.RestyConn
+	Data        *data.DataConn
+	Edu         *edu.EduConn
 	Secrets     *config.Secrets
 	EmailClient emailclient.EmailClient
 }
@@ -532,7 +535,7 @@ func (handler *HttpHandler) GetDataInfo(w http.ResponseWriter, r *http.Request) 
 }
 
 // GetTransactions returns the list of transaction carried out in the server. It is for admins to view all transactions.
-func (handler *HttpHandler) GetTransactions(w http.ResponseWriter, r *http.Request) {
+func (handler *HttpHandler) GetDataTransactions(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := handler.dataClient.GetAllTransactions()
 	if err != nil {
@@ -544,4 +547,50 @@ func (handler *HttpHandler) GetTransactions(w http.ResponseWriter, r *http.Reque
 
 	json.NewEncoder(w).Encode(resp)
 
+}
+
+func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method == "POST" {
+		data := models.EduInfo{}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		res, err := handler.eduClient.BuyEduPin(data)
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			fmt.Fprintf(w, "An internal error occurred while purchasing edu pin, confirm purchase with id: %d", res.OrderID)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if r.Method == "GET" {
+		res, err := handler.eduClient.QueryTransaction("id")
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(res)
+	}
+
+}
+
+// To be used by admins to view transactions in the databases
+func (handler *HttpHandler) GetEduTransactions(w http.ResponseWriter, r *http.Request) {
+
+	resp, err := handler.eduClient.GetAllTransaction("user")
+	if err != nil {
+		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
+		fmt.Fprintln(w, "Error occurred while getting transactions")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(resp)
 }
