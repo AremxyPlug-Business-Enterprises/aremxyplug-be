@@ -3,13 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+
 	"github.com/aremxyplug-be/config"
 	"github.com/aremxyplug-be/db/mongo"
 	"github.com/aremxyplug-be/lib/emailclient/postmark"
 	zapLogger "github.com/aremxyplug-be/lib/logger"
+	"github.com/aremxyplug-be/lib/telcom/data"
 	httpSrv "github.com/aremxyplug-be/server/http"
 	"go.uber.org/zap"
-	"net/http"
 )
 
 func main() {
@@ -24,8 +26,9 @@ func main() {
 
 	// setup email client
 	emailClient := postmark.New(secrets)
+	data := data.NewData(store, logger)
 
-	httpRouter := httpSrv.MountServer(logger, store, secrets, emailClient)
+	httpRouter := httpSrv.MountServer(logger, store, secrets, emailClient, data)
 	// Start HTTP server
 	httpAddr := fmt.Sprintf(":%s", secrets.AppPort)
 	logger.Info(fmt.Sprintf("HTTP service running on %v.", httpAddr))

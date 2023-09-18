@@ -2,12 +2,15 @@ package mongo
 
 import (
 	"context"
+	"log"
+	"strconv"
 	"time"
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/errorvalues"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -33,6 +36,11 @@ func New(connectURI, databaseName string, logger *zap.Logger) (db.DataStore, *mo
 }
 
 var _ db.DataStore = &mongoStore{}
+
+var (
+	dataColl = "data"
+	eduColl  = "edu"
+)
 
 type mongoStore struct {
 	mongoClient  *mongo.Client
@@ -94,4 +102,146 @@ func (d *mongoStore) CreateMessage(message *models.Message) error {
 	}
 
 	return nil
+}
+
+// SaveTransaction saves a data transaction to the database.
+func (m *mongoStore) SaveDataTransaction(details *models.DataResult) error {
+
+	err := m.saveTransaction(dataColl, details)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetTransactionDetails returns a data transaction detail.
+func (m *mongoStore) GetDataTransactionDetails(id string) (models.DataResult, error) {
+	res := models.DataResult{}
+
+	findResult := m.getTransaction(id, dataColl)
+	err := findResult.Decode(&res)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return models.DataResult{}, nil
+		}
+		// write for errors
+		log.Println(err)
+		return models.DataResult{}, err
+	}
+
+	return res, nil
+
+}
+
+// GetAllTransaction returns all the data transactions associated to a user, if an empty string is passed it returns all data transactions.
+func (m *mongoStore) GetAllDataTransactions(user string) ([]models.DataResult, error) {
+	ctx := context.Background()
+	res := []models.DataResult{}
+
+	cur, err := m.getAllTransaction(dataColl, user)
+	if err != nil {
+		return []models.DataResult{}, err
+	}
+
+	if cur.Next(ctx) {
+		resp := models.DataResult{}
+		if err := cur.Decode(&resp); err != nil {
+			return nil, err
+		}
+		res = append(res, resp)
+	}
+	defer cur.Close(ctx)
+
+	return res, nil
+
+}
+
+// SaveEduTransactions saves the result of the edu transaction to the database.
+func (m *mongoStore) SaveEduTransaction(details *models.EduResponse) error {
+	err := m.saveTransaction(eduColl, details)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *mongoStore) GetEduTransactionDetails(id string) (models.EduResponse, error) {
+	res := models.EduResponse{}
+
+	result := m.getTransaction(id, eduColl)
+
+	err := result.Decode(&res)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return models.EduResponse{}, nil
+		}
+		// return error
+		return models.EduResponse{}, err
+	}
+
+	return res, nil
+
+}
+
+func (m *mongoStore) GetAllEduTransactions(user string) ([]models.EduResponse, error) {
+	ctx := context.Background()
+	res := []models.EduResponse{}
+
+	cur, err := m.getAllTransaction(dataColl, user)
+	if err != nil {
+		return []models.EduResponse{}, err
+	}
+
+	if cur.Next(ctx) {
+		resp := models.EduResponse{}
+		if err := cur.Decode(&resp); err != nil {
+			return nil, err
+		}
+		res = append(res, resp)
+	}
+	defer cur.Close(ctx)
+
+	return res, nil
+}
+
+func (m *mongoStore) getTransaction(id, collectionName string) *mongo.SingleResult {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	oID, err := strconv.Atoi(id)
+	if err != nil {
+		return &mongo.SingleResult{}
+	}
+
+	filter := bson.D{primitive.E{Key: "order_id", Value: oID}}
+
+	result := m.col(collectionName).FindOne(ctx, filter)
+
+	return result
+
+}
+
+func (m *mongoStore) saveTransaction(collectionName string, details interface{}) error {
+	ctx := context.Background()
+
+	_, err := m.col(collectionName).InsertOne(ctx, details)
+
+	return err
+}
+
+func (m *mongoStore) getAllTransaction(collectionName, user string) (*mongo.Cursor, error) {
+	ctx := context.Background()
+	var filter bson.D
+
+	if user == "" {
+		filter = bson.D{}
+	} else {
+		filter = bson.D{primitive.E{Key: "username", Value: user}}
+	}
+
+	cur, err := m.col(collectionName).Find(ctx, filter)
+	return cur, err
 }
