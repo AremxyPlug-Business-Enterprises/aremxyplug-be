@@ -16,4 +16,7 @@ type AremxyStore interface {
 	SaveEduTransaction(details *models.EduResponse) error
 	GetEduTransactionDetails(id string) (models.EduResponse, error)
 	GetAllEduTransactions(user string) ([]models.EduResponse, error)
+	SaveAirtimeTransaction(details *models.AirtimeResponse) error
+	GetAirtimeTransactionDetails(id string) (models.AirtimeResponse, error)
+	GetAllAirtimeTransactions(user string) ([]models.AirtimeResponse, error)
 }

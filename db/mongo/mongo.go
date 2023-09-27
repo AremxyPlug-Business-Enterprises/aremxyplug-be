@@ -40,6 +40,7 @@ var _ db.DataStore = &mongoStore{}
 var (
 	dataColl = "data"
 	eduColl  = "edu"
+	airColl  = "airtime"
 )
 
 type mongoStore struct {
@@ -208,6 +209,53 @@ func (m *mongoStore) GetAllEduTransactions(user string) ([]models.EduResponse, e
 	return res, nil
 }
 
+func (m *mongoStore) SaveAirtimeTransaction(details *models.AirtimeResponse) error {
+	err := m.saveTransaction(airColl, details)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *mongoStore) GetAirtimeTransactionDetails(id string) (models.AirtimeResponse, error) {
+	res := models.AirtimeResponse{}
+
+	result := m.getTransaction(id, eduColl)
+
+	err := result.Decode(&res)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return models.AirtimeResponse{}, nil
+		}
+		// return error
+		return models.AirtimeResponse{}, err
+	}
+
+	return res, nil
+}
+
+func (m *mongoStore) GetAllAirtimeTransactions(user string) ([]models.AirtimeResponse, error) {
+	ctx := context.Background()
+	res := []models.AirtimeResponse{}
+
+	cur, err := m.getAllTransaction(dataColl, user)
+	if err != nil {
+		return []models.AirtimeResponse{}, err
+	}
+
+	if cur.Next(ctx) {
+		resp := models.AirtimeResponse{}
+		if err := cur.Decode(&resp); err != nil {
+			return nil, err
+		}
+		res = append(res, resp)
+	}
+	defer cur.Close(ctx)
+
+	return res, nil
+}
+
 func (m *mongoStore) getTransaction(id, collectionName string) *mongo.SingleResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -228,8 +276,11 @@ func (m *mongoStore) saveTransaction(collectionName string, details interface{})
 	ctx := context.Background()
 
 	_, err := m.col(collectionName).InsertOne(ctx, details)
+	if err != nil {
+		return err
+	}
 
-	return err
+	return nil
 }
 
 func (m *mongoStore) getAllTransaction(collectionName, user string) (*mongo.Cursor, error) {

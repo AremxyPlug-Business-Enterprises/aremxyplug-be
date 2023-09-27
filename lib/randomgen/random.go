@@ -4,6 +4,10 @@ import (
 	"crypto/rand"
 	"math"
 	"math/big"
+	random "math/rand"
+	"os"
+	"strconv"
+	"time"
 )
 
 func GenerateRandomNum(numberOfDigits int) (int, error) {
@@ -26,4 +30,36 @@ func GenerateRandomNum(numberOfDigits int) (int, error) {
 		randomNumberInt = int(maxLimit)
 	}
 	return randomNumberInt, nil
+}
+
+func GenerateTransactionID() string {
+	seedRand := random.New(random.NewSource(time.Now().UnixNano()))
+	charset := os.Getenv("CHARSET")
+
+	b := make([]byte, 10)
+	for i := range b {
+		b[i] = charset[seedRand.Intn(len(charset))]
+	}
+
+	return string(b)
+}
+
+// generateOrderID generates a unique OrderID
+func GenerateOrderID() (int, error) {
+	seedRand := random.New(random.NewSource(int64(time.Now().UnixNano())))
+	numbset := os.Getenv(("NUMBSET"))
+
+	b := make([]byte, 10)
+	for i := range b {
+		b[i] = numbset[seedRand.Intn(len(numbset))]
+	}
+
+	s := string(b)
+
+	Id, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, err
+	}
+
+	return Id, nil
 }

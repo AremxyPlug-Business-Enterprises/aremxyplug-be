@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -13,14 +13,14 @@ import (
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/lib/randomgen"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
 var (
-	api = os.Getenv("DONTECH")
-	// token = "Token " + os.Getenv("AUTHTOKEN")
-	token = os.Getenv("AUTHTOKEN")
+	api   = os.Getenv("DONTECH")
+	token = "Token " + os.Getenv("DONTECH_AUTH")
 )
 
 type DataConn struct {
@@ -41,7 +41,7 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 
 	var buf bytes.Buffer
 	json.NewEncoder(&buf).Encode(&data)
-	id, err := d.generateOrderID()
+	id, err := randomgen.GenerateOrderID()
 	if err != nil {
 		// check error
 		d.Logger.Error("Could not generate orderID...", zap.Error(err))
@@ -50,7 +50,7 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 
 	req, err := http.NewRequest("POST", api+"/data/", &buf)
 	req.Header.Set("Access-Control-Allow-Origin", "*")
-	req.Header.Add("Authorization", "Token "+token)
+	req.Header.Add("Authorization", token)
 	req.Header.Add("Content-Type", "application/json")
 	//resp, err := d.RestyClient.R().SetBody(info).SetAuthToken(token).Post("/user/")
 	if err != nil {
@@ -66,39 +66,49 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 	defer resp.Body.Close()
 
 	apiResponse := models.APIResponse{}
-	result := &models.DataResult{}
-	if resp.StatusCode != http.StatusCreated {
+	if resp.StatusCode == http.StatusCreated {
+
+		if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+			if err == io.EOF {
+				log.Println("No response from body")
+				// edu.Logger.Error("Empty response body", zap.Error(err))
+				return nil, errors.New("empty response from server")
+			} else {
+				log.Println("other error:", err)
+				d.Logger.Error("error returned from server: ", zap.Error(err))
+				return nil, errors.New("error returned from server...")
+			}
+		}
+
+		transactionID := randomgen.GenerateTransactionID()
+		result := &models.DataResult{
+			Network:         apiResponse.Plan_network,
+			Phone_Number:    apiResponse.Mobile_number,
+			ReferenceNumber: apiResponse.Ident,
+			Plan_Amount:     apiResponse.Plan_amount,
+			PlanName:        apiResponse.Plan_Name,
+			CreatedAt:       time.Now().String(),
+			OrderID:         id,
+			TransactionID:   transactionID,
+			Status:          apiResponse.Status,
+			Name:            data.Name,
+		}
+		if err := d.saveTransacation(result); err != nil {
+			d.Logger.Error("Database error try again...", zap.Error(err))
+			return nil, errors.New("Database Insert Error...")
+		}
+
+		log.Println(resp.StatusCode)
+		return result, nil
+	} else {
 		d.Logger.Error("Api Call Error: %v", zap.String("status", fmt.Sprint((resp.StatusCode))))
 		return nil, errors.New("Api Call Error")
 	}
 
-	json.NewDecoder(resp.Body).Decode(&apiResponse)
-
-	result.Network = apiResponse.Plan_network
-	result.Phone_Number = apiResponse.Mobile_number
-	result.ReferenceNumber = apiResponse.Ident
-	result.Plan_Amount = apiResponse.Plan_amount
-	result.PlanName = apiResponse.Plan_Name
-	result.CreatedAt = time.Now().String()
-	//result.OrderID = apiResponse.Id
-	result.OrderID = id
-	result.TransactionID = d.generateTransactionID()
-	result.Status = apiResponse.Status
-	result.Name = data.Name
-	log.Println(result)
-	if err := d.saveTransacation(result); err != nil {
-		d.Logger.Error("Database error try again...", zap.Error(err))
-		return nil, errors.New("Database Insert Error...")
-	}
-
-	log.Println(resp.StatusCode)
-	return result, nil
 }
 
 // GetTransactionDetail takes a  id and returns the details of the transaction
 func (d *DataConn) GetTransactionDetail(id string) (models.DataResult, error) {
-	// check if id is a validate transaction id.
-
 	resp := models.DataResult{}
 	res, err := d.getTransactionDetails(id)
 	if err != nil {
@@ -107,7 +117,6 @@ func (d *DataConn) GetTransactionDetail(id string) (models.DataResult, error) {
 		return resp, errors.New("Database request error: " + err.Error())
 	}
 
-	// return transaction details if no errors
 	return res, nil
 }
 
@@ -121,7 +130,6 @@ func (d *DataConn) GetUserTransactions(user string) ([]models.DataResult, error)
 		return nil, errors.New("Database request error: " + err.Error())
 	}
 
-	// return the list of transactions.
 	return res, err
 }
 
@@ -156,8 +164,6 @@ func (d *DataConn) GetAllTransactions() ([]models.DataResult, error) {
 	var user string
 	result, err := d.Dbconn.GetAllDataTransactions(user)
 	if err != nil {
-		// Log the error
-		// Return an empty result and error
 		d.Logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("Database request error: " + err.Error())
 	}
@@ -173,7 +179,6 @@ func (d *DataConn) QueryTransaction(id int) error {
 	req.Header.Set("Access-Control-Allow-Origin", "*")
 	req.Header.Add("Authorization", "Token "+token)
 	req.Header.Add("Content-Type", "application/json")
-	//resp, err := d.RestyClient.R().SetBody(info).SetAuthToken(token).Post("/user/")
 	if err != nil {
 		// return err
 		return err
@@ -211,36 +216,4 @@ func (d *DataConn) getTransactionDetails(id string) (models.DataResult, error) {
 func (d *DataConn) getAllTransactions(user string) ([]models.DataResult, error) {
 	results, err := d.Dbconn.GetAllDataTransactions(user)
 	return results, err
-}
-
-// generateTransactionID generates a unique transaction ID.
-func (d *DataConn) generateTransactionID() string {
-	seedRand := rand.New(rand.NewSource(time.Now().UnixNano()))
-	charset := os.Getenv("CHARSET")
-
-	b := make([]byte, 10)
-	for i := range b {
-		b[i] = charset[seedRand.Intn(len(charset))]
-	}
-
-	return string(b)
-}
-
-func (d *DataConn) generateOrderID() (int, error) {
-	seedRand := rand.New(rand.NewSource(int64(time.Now().UnixNano())))
-	numbset := os.Getenv(("NUMBSET"))
-
-	b := make([]byte, 10)
-	for i := range b {
-		b[i] = numbset[seedRand.Intn(len(numbset))]
-	}
-
-	s := string(b)
-
-	Id, err := strconv.Atoi(s)
-	if err != nil {
-		return 0, err
-	}
-
-	return Id, nil
 }

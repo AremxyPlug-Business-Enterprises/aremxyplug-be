@@ -5,6 +5,7 @@ import (
 
 	"github.com/aremxyplug-be/lib/emailclient"
 	"github.com/aremxyplug-be/lib/telcom/data"
+	"github.com/aremxyplug-be/lib/telcom/edu"
 	"github.com/aremxyplug-be/server/http/handlers"
 
 	"github.com/aremxyplug-be/config"
@@ -16,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets, emailClient emailclient.EmailClient, dataClient *data.DataConn) *chi.Mux {
+func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets, emailClient emailclient.EmailClient, dataClient *data.DataConn, eduClient *edu.EduConn) *chi.Mux {
 	router := chi.NewRouter()
 
 	// Middlewares
@@ -44,6 +45,7 @@ func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets
 		Secrets:     secrets,
 		EmailClient: emailClient,
 		Data:        dataClient,
+		Edu:         eduClient,
 	})
 
 	// Routes
@@ -68,15 +70,31 @@ func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets
 		// test
 		router.Post("/test", httpHandler.Testtoken)
 
-		// buy data
+		// Data Routes
 		router.Post("/data", httpHandler.Data)
 		// get user's transaction history
 		router.Get("/data", httpHandler.Data)
 		// get's  details of a transaction
 		router.Get("/data/{id}", httpHandler.GetDataInfo)
-
 		// returns all transactions: to be used by admins
-		router.Get("/transactions", httpHandler.GetDataTransactions)
+		router.Get("/data/transactions", httpHandler.GetDataTransactions)
+
+		// Edu Routes
+		router.Post("/edu", httpHandler.EduPins)
+		// returns users transaction history
+		router.Get("/edu", httpHandler.EduPins)
+		router.Get("/edu/{id}", httpHandler.GetDataInfo)
+		// returns all transactions: to be used by admin
+		router.Get("/edu/transactions", httpHandler.GetEduTransactions)
+
+		//  Airtime Routes
+		router.Post("/airtime", httpHandler.Airtime)
+		// get user's transaction history
+		router.Get("/airtime", httpHandler.Airtime)
+		// get's details of a transaction
+		router.Get("/airtime/{id}", httpHandler.GetAirtimeInfo)
+		// returns all transactions: to be used by admins
+		router.Get("/airtime/transactions", httpHandler.GetAirtimeTransactions)
 
 	})
 

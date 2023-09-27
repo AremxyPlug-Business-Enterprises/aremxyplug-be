@@ -10,6 +10,7 @@ import (
 	"github.com/aremxyplug-be/lib/emailclient/postmark"
 	zapLogger "github.com/aremxyplug-be/lib/logger"
 	"github.com/aremxyplug-be/lib/telcom/data"
+	"github.com/aremxyplug-be/lib/telcom/edu"
 	httpSrv "github.com/aremxyplug-be/server/http"
 	"go.uber.org/zap"
 )
@@ -27,8 +28,9 @@ func main() {
 	// setup email client
 	emailClient := postmark.New(secrets)
 	data := data.NewData(store, logger)
+	edu := edu.NewEdu(store, logger)
 
-	httpRouter := httpSrv.MountServer(logger, store, secrets, emailClient, data)
+	httpRouter := httpSrv.MountServer(logger, store, secrets, emailClient, data, edu)
 	// Start HTTP server
 	httpAddr := fmt.Sprintf(":%s", secrets.AppPort)
 	logger.Info(fmt.Sprintf("HTTP service running on %v.", httpAddr))

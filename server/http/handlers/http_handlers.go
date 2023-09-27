@@ -10,6 +10,7 @@ import (
 	"github.com/aremxyplug-be/lib/emailclient"
 	"github.com/aremxyplug-be/lib/errorvalues"
 	"github.com/aremxyplug-be/lib/responseFormat"
+	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
 	"github.com/aremxyplug-be/types/dto"
@@ -49,6 +50,7 @@ type HttpHandler struct {
 	emailClient          emailclient.EmailClient
 	dataClient           *data.DataConn
 	eduClient            *edu.EduConn
+	vtuClient            *airtime.AirtimeConn
 }
 
 type HandlerOptions struct {
@@ -56,6 +58,7 @@ type HandlerOptions struct {
 	Store       db.DataStore
 	Data        *data.DataConn
 	Edu         *edu.EduConn
+	VTU         *airtime.AirtimeConn
 	Secrets     *config.Secrets
 	EmailClient emailclient.EmailClient
 }
@@ -102,6 +105,7 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		uuidGenerator:        uuidgenerator.NewGoogleUUIDGenerator(),
 		emailClient:          opt.EmailClient,
 		dataClient:           opt.Data,
+		vtuClient:            opt.VTU,
 	}
 }
 
@@ -496,7 +500,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		res, err := handler.dataClient.BuyData(data)
 		if err != nil {
 			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintf(w, "An internal error occurred while purchasing data, confirm purchase with id %d", res.OrderID)
+			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -549,6 +553,7 @@ func (handler *HttpHandler) GetDataTransactions(w http.ResponseWriter, r *http.R
 
 }
 
+// EduPins is use to carry out buying of education pins(POST) and returning all the transactions made by the user(GET)
 func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "POST" {
@@ -558,10 +563,16 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		res, err := handler.eduClient.BuyEduPin(data)
+		if data.Quantity >= 5 && data.Quantity < 10 {
+			handler.logger.Error("invalid number of buy pins")
+			fmt.Fprintf(w, "Invalid number of pins!! Pins between %d and %d are not allowed. Try again...", 5, 10)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		_, err := handler.eduClient.BuyEduPin(data)
 		if err != nil {
 			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintf(w, "An internal error occurred while purchasing edu pin, confirm purchase with id: %d", res.OrderID)
+			fmt.Fprintf(w, "An internal error occurred while purchasing %s pin, please try again...", data.Exam_Type)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -581,6 +592,23 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 
 }
 
+// GetEduInfo returns the details of an airtime transaction.
+func (handler *HttpHandler) GetEduInfo(w http.ResponseWriter, r *http.Request) {
+
+	//id := r.URL.Query().Get("id")
+	id := chi.URLParam(r, "id")
+
+	res, err := handler.dataClient.GetTransactionDetail(id)
+	if err != nil {
+		handler.logger.Error("Api response error", zap.Error(err))
+		fmt.Fprintln(w, "Error getting transaction detail.")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(res)
+}
+
 // To be used by admins to view transactions in the databases
 func (handler *HttpHandler) GetEduTransactions(w http.ResponseWriter, r *http.Request) {
 
@@ -593,4 +621,72 @@ func (handler *HttpHandler) GetEduTransactions(w http.ResponseWriter, r *http.Re
 	}
 
 	json.NewEncoder(w).Encode(resp)
+}
+
+// Airtime is use to carry out buying of airtime(POST) and returning all the transactions made by the user(GET)
+func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method == "POST" {
+		data := models.AirtimeInfo{}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+
+		}
+		if len(data.Phone_no) != 11 {
+			fmt.Fprintf(w, "Phone number must be %d digits, got %d. Check the phone number and try again.", 11, len(data.Phone_no))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		res, err := handler.vtuClient.BuyAirtime(data)
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(res)
+	}
+
+	if r.Method == "GET" {
+		res, err := handler.vtuClient.GetUserTransaction("user")
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(res)
+	}
+}
+
+// GetAirtimeTransactions return all the airtime transactions in the database, to be used by admin.
+func (handler *HttpHandler) GetAirtimeTransactions(w http.ResponseWriter, r *http.Request) {
+
+	resp, err := handler.vtuClient.GetAllTransactions()
+	if err != nil {
+		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
+		fmt.Fprintln(w, "Error occurred while getting transactions")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(resp)
+}
+
+// GetAirtimeInfo returns the details of an airtime transaction.
+func (handler *HttpHandler) GetAirtimeInfo(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	res, err := handler.dataClient.GetTransactionDetail(id)
+	if err != nil {
+		handler.logger.Error("Api response error", zap.Error(err))
+		fmt.Fprintln(w, "Error getting transaction detail.")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(res)
 }
