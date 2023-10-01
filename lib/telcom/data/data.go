@@ -80,7 +80,7 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 			}
 		}
 
-		transactionID := randomgen.GenerateTransactionID()
+		transactionID := randomgen.GenerateTransactionID("dat")
 		result := &models.DataResult{
 			Network:         apiResponse.Plan_network,
 			Phone_Number:    apiResponse.Mobile_number,
@@ -92,6 +92,7 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 			TransactionID:   transactionID,
 			Status:          apiResponse.Status,
 			Name:            data.Name,
+			ApiID:           apiResponse.Id,
 		}
 		if err := d.saveTransacation(result); err != nil {
 			d.Logger.Error("Database error try again...", zap.Error(err))

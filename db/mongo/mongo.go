@@ -277,6 +277,7 @@ func (m *mongoStore) saveTransaction(collectionName string, details interface{})
 
 	_, err := m.col(collectionName).InsertOne(ctx, details)
 	if err != nil {
+		log.Fatal(err)
 		return err
 	}
 

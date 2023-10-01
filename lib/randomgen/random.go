@@ -2,11 +2,13 @@ package randomgen
 
 import (
 	"crypto/rand"
+	"fmt"
 	"math"
 	"math/big"
 	random "math/rand"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -32,16 +34,22 @@ func GenerateRandomNum(numberOfDigits int) (int, error) {
 	return randomNumberInt, nil
 }
 
-func GenerateTransactionID() string {
+func GenerateTransactionID(product string) string {
+
+	prod_type := strings.ToUpper(product)
 	seedRand := random.New(random.NewSource(time.Now().UnixNano()))
 	charset := os.Getenv("CHARSET")
 
-	b := make([]byte, 10)
+	b := make([]byte, 5)
 	for i := range b {
 		b[i] = charset[seedRand.Intn(len(charset))]
 	}
 
-	return string(b)
+	randgen := string(b)
+
+	id := fmt.Sprintf("%s-%s-%s", "AP", prod_type, randgen)
+
+	return id
 }
 
 // generateOrderID generates a unique OrderID

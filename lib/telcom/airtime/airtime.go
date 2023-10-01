@@ -72,7 +72,7 @@ func (a *AirtimeConn) BuyAirtime(airtime models.AirtimeInfo) (*models.AirtimeRes
 		return nil, errors.New("failed to buy airtime")
 	}
 
-	transactionID := randomgen.GenerateTransactionID()
+	transactionID := randomgen.GenerateTransactionID("vtu")
 	amount := strconv.Itoa(apiResponse.Amount)
 	product := apiResponse.Network + " " + airtime.Product
 

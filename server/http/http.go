@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/aremxyplug-be/lib/emailclient"
+	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
 	"github.com/aremxyplug-be/server/http/handlers"
@@ -17,7 +18,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets, emailClient emailclient.EmailClient, dataClient *data.DataConn, eduClient *edu.EduConn) *chi.Mux {
+func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets, emailClient emailclient.EmailClient, dataClient *data.DataConn, eduClient *edu.EduConn, vtu *airtime.AirtimeConn) *chi.Mux {
 	router := chi.NewRouter()
 
 	// Middlewares
@@ -46,6 +47,7 @@ func MountServer(logger *zap.Logger, store db.DataStore, secrets *config.Secrets
 		EmailClient: emailClient,
 		Data:        dataClient,
 		Edu:         eduClient,
+		VTU:         vtu,
 	})
 
 	// Routes

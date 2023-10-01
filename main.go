@@ -9,6 +9,7 @@ import (
 	"github.com/aremxyplug-be/db/mongo"
 	"github.com/aremxyplug-be/lib/emailclient/postmark"
 	zapLogger "github.com/aremxyplug-be/lib/logger"
+	vtu "github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
 	httpSrv "github.com/aremxyplug-be/server/http"
@@ -29,8 +30,9 @@ func main() {
 	emailClient := postmark.New(secrets)
 	data := data.NewData(store, logger)
 	edu := edu.NewEdu(store, logger)
+	vtu := vtu.NewAirtimeConn(logger, store)
 
-	httpRouter := httpSrv.MountServer(logger, store, secrets, emailClient, data, edu)
+	httpRouter := httpSrv.MountServer(logger, store, secrets, emailClient, data, edu, vtu)
 	// Start HTTP server
 	httpAddr := fmt.Sprintf(":%s", secrets.AppPort)
 	logger.Info(fmt.Sprintf("HTTP service running on %v.", httpAddr))

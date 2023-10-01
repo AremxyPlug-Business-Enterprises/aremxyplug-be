@@ -76,7 +76,7 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 		return nil, errors.New("failed while purchasing edu pin")
 	}
 
-	transactionID := randomgen.GenerateTransactionID()
+	transactionID := randomgen.GenerateTransactionID("edu")
 	pinGenerated := []string{
 		apiResponse.Pin.Pin1,
 		apiResponse.Pin.Pin2,

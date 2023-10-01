@@ -22,6 +22,7 @@ type DataResult struct {
 	Name            string `json:"Name" bson:"name"`
 	Phone_Number    string `json:"Phone_Number" bson:"phone_number"`
 	CreatedAt       string `json:"CreatedAt" bson:"created_at"`
+	ApiID           int    `bson:"apiID"`
 }
 
 type APIResponse struct {
@@ -99,12 +100,12 @@ type AirtimeApiResponse struct {
 }
 
 type AirtimeResponse struct {
-	Status          string `json:"status"`
-	Network         string `json:"network"`
-	Amount          string `json:"amount"`
-	Phone_no        string `json:"phone_no"`
-	Product         string `json:"product"`
-	Recipient       string `json:"recipient,omitempty"`
+	Status          string `json:"status" bson:"status"`
+	Network         string `json:"network" bson:"network"`
+	Amount          string `json:"amount" bson:"amount"`
+	Phone_no        string `json:"phone_no" bson:"phone_no"`
+	Product         string `json:"product" bson:"product"`
+	Recipient       string `json:"recipient,omitempty" bson:"recipient,omitempty"`
 	OrderID         int    `json:"order_id" bson:"order_id"`
 	Description     string `json:"description" bson:"description"`
 	TransactionID   string `json:"transaction_id" bson:"transaction_id"`
