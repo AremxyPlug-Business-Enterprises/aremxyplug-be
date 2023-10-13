@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/aremxyplug-be/db"
+	elect "github.com/aremxyplug-be/lib/bills/electricity"
+	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
 	"github.com/aremxyplug-be/lib/errorvalues"
 	"github.com/aremxyplug-be/lib/responseFormat"
@@ -51,6 +53,8 @@ type HttpHandler struct {
 	dataClient           *data.DataConn
 	eduClient            *edu.EduConn
 	vtuClient            *airtime.AirtimeConn
+	tvClient             *tvsub.TvConn
+	electClient          *elect.ElectricConn
 }
 
 type HandlerOptions struct {
@@ -59,6 +63,8 @@ type HandlerOptions struct {
 	Data        *data.DataConn
 	Edu         *edu.EduConn
 	VTU         *airtime.AirtimeConn
+	TvSub       *tvsub.TvConn
+	ElectSub    *elect.ElectricConn
 	Secrets     *config.Secrets
 	EmailClient emailclient.EmailClient
 }
@@ -106,6 +112,8 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		emailClient:          opt.EmailClient,
 		dataClient:           opt.Data,
 		vtuClient:            opt.VTU,
+		tvClient:             opt.TvSub,
+		electClient:          opt.ElectSub,
 	}
 }
 
@@ -689,4 +697,254 @@ func (handler *HttpHandler) GetAirtimeInfo(w http.ResponseWriter, r *http.Reques
 	}
 
 	json.NewEncoder(w).Encode(res)
+}
+
+func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "POST" {
+		data := models.TvInfo{}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+
+		}
+		res, err := handler.tvClient.BuySub(data)
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			// change error message
+			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(res)
+	}
+
+	if r.Method == "GET" {
+		res, err := handler.tvClient.GetUserTransactions("user")
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(res)
+	}
+}
+
+func (handler *HttpHandler) GetTvSubscriptions(w http.ResponseWriter, r *http.Request) {
+	resp, err := handler.tvClient.GetAllTransactions()
+	if err != nil {
+		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
+		fmt.Fprintln(w, "Error occurred while getting transactions")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (handler *HttpHandler) GetTvSubDetails(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	res, err := handler.tvClient.GetTransactionDetails(id)
+	if err != nil {
+		handler.logger.Error("Api response error", zap.Error(err))
+		fmt.Fprintln(w, "Error getting transaction detail.")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(res)
+}
+
+func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "POST" {
+		data := models.ElectricInfo{}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+
+		}
+		res, err := handler.electClient.PayBill(data)
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			// change error message
+			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(res)
+	}
+
+	if r.Method == "GET" {
+		res, err := handler.electClient.GetUserTransactions("user")
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(res)
+	}
+}
+
+func (handler *HttpHandler) GetElectricBills(w http.ResponseWriter, r *http.Request) {
+	resp, err := handler.electClient.GetAllTransactions()
+	if err != nil {
+		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
+		fmt.Fprintln(w, "Error occurred while getting transactions")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (handler *HttpHandler) GetElectricBillDetails(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	res, err := handler.electClient.GetTransactionDetails(id)
+	if err != nil {
+		handler.logger.Error("Api response error", zap.Error(err))
+		fmt.Fprintln(w, "Error getting transaction detail.")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(res)
+}
+
+func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Request) {
+
+	// Get username from request or token
+
+	if r.Method == "POST" {
+		data := models.SpectranetInfo{}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+
+		}
+		res, err := handler.dataClient.BuySpecData(data)
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(res)
+	}
+
+	if r.Method == "GET" {
+		res, err := handler.dataClient.GetSpecUserTransactions("user")
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(res)
+	}
+
+}
+
+func (handler *HttpHandler) GetSpecDataDetails(w http.ResponseWriter, r *http.Request) {
+
+	//id := r.URL.Query().Get("id")
+	id := chi.URLParam(r, "id")
+
+	res, err := handler.dataClient.GetSpecTransDetails(id)
+	if err != nil {
+		handler.logger.Error("Api response error", zap.Error(err))
+		fmt.Fprintln(w, "Error getting transaction detail.")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(res)
+}
+
+// To be used by admin
+func (handler *HttpHandler) GetSpectranetTransactions(w http.ResponseWriter, r *http.Request) {
+
+	resp, err := handler.dataClient.GetAllSpecTransactions()
+	if err != nil {
+		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
+		fmt.Fprintln(w, "Error occurred while getting transactions")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
+
+	// Get username from request or token
+
+	if r.Method == "POST" {
+		data := models.SmileInfo{}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+
+		}
+		res, err := handler.dataClient.BuySmileData(data)
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(res)
+	}
+
+	if r.Method == "GET" {
+		res, err := handler.dataClient.GetSmileUserTransactions("user")
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(res)
+	}
+
+}
+
+func (handler *HttpHandler) GetSmileDataDetails(w http.ResponseWriter, r *http.Request) {
+
+	//id := r.URL.Query().Get("id")
+	id := chi.URLParam(r, "id")
+
+	res, err := handler.dataClient.GetSmileTransDetails(id)
+	if err != nil {
+		handler.logger.Error("Api response error", zap.Error(err))
+		fmt.Fprintln(w, "Error getting transaction detail.")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(res)
+}
+
+// To be used by admin
+func (handler *HttpHandler) GetSmileTransactions(w http.ResponseWriter, r *http.Request) {
+
+	resp, err := handler.dataClient.GetAllSmileTransactions()
+	if err != nil {
+		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
+		fmt.Fprintln(w, "Error occurred while getting transactions")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(resp)
 }

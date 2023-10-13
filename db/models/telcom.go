@@ -111,3 +111,123 @@ type AirtimeResponse struct {
 	TransactionID   string `json:"transaction_id" bson:"transaction_id"`
 	ReferenceNumber string `json:"reference_number" bson:"reference_number"`
 }
+
+type SmileInfo struct {
+	Network      string `json:"network"`
+	Email        string `json:"email"`
+	Phone_Number string `json:"phone_no"`
+	AccountID    string `json:"accountID"` // Account ID, billlersCode
+	Product      string `json:"product"`   //serviceID
+	Product_plan string `json:"plan"`      // variation code
+	RequestID    string `json:"request_id"`
+}
+
+type SmileAPIresponse struct {
+	Code      string           `json:"code"`
+	Content   SmileContent     `json:"content"`
+	Date      Transaction_Date `json:"transaction_date"`
+	RequestID string           `json:"requestId"`
+	Response  string           `json:"response_description"`
+}
+
+type SmileContent struct {
+	Transcations Smile_Transactions `json:"transactions"`
+}
+
+type Smile_Transactions struct {
+	Status        string  `json:"status"`
+	Product_Desc  string  `json:"product_name"`
+	Unit_Price    float64 `json:"unit_price"`
+	Commission    float64 `json:"commission"`
+	Email         string  `json:"email"`
+	Phone         string  `json:"phone"`
+	Amount        int     `json:"amount"`
+	TransactionID string  `json:"transactionId"`
+	Type          string  `json:"type"`
+}
+
+type Transaction_Date struct {
+	Date string `json:"date"`
+}
+
+type SmileResult struct {
+	Network         string `json:"network"`
+	ProductPlan     string `json:"plan"`
+	Email           string `json:"email"`
+	AccountID       string `json:"account_id"`
+	Phone_Number    string `json:"phone_no"`
+	Name            string `json:"name"`
+	Amount          int    `json:"amount"`
+	Product         string `json:"product"`
+	Description     string `json:"description"`
+	OrderID         int    `json:"order_id"`
+	TranscationID   string `json:"transcation_id"`
+	ReferenceNumber string `json:"Reference_number"` // map transactionid from api to this.
+	RequestID       string `json:"request_id"`
+}
+
+type SpectranetInfo struct {
+	Network      string `json:"network"`  // ServiceID
+	Product      string `json:"product"`  //
+	Plan         string `json:"plan"`     // variation code?
+	Phone_Number string `json:"phone_no"` // billersCode &
+	Name         string `json:"name"`
+	No_of_Pins   string `json:"no_of_pins"` // quantity
+	Amount       int    `json:"amount"`
+	RequestID    string `json:"request_id"`
+}
+
+type SpectranetApi struct {
+	Code      string               `json:"code"`
+	Content   SpectranetContent    `json:"content"`
+	Date      SpecTransaction_Date `json:"transaction_date"`
+	RequestID string               `json:"requestId"`
+	Response  string               `json:"response_description"`
+	Cards     []Card               `json:"cards"`
+}
+
+type SpectranetContent struct {
+	Transcations Spec_Content `json:"transactions"`
+}
+
+type Spec_Content struct {
+	Status        string `json:"status"`
+	Product_Desc  string `json:"product_name"`
+	Phone_Number  string `json:"unique_element"`
+	Unit_Price    int    `json:"unit_price"`
+	Commission    int    `json:"commission"`
+	Email         string `json:"email"`
+	Phone         string `json:"phone"`
+	Amount        int    `json:"amount"`
+	Quantity      int    `json:"quantity"`
+	TransactionID string `json:"transactionId"`
+	Type          string `json:"type"`
+}
+
+type SpecTransaction_Date struct {
+	Date string `json:"date"`
+}
+
+type Card struct {
+	SerialNumber string `json:"serialNumber"`
+	Pin          string `json:"pin"`
+	ExpiresOn    string `json:"expiresOn"`
+	Value        int    `json:"value"`
+}
+
+type SpectranetResult struct {
+	Network         string `json:"network"`
+	Product         string `json:"product"`
+	Plan            string `json:"plan"`
+	Email           string `json:"email"`
+	Phone_Number    string `json:"phone_no"`
+	Name            string `json:"name"`
+	No_of_Pins      int    `json:"no_of_pins"`
+	Amount          int    `json:"amount"`
+	ProductDesc     string `json:"product_desc"`
+	Description     string `json:"description"`
+	OrderID         int    `json:"order_id"`
+	TranscationID   string `json:"transcation_id"`
+	ReferenceNumber string `json:"reference_number"`
+	RequestID       string `json:"request_id"`
+}

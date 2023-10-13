@@ -1,16 +1,17 @@
 package models
 
 type ElectricInfo struct {
-	ServiceID     string `json:"service_id"`     // Name of service to buy
-	BillersCode   string `json:"billers_code"`   // meter number
-	VariationCode string `json:"variation_code"` // meter type
-	Amount        int    `json:"amount"`
-	Phone         int    `json:"phone"`
-	RequestID     string `json:"request_id"`
+	DiscoType  string `json:"disco_type"` // Name of service to buy
+	Meter_No   string `json:"meter_no"`   // meter number
+	Meter_Type string `json:"meter_type"` // meter type
+	Amount     int    `json:"amount"`
+	Phone      int    `json:"phone"`
+	Email      string `json:"email"`
+	RequestID  string `json:"request_id"`
 }
 
 type ElectricAPI struct {
-	Code            int             `json:"code"`
+	Code            string          `json:"code"`
 	Contents        Content         `json:"content"`
 	TransactionDate TransactionDate `json:"transaction_date"`
 	RequestID       string          `json:"requestId"`
@@ -24,9 +25,11 @@ type Content struct {
 type TransactionDetails struct {
 	Status        string  `json:"status"`
 	Product_Name  string  `json:"product_name"` // map to description, split end to bill generated
+	Meter_No      string  `json:"unique_element"`
 	Unit_Price    float64 `json:"unit_price"`
 	Commission    float64 `json:"commission"`
 	Phone         string  `json:"phone"`
+	Type          string  `json:"type"`
 	TransactionID string  `json:"transactionId"`
 	Email         string  `json:"email"`
 }
@@ -39,7 +42,7 @@ type ElectricResult struct {
 	DiscoType     string `json:"disco_type"`
 	MeterType     string `json:"meter_type"` // Prepaid
 	Name          string `json:"name"`
-	MeterNumber   int    `json:"meter_number"`
+	MeterNumber   string `json:"meter_number"`
 	Phone         string `json:"phone"`
 	Email         string `json:"email"`
 	Product       string `json:"product"`
@@ -47,4 +50,5 @@ type ElectricResult struct {
 	BillGenerated string `json:"bill_generated"`
 	OrderID       int    `json:"order_id"`
 	TransactionID string `json:"transaction_id"`
+	RequestID     string `json:"request_id"`
 }

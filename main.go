@@ -7,6 +7,8 @@ import (
 
 	"github.com/aremxyplug-be/config"
 	"github.com/aremxyplug-be/db/mongo"
+	elect "github.com/aremxyplug-be/lib/bills/electricity"
+	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient/postmark"
 	zapLogger "github.com/aremxyplug-be/lib/logger"
 	vtu "github.com/aremxyplug-be/lib/telcom/airtime"
@@ -31,8 +33,21 @@ func main() {
 	data := data.NewData(store, logger)
 	edu := edu.NewEdu(store, logger)
 	vtu := vtu.NewAirtimeConn(logger, store)
+	tvSub := tvsub.NewTvConn(store, logger)
+	electSub := elect.NewElectricConn(store, logger)
 
-	httpRouter := httpSrv.MountServer(logger, store, secrets, emailClient, data, edu, vtu)
+	config := httpSrv.ServerConfig{
+		EmailClient: emailClient,
+		Logger:      logger,
+		Secrets:     secrets,
+		DataClient:  data,
+		EduClient:   edu,
+		Vtu:         vtu,
+		TvSub:       tvSub,
+		ElectSub:    electSub,
+	}
+
+	httpRouter := httpSrv.MountServer(config)
 	// Start HTTP server
 	httpAddr := fmt.Sprintf(":%s", secrets.AppPort)
 	logger.Info(fmt.Sprintf("HTTP service running on %v.", httpAddr))
