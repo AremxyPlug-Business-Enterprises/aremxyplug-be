@@ -41,6 +41,7 @@ var (
 	dataColl = "data"
 	eduColl  = "edu"
 	airColl  = "airtime"
+	tvColl   = "tv-sub"
 )
 
 type mongoStore struct {
@@ -106,7 +107,7 @@ func (d *mongoStore) CreateMessage(message *models.Message) error {
 }
 
 // SaveTransaction saves a data transaction to the database.
-func (m *mongoStore) SaveDataTransaction(details *models.DataResult) error {
+func (m *mongoStore) SaveDataTransaction(details interface{}) error {
 
 	err := m.saveTransaction(dataColl, details)
 	if err != nil {
@@ -157,6 +158,84 @@ func (m *mongoStore) GetAllDataTransactions(user string) ([]models.DataResult, e
 
 	return res, nil
 
+}
+
+func (m *mongoStore) GetSpecTransDetails(id string) (models.SpectranetResult, error) {
+	res := models.SpectranetResult{}
+
+	findResult := m.getTransaction(id, dataColl)
+	err := findResult.Decode(&res)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return models.SpectranetResult{}, nil
+		}
+		// write for errors
+		log.Println(err)
+		return models.SpectranetResult{}, err
+	}
+
+	return res, nil
+}
+
+func (m *mongoStore) GetAllSpecDataTransactions(user string) ([]models.SpectranetResult, error) {
+	ctx := context.Background()
+	res := []models.SpectranetResult{}
+
+	cur, err := m.getAllTransaction(dataColl, user)
+	if err != nil {
+		return []models.SpectranetResult{}, err
+	}
+
+	if cur.Next(ctx) {
+		resp := models.SpectranetResult{}
+		if err := cur.Decode(&resp); err != nil {
+			return nil, err
+		}
+		res = append(res, resp)
+	}
+	defer cur.Close(ctx)
+
+	return res, nil
+}
+
+func (m *mongoStore) GetSmileTransDetails(id string) (models.SmileResult, error) {
+	res := models.SmileResult{}
+
+	findResult := m.getTransaction(id, dataColl)
+	err := findResult.Decode(&res)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return models.SmileResult{}, nil
+		}
+		// write for errors
+		log.Println(err)
+		return models.SmileResult{}, err
+	}
+
+	return res, nil
+}
+
+func (m *mongoStore) GetAllSmileDataTransactions(user string) ([]models.SmileResult, error) {
+	ctx := context.Background()
+	res := []models.SmileResult{}
+
+	cur, err := m.getAllTransaction(dataColl, user)
+	if err != nil {
+		return []models.SmileResult{}, err
+	}
+
+	if cur.Next(ctx) {
+		resp := models.SmileResult{}
+		if err := cur.Decode(&resp); err != nil {
+			return nil, err
+		}
+		res = append(res, resp)
+	}
+	defer cur.Close(ctx)
+
+	return res, nil
 }
 
 // SaveEduTransactions saves the result of the edu transaction to the database.
@@ -246,6 +325,102 @@ func (m *mongoStore) GetAllAirtimeTransactions(user string) ([]models.AirtimeRes
 
 	if cur.Next(ctx) {
 		resp := models.AirtimeResponse{}
+		if err := cur.Decode(&resp); err != nil {
+			return nil, err
+		}
+		res = append(res, resp)
+	}
+	defer cur.Close(ctx)
+
+	return res, nil
+}
+
+func (m *mongoStore) SaveTVSubcriptionTransaction(details *models.BillResult) error {
+	err := m.saveTransaction(tvColl, details)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *mongoStore) GetTvSubscriptionDetails(id string) (models.BillResult, error) {
+	res := models.BillResult{}
+
+	result := m.getTransaction(id, tvColl)
+
+	err := result.Decode(&res)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return models.BillResult{}, nil
+		}
+		// return error
+		return models.BillResult{}, err
+	}
+
+	return res, nil
+}
+
+func (m *mongoStore) GetAllTvSubTransactions(user string) ([]models.BillResult, error) {
+	ctx := context.Background()
+	res := []models.BillResult{}
+
+	cur, err := m.getAllTransaction(dataColl, user)
+	if err != nil {
+		return []models.BillResult{}, err
+	}
+
+	if cur.Next(ctx) {
+		resp := models.BillResult{}
+		if err := cur.Decode(&resp); err != nil {
+			return nil, err
+		}
+		res = append(res, resp)
+	}
+	defer cur.Close(ctx)
+
+	return res, nil
+}
+
+func (m *mongoStore) SaveElectricTransaction(details *models.ElectricResult) error {
+	err := m.saveTransaction(tvColl, details)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *mongoStore) GetElectricSubDetails(id string) (models.ElectricResult, error) {
+	res := models.ElectricResult{}
+
+	result := m.getTransaction(id, tvColl)
+
+	err := result.Decode(&res)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return models.ElectricResult{}, nil
+		}
+		// return error
+		return models.ElectricResult{}, err
+	}
+
+	return res, nil
+}
+
+func (m *mongoStore) GetAllElectricSubTransactions(user string) ([]models.ElectricResult, error) {
+	ctx := context.Background()
+	res := []models.ElectricResult{}
+
+	cur, err := m.getAllTransaction(dataColl, user)
+	if err != nil {
+		return []models.ElectricResult{}, err
+	}
+
+	if cur.Next(ctx) {
+		resp := models.ElectricResult{}
 		if err := cur.Decode(&resp); err != nil {
 			return nil, err
 		}

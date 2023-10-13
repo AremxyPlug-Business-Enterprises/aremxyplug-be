@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -21,6 +22,9 @@ import (
 var (
 	api   = os.Getenv("DONTECH")
 	token = "Token " + os.Getenv("DONTECH_AUTH")
+	vtapi = os.Getenv("VTPASS_SANDBOX")
+	pk    = os.Getenv("APIKey")
+	sk    = os.Getenv("SK")
 )
 
 type DataConn struct {
@@ -40,23 +44,22 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 	data.Ported_number = true
 
 	var buf bytes.Buffer
-	json.NewEncoder(&buf).Encode(&data)
+	if err := json.NewEncoder(&buf).Encode(&data); err != nil {
+		return nil, d.logAndReturnError("unable to encode data", err)
+	}
 	id, err := randomgen.GenerateOrderID()
 	if err != nil {
-		// check error
 		d.Logger.Error("Could not generate orderID...", zap.Error(err))
-		return nil, errors.New("Api Call Error")
+		return nil, d.logAndReturnError("Could not generate orderID", err)
 	}
 
 	req, err := http.NewRequest("POST", api+"/data/", &buf)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Set("Access-Control-Allow-Origin", "*")
 	req.Header.Add("Authorization", token)
 	req.Header.Add("Content-Type", "application/json")
-	//resp, err := d.RestyClient.R().SetBody(info).SetAuthToken(token).Post("/user/")
-	if err != nil {
-		// return err
-		return nil, err
-	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -70,14 +73,9 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 
 		if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 			if err == io.EOF {
-				log.Println("No response from body")
-				// edu.Logger.Error("Empty response body", zap.Error(err))
-				return nil, errors.New("empty response from server")
-			} else {
-				log.Println("other error:", err)
-				d.Logger.Error("error returned from server: ", zap.Error(err))
-				return nil, errors.New("error returned from server...")
+				return nil, d.logAndReturnError("Empty response body retured from server", err)
 			}
+			return nil, d.logAndReturnError("error while decoding json", err)
 		}
 
 		transactionID := randomgen.GenerateTransactionID("dat")
@@ -103,9 +101,105 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 		return result, nil
 	} else {
 		d.Logger.Error("Api Call Error: %v", zap.String("status", fmt.Sprint((resp.StatusCode))))
-		return nil, errors.New("Api Call Error")
+		return nil, d.logAndReturnError("Api Call Error", nil)
 	}
 
+}
+
+func (d *DataConn) BuySpecData(data models.SpectranetInfo) (*models.SpectranetResult, error) {
+
+	data.RequestID = randomgen.GenerateRequestID()
+	orderid, err := randomgen.GenerateOrderID()
+	if err != nil {
+		return nil, d.logAndReturnError("unable to generate orderid", err)
+	}
+	transactionID := randomgen.GenerateTransactionID("dat")
+	resp, err := d.buySpecData(data)
+	if err != nil {
+		d.Logger.Error("error returned from server", zap.Any("error:", err))
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	apiResponse := models.SpectranetApi{}
+	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+		if err == io.EOF {
+			return nil, d.logAndReturnError("Empty response body retured from server", err)
+		}
+		return nil, d.logAndReturnError("error while decoding json", err)
+	}
+
+	trans_content := apiResponse.Content.Transcations
+	result := &models.SpectranetResult{
+		Network:         data.Network,
+		Product:         data.Product,
+		Plan:            data.Plan,
+		Phone_Number:    trans_content.Phone_Number,
+		No_of_Pins:      trans_content.Quantity,
+		Amount:          trans_content.Amount,
+		ProductDesc:     trans_content.Type,
+		Description:     data.Product,
+		TranscationID:   transactionID,
+		OrderID:         orderid,
+		ReferenceNumber: trans_content.TransactionID,
+		RequestID:       apiResponse.RequestID,
+	}
+
+	if err := d.saveTransacation(result); err != nil {
+		return nil, d.logAndReturnError("error while saving to database", err)
+	}
+
+	fmt.Printf("%+v\n", apiResponse)
+
+	return result, nil
+
+}
+
+func (d *DataConn) BuySmileData(data models.SmileInfo) (*models.SmileResult, error) {
+
+	data.RequestID = randomgen.GenerateRequestID()
+	orderid, err := randomgen.GenerateOrderID()
+	if err != nil {
+		return nil, d.logAndReturnError("unable to generate orderid", err)
+	}
+	transactionID := randomgen.GenerateTransactionID("dat")
+	resp, err := d.buySmileData(data)
+	if err != nil {
+		return nil, d.logAndReturnError("error returned from server", err)
+	}
+
+	defer resp.Body.Close()
+
+	apiResponse := models.SmileAPIresponse{}
+
+	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+		if err == io.EOF {
+			return nil, d.logAndReturnError("Empty response body retured from server", err)
+		}
+		return nil, d.logAndReturnError("error while decoding json", err)
+	}
+
+	trans_content := apiResponse.Content.Transcations
+	result := &models.SmileResult{
+		Network:         data.Network,
+		ProductPlan:     trans_content.Product_Desc,
+		Email:           data.Email,
+		AccountID:       data.AccountID,
+		Phone_Number:    data.AccountID,
+		Amount:          trans_content.Amount,
+		Product:         trans_content.Type,
+		Description:     trans_content.Product_Desc,
+		TranscationID:   transactionID,
+		OrderID:         orderid,
+		ReferenceNumber: trans_content.TransactionID,
+		RequestID:       apiResponse.RequestID,
+	}
+
+	if err := d.saveTransacation(result); err != nil {
+		return nil, d.logAndReturnError("error while saving to database", err)
+	}
+
+	return result, nil
 }
 
 // GetTransactionDetail takes a  id and returns the details of the transaction
@@ -113,9 +207,7 @@ func (d *DataConn) GetTransactionDetail(id string) (models.DataResult, error) {
 	resp := models.DataResult{}
 	res, err := d.getTransactionDetails(id)
 	if err != nil {
-		// write error
-		d.Logger.Error("Database error try again...", zap.Error(err))
-		return resp, errors.New("Database request error: " + err.Error())
+		return resp, d.logAndReturnError("error while communicating with database", err)
 	}
 
 	return res, nil
@@ -126,9 +218,7 @@ func (d *DataConn) GetUserTransactions(user string) ([]models.DataResult, error)
 
 	res, err := d.getAllTransactions(user)
 	if err != nil {
-		// write error
-		d.Logger.Error("Database error try again...", zap.Error(err))
-		return nil, errors.New("Database request error: " + err.Error())
+		return res, d.logAndReturnError("error while communicating with database", err)
 	}
 
 	return res, err
@@ -163,7 +253,74 @@ func (d *DataConn) PingUser(w http.ResponseWriter) (*http.Response, error) {
 // GetAllTransactions returns a list of all data transactions.
 func (d *DataConn) GetAllTransactions() ([]models.DataResult, error) {
 	var user string
-	result, err := d.Dbconn.GetAllDataTransactions(user)
+	result, err := d.getAllTransactions(user)
+	if err != nil {
+		d.Logger.Error("Database error try again...", zap.Error(err))
+		return nil, errors.New("Database request error: " + err.Error())
+	}
+
+	return result, nil
+}
+
+func (d *DataConn) GetSpecTransDetails(requestID string) (models.SpectranetResult, error) {
+	resp := models.SpectranetResult{}
+	res, err := d.getSpecDataDetails(requestID)
+	if err != nil {
+		return resp, d.logAndReturnError("error while communicating with database", err)
+	}
+
+	return res, nil
+}
+
+func (d *DataConn) GetSpecUserTransactions(user string) ([]models.SpectranetResult, error) {
+
+	res, err := d.getAllSpecTransactions(user)
+	if err != nil {
+		d.Logger.Error("Database error try again...", zap.Error(err))
+		return nil, errors.New("database request error: " + err.Error())
+	}
+
+	return res, err
+}
+
+func (d *DataConn) GetAllSpecTransactions() ([]models.SpectranetResult, error) {
+	var user string
+	result, err := d.getAllSpecTransactions(user)
+	if err != nil {
+		d.Logger.Error("Database error try again...", zap.Error(err))
+		return nil, errors.New("Database request error: " + err.Error())
+	}
+
+	return result, nil
+}
+
+func (d *DataConn) GetSmileTransDetails(requestID string) (models.SmileResult, error) {
+	resp := models.SmileResult{}
+	res, err := d.getSmileDataDetails(requestID)
+	if err != nil {
+		// write error
+		d.Logger.Error("Database error try again...", zap.Error(err))
+		return resp, errors.New("Database request error: " + err.Error())
+	}
+
+	return res, nil
+}
+
+func (d *DataConn) GetSmileUserTransactions(user string) ([]models.SmileResult, error) {
+
+	res, err := d.getAllSmileTransactions(user)
+	if err != nil {
+		// write error
+		d.Logger.Error("Database error try again...", zap.Error(err))
+		return nil, errors.New("database request error: " + err.Error())
+	}
+
+	return res, err
+}
+
+func (d *DataConn) GetAllSmileTransactions() ([]models.SmileResult, error) {
+	var user string
+	result, err := d.getAllSmileTransactions(user)
 	if err != nil {
 		d.Logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("Database request error: " + err.Error())
@@ -201,8 +358,72 @@ func (d *DataConn) QueryTransaction(id int) error {
 
 }
 
+func (d *DataConn) buySmileData(data models.SmileInfo) (*http.Response, error) {
+
+	formdata := url.Values{
+		"request_id":     {data.RequestID},
+		"serviceID":      {data.Product},
+		"billersCode":    {data.AccountID},
+		"variation_code": {data.Product_plan},
+		"phone":          {data.Phone_Number},
+	}
+
+	body := bytes.NewBufferString(formdata.Encode())
+	url := fmt.Sprintf("%s/%s", vtapi, "pay")
+
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("api-key", pk)
+	req.Header.Set("secret-key", sk)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+func (d *DataConn) buySpecData(data models.SpectranetInfo) (*http.Response, error) {
+
+	amount := strconv.Itoa(data.Amount)
+
+	formdata := url.Values{
+		"request_id":     {data.RequestID},
+		"serviceID":      {data.Network},
+		"billersCode":    {data.Phone_Number},
+		"variation_code": {data.Plan},
+		"amount":         {amount},
+		"phone":          {data.Phone_Number},
+		"quantity":       {data.No_of_Pins},
+	}
+
+	body := bytes.NewBufferString(formdata.Encode())
+	url := fmt.Sprintf("%s/%s", vtapi, "pay")
+
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("api-key", pk)
+	req.Header.Set("secret-key", sk)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 // saveTranscation saves the details of a transaction to database
-func (d *DataConn) saveTransacation(details *models.DataResult) error {
+func (d *DataConn) saveTransacation(details interface{}) error {
 	err := d.Dbconn.SaveDataTransaction(details)
 	return err
 }
@@ -217,4 +438,30 @@ func (d *DataConn) getTransactionDetails(id string) (models.DataResult, error) {
 func (d *DataConn) getAllTransactions(user string) ([]models.DataResult, error) {
 	results, err := d.Dbconn.GetAllDataTransactions(user)
 	return results, err
+}
+
+// get transactions history
+func (d *DataConn) getSpecDataDetails(requestID string) (models.SpectranetResult, error) {
+	result, err := d.Dbconn.GetSpecTransDetails(requestID)
+	return result, err
+}
+
+func (d *DataConn) getAllSpecTransactions(user string) ([]models.SpectranetResult, error) {
+	result, err := d.Dbconn.GetAllSpecDataTransactions(user)
+	return result, err
+}
+
+func (d *DataConn) getSmileDataDetails(id string) (models.SmileResult, error) {
+	result, err := d.Dbconn.GetSmileTransDetails(id)
+	return result, err
+}
+
+func (d *DataConn) getAllSmileTransactions(user string) ([]models.SmileResult, error) {
+	result, err := d.Dbconn.GetAllSmileDataTransactions(user)
+	return result, err
+}
+
+func (d *DataConn) logAndReturnError(errorMsg string, err error) error {
+	d.Logger.Error(errorMsg, zap.Error(err))
+	return errors.New(errorMsg)
 }

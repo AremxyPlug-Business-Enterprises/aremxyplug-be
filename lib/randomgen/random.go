@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+var (
+	charset = os.Getenv("CHARSET")
+	numbset = os.Getenv(("NUMBSET"))
+)
+
 func GenerateRandomNum(numberOfDigits int) (int, error) {
 	maxLimit := int64(int(math.Pow10(numberOfDigits)) - 1)
 	lowLimit := int(math.Pow10(numberOfDigits - 1))
@@ -38,7 +43,6 @@ func GenerateTransactionID(product string) string {
 
 	prod_type := strings.ToUpper(product)
 	seedRand := random.New(random.NewSource(time.Now().UnixNano()))
-	charset := os.Getenv("CHARSET")
 
 	b := make([]byte, 5)
 	for i := range b {
@@ -55,7 +59,6 @@ func GenerateTransactionID(product string) string {
 // generateOrderID generates a unique OrderID
 func GenerateOrderID() (int, error) {
 	seedRand := random.New(random.NewSource(int64(time.Now().UnixNano())))
-	numbset := os.Getenv(("NUMBSET"))
 
 	b := make([]byte, 10)
 	for i := range b {
@@ -70,4 +73,20 @@ func GenerateOrderID() (int, error) {
 	}
 
 	return Id, nil
+}
+
+func GenerateRequestID() string {
+
+	random.New(random.NewSource(int64(time.Now().UnixNano())))
+
+	randomChars := make([]byte, 3)
+	for i := range randomChars {
+		randomChars[i] = charset[random.Intn(len(charset))]
+	}
+
+	lagos, _ := time.LoadLocation("Africa/Lagos")
+
+	current_time := time.Now().In(lagos).Format("200601021504")
+
+	return current_time + string(randomChars)
 }
