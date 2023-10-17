@@ -44,6 +44,15 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 		return nil, e.logAndReturnError("error generating orderID", err)
 	}
 	transactionID := randomgen.GenerateTransactionID("ele")
+
+	validNo, err := e.verifyMeterNo(data.DiscoType, data.Meter_No, data.Meter_Type)
+	if err != nil {
+		return nil, e.logAndReturnError("error verifying meter number", err)
+	}
+	if !validNo {
+		return nil, e.logAndReturnError("meter number is not valid", errors.New("invalid meter number"))
+	}
+
 	resp, err := e.payBill(data)
 	if err != nil {
 		return nil, e.logAndReturnError("error communicating with server", err)
@@ -221,4 +230,32 @@ func (e *ElectricConn) queryTransaction(requestID string) (*http.Response, error
 func (d *ElectricConn) logAndReturnError(errorMsg string, err error) error {
 	d.logger.Error(errorMsg, zap.Error(err))
 	return errors.New(errorMsg)
+}
+
+func (d *ElectricConn) verifyMeterNo(discoType, meterNo, meterType string) (bool, error) {
+
+	formdata := url.Values{
+		"serviceID":      {discoType},
+		"billersCode":    {meterNo},
+		"variation_code": {meterType},
+	}
+
+	body := bytes.NewBufferString(formdata.Encode())
+	url := fmt.Sprintf("%s/%s", api, "merchant-verify")
+
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("api-key", pk)
+	req.Header.Set("secret-key", sk)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{}
+	_, err = client.Do(req)
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
