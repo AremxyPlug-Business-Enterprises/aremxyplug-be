@@ -11,6 +11,7 @@ import (
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
 	"github.com/aremxyplug-be/lib/errorvalues"
+	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
@@ -67,6 +68,7 @@ type HandlerOptions struct {
 	ElectSub    *elect.ElectricConn
 	Secrets     *config.Secrets
 	EmailClient emailclient.EmailClient
+	Otp         *otpgen.OTPConn
 }
 
 func NewHttpHandler(opt *HandlerOptions) *HttpHandler {

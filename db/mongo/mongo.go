@@ -54,6 +54,22 @@ func (m *mongoStore) col(collectionName string) *mongo.Collection {
 	return m.mongoClient.Database(m.databaseName).Collection(collectionName)
 }
 
+func (m *mongoStore) otpColl() (*mongo.Collection, error) {
+	col := m.mongoClient.Database(m.databaseName).Collection("OTP")
+	ctx := context.Background()
+	indexModel := mongo.IndexModel{
+		Keys:    bson.D{primitive.E{Key: "expireAt", Value: 1}},
+		Options: options.Index().SetExpireAfterSeconds(0),
+	}
+
+	_, err := col.Indexes().CreateOne(ctx, indexModel)
+	if err != nil {
+		return nil, err
+	}
+
+	return col, nil
+}
+
 func (m *mongoStore) SaveUser(user models.User) error {
 	_, err := m.col(models.UserCollectionName).InsertOne(context.Background(), user)
 	if err != nil {
@@ -471,4 +487,39 @@ func (m *mongoStore) getAllTransaction(collectionName, user string) (*mongo.Curs
 
 	cur, err := m.col(collectionName).Find(ctx, filter)
 	return cur, err
+}
+
+func (m *mongoStore) SaveOTP(data models.OTP) error {
+	ctx := context.Background()
+	data.ExpireAt = time.Now().Add(time.Duration(5) * time.Minute)
+
+	col, err := m.otpColl()
+	if err != nil {
+		return err
+	}
+
+	_, err = col.InsertOne(ctx, data)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *mongoStore) GetOTP(email string) (models.OTP, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	data := models.OTP{}
+	filter := bson.D{primitive.E{Key: "email", Value: email}}
+	opts := options.FindOne().SetSort(bson.D{{Key: "expiresAt", Value: -1}})
+
+	result := m.col("OTP").FindOne(ctx, filter, opts)
+	err := result.Decode(&data)
+	if err == mongo.ErrNoDocuments {
+		return models.OTP{}, nil
+	} else if err != nil {
+		return models.OTP{}, err
+	}
+
+	return data, nil
 }

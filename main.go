@@ -11,6 +11,7 @@ import (
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient/postmark"
 	zapLogger "github.com/aremxyplug-be/lib/logger"
+	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	vtu "github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
@@ -30,6 +31,7 @@ func main() {
 
 	// setup email client
 	emailClient := postmark.New(secrets)
+	otp := otpgen.NewOTP(store)
 	data := data.NewData(store, logger)
 	edu := edu.NewEdu(store, logger)
 	vtu := vtu.NewAirtimeConn(logger, store)
@@ -45,6 +47,7 @@ func main() {
 		Vtu:         vtu,
 		TvSub:       tvSub,
 		ElectSub:    electSub,
+		Otp:         otp,
 	}
 
 	httpRouter := httpSrv.MountServer(config)

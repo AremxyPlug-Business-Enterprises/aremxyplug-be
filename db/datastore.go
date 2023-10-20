@@ -29,4 +29,6 @@ type AremxyStore interface {
 	SaveElectricTransaction(details *models.ElectricResult) error
 	GetElectricSubDetails(id string) (models.ElectricResult, error)
 	GetAllElectricSubTransactions(user string) ([]models.ElectricResult, error)
+	SaveOTP(data models.OTP) error
+	GetOTP(email string) (models.OTP, error)
 }

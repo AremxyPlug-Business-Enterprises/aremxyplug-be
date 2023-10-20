@@ -6,6 +6,7 @@ import (
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
+	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
@@ -30,6 +31,7 @@ type ServerConfig struct {
 	Vtu         *airtime.AirtimeConn
 	TvSub       *tvsub.TvConn
 	ElectSub    *elect.ElectricConn
+	Otp         *otpgen.OTPConn
 }
 
 func MountServer(config ServerConfig) *chi.Mux {
@@ -59,6 +61,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 		VTU:         config.Vtu,
 		TvSub:       config.TvSub,
 		ElectSub:    config.ElectSub,
+		Otp:         config.Otp,
 	})
 
 	// Routes
