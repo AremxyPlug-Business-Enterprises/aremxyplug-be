@@ -122,6 +122,21 @@ func (d *mongoStore) CreateMessage(message *models.Message) error {
 	return nil
 }
 
+// update user password
+func (d *mongoStore) UpdateUserPassword(email string, password string) error {
+	ctx := context.Background()
+	filter := bson.M{"email": email}
+	update := bson.M{"$set": bson.M{"password": password}}
+	_, err := d.mongoClient.
+		Database(d.databaseName).
+		Collection(models.UserCollectionName).
+		UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // SaveTransaction saves a data transaction to the database.
 func (m *mongoStore) SaveDataTransaction(details interface{}) error {
 
