@@ -54,16 +54,11 @@ func (a *AirtimeConn) BuyAirtime(airtime models.AirtimeInfo) (*models.AirtimeRes
 	defer resp.Body.Close()
 
 	apiResponse := models.AirtimeApiResponse{}
-
-	jsonerr := json.NewDecoder(resp.Body).Decode(&apiResponse)
-	log.Println(apiResponse)
-	fmt.Printf("%+v\n", apiResponse)
-	if jsonerr == io.EOF {
-		log.Println("No response from body")
-		return nil, errors.New("empty response from server")
-	} else if jsonerr != nil {
-		log.Println("other error:", jsonerr)
-		return nil, errors.New("error returned from server")
+	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+		if err == io.EOF {
+			return nil, logAndReturnError(a.logger, "Empty response from server")
+		}
+		return nil, logAndReturnError(a.logger, "Error returned from server")
 	}
 
 	// check to see if the buy was successful. The response is printed to the log
@@ -91,8 +86,7 @@ func (a *AirtimeConn) BuyAirtime(airtime models.AirtimeInfo) (*models.AirtimeRes
 
 	// save transaction
 	if err := a.saveTransaction(result); err != nil {
-		a.logger.Error("error saving transaction, an error occurred!", zap.String("error:", fmt.Sprint(err)))
-		return result, err
+		return result, logAndReturnError(a.logger, "error saving transaction, an error occurred")
 	}
 
 	return result, nil
@@ -208,3 +202,22 @@ func (a *AirtimeConn) queryTransaction(id string) (*http.Response, error) {
 
 	return resp, nil
 }
+
+func logAndReturnError(logger *zap.Logger, errorMsg string) error {
+	logger.Error(errorMsg)
+	return errors.New(errorMsg)
+}
+
+// international airtime
+
+// buy airtime
+
+// get history
+
+// query transaction
+
+// smile airtime
+
+// buy airtimme
+
+// query transaction
