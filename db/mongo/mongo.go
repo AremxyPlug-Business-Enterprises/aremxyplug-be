@@ -20,7 +20,7 @@ import (
 // New returns a new instance of DataStore and Client
 // response can contain error
 func New(connectURI, databaseName string, logger *zap.Logger) (db.DataStore, *mongo.Client, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5+time.Second)
 	defer cancel()
 
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(connectURI))
