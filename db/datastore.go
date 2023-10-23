@@ -10,6 +10,7 @@ type AremxyStore interface {
 	SaveUser(user models.User) error
 	GetUserByEmail(email string) (*models.User, error)
 	CreateMessage(message *models.Message) error
+	UpdateUserPassword(email string, password string) error
 	SaveDataTransaction(details interface{}) error
 	GetDataTransactionDetails(id string) (models.DataResult, error)
 	GetAllDataTransactions(user string) ([]models.DataResult, error)
