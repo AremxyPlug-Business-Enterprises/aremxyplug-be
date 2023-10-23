@@ -3,8 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/go-chi/render"
-	"log"
 	"net/http"
 	"time"
 
@@ -13,7 +11,7 @@ import (
 	"github.com/aremxyplug-be/lib/errorvalues"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/aremxyplug-be/lib/telcom/data"
-	//"github.com/aremxyplug-be/lib/telcom/edu"
+	"github.com/aremxyplug-be/lib/telcom/edu"
 	"github.com/aremxyplug-be/types/dto"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/go-chi/chi/v5"
@@ -50,14 +48,14 @@ type HttpHandler struct {
 	uuidGenerator        uuidgenerator.UUIDGenerator
 	emailClient          emailclient.EmailClient
 	dataClient           *data.DataConn
-	//eduClient            *edu.EduConn
+	eduClient            *edu.EduConn
 }
 
 type HandlerOptions struct {
-	Logger *zap.Logger
-	Store  db.DataStore
-	Data   *data.DataConn
-	//Edu         *edu.EduConn
+	Logger      *zap.Logger
+	Store       db.DataStore
+	Data        *data.DataConn
+	Edu         *edu.EduConn
 	Secrets     *config.Secrets
 	EmailClient emailclient.EmailClient
 }
@@ -258,120 +256,8 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 }
 
-// ForgotPassword
-func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
-	var userlogin dto.LoginInput
-
-	// validate the request body
-	if err := json.NewDecoder(r.Body).Decode(&userlogin); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Header().Set("Content-Type", "application/json")
-		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
-	email := userlogin.Email
-	// Checking if the user exists (replace with your actual user lookup logic)
-	user, err := handler.store.GetUserByEmail(userlogin.Email)
-	if user == nil {
-		render.Status(r, http.StatusUnauthorized)
-		render.JSON(w, r, map[string]string{"error": "Sorry, this user does not exist"})
-		return
-	}
-
-	claims := dto.Claims{
-		PersonId: user.ID,
-		Email:    email,
-	}
-
-	token, err := handler.jwt.GenerateToken(claims)
-	if err != nil {
-		handler.logger.Error("fail to generate token", zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-	//var uri string
-	uri := "/api/v1/reset-password?token="
-	Scheme := "http"
-	link := fmt.Sprintf("%s://%s%s%s", Scheme, r.Host, uri, token)
-	fmt.Println(link)
-
-	// Creating Message
-	message := models.Message{
-		ID:         handler.idGenerator.Generate(),
-		CustomerID: user.ID,
-		Target:     user.Email,
-		Type:       "email",
-		Title:      "Password Reset",
-		Body:       link,
-		TemplateID: PasswordResetAlias,
-		DataMap:    map[string]string{},
-		Ts:         handler.timeHelper.Now().Unix(),
-	}
-	message.DataMap["FullName"] = user.FullName
-	message.DataMap["Email"] = user.Email
-	message.DataMap["Link"] = link
-
-	// send message
-	fmt.Println("about send email")
-	err = handler.emailClient.Send(&message)
-	fmt.Println("email sent")
-	if err != nil {
-		handler.logger.Error("error sending password reset email", zap.String("target", user.Email), zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Header().Set("Content-Type", "application/json")
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-	handler.logger.Info("password reset email sent", zap.String("target", user.Email))
-	w.WriteHeader(http.StatusCreated)
-	w.Header().Set("Content-Type", "application/json")
-	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"msg": "email sent successfully"}}
-	json.NewEncoder(w).Encode(response)
-
-}
-
-// ResetPassword
-func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
-	//params := chi.URLParam(r, "token")
-	//token := chi.URLParam(r, "token")
-	//log.Print(token, params)
-	token := r.URL.Query().Get("token")
-	log.Print(token)
-
-	//validate the token
-	anything, err := handler.jwt.ValidateToken(token)
-	if err != nil {
-		handler.logger.Error("fail to validate token", zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-	//	hashing and updating user's password
-	var newPassword string
-	json.NewDecoder(r.Body).Decode(&newPassword)
-	hashedPassword, err := handler.encrypt.GenerateFromPassword(newPassword)
-	newPassword = string(hashedPassword)
-
-	err = handler.store.UpdateUserPassword(anything.ID, newPassword)
-	if err != nil {
-		handler.logger.Error("fail to update password", zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-	w.WriteHeader(http.StatusCreated)
-	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"data": "Password updated successfully"}}
-	json.NewEncoder(w).Encode(response)
-}
-
-func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
+// PasswordReset
+func (handler *HttpHandler) PasswordReset(w http.ResponseWriter, r *http.Request) {
 	var userlogin dto.LoginInput
 
 	// validate the request body
@@ -397,7 +283,7 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 		CustomerID: user.ID,
 		Target:     user.Email,
 		Type:       "email",
-		Title:      "Password otp",
+		Title:      "Password Reset",
 		Body:       "",
 		TemplateID: PasswordResetAlias,
 		DataMap:    map[string]string{},
@@ -426,7 +312,60 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 
 }
 
-//PasswordReset
+func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
+	var userlogin dto.LoginInput
+
+	// validate the request body
+	if err := json.NewDecoder(r.Body).Decode(&userlogin); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	user, err := handler.store.GetUserByEmail(userlogin.Email)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		w.Header().Set("Content-Type", "application/json")
+		response := responseFormat.CustomResponse{Status: http.StatusNotFound, Message: "user not found", Data: map[string]interface{}{"data": "user not found"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Creating Message
+	message := models.Message{
+		ID:         handler.idGenerator.Generate(),
+		CustomerID: user.ID,
+		Target:     user.Email,
+		Type:       "email",
+		Title:      "Password Reset",
+		Body:       "",
+		TemplateID: PasswordResetAlias,
+		DataMap:    map[string]string{},
+		Ts:         handler.timeHelper.Now().Unix(),
+	}
+	message.DataMap["FullName"] = user.FullName
+	message.DataMap["Email"] = user.Email
+
+	// send message
+	fmt.Println("about send email")
+	err = handler.emailClient.Send(&message)
+	fmt.Println("email sent")
+	if err != nil {
+		handler.logger.Error("error sending password reset email", zap.String("target", user.Email), zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	handler.logger.Info("password reset email sent", zap.String("target", user.Email))
+	w.WriteHeader(http.StatusCreated)
+	w.Header().Set("Content-Type", "application/json")
+	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"msg": "email sent successfully"}}
+	json.NewEncoder(w).Encode(response)
+
+}
 
 func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	var userlogin dto.LoginInput
@@ -610,49 +549,48 @@ func (handler *HttpHandler) GetDataTransactions(w http.ResponseWriter, r *http.R
 
 }
 
-////
-////func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
-////
-////	if r.Method == "POST" {
-////		data := models.EduInfo{}
-////		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-////			handler.logger.Error("Decoding JSON response", zap.Error(err))
-////			w.WriteHeader(http.StatusInternalServerError)
-////			return
-////		}
-////		res, err := handler.eduClient.BuyEduPin(data)
-////		if err != nil {
-////			handler.logger.Error("Api response error", zap.Error(err))
-////			fmt.Fprintf(w, "An internal error occurred while purchasing edu pin, confirm purchase with id: %d", res.OrderID)
-////			w.WriteHeader(http.StatusInternalServerError)
-////			return
-////		}
-////	}
-////
-////	if r.Method == "GET" {
-////		res, err := handler.eduClient.QueryTransaction("id")
-////		if err != nil {
-////			handler.logger.Error("Api response error", zap.Error(err))
-////			fmt.Fprintln(w, "Errror occurred while getting user's records")
-////			w.WriteHeader(http.StatusInternalServerError)
-////			return
-////		}
-////
-////		json.NewEncoder(w).Encode(res)
-////	}
-////
-////}
-//
-//// To be used by admins to view transactions in the databases
-//func (handler *HttpHandler) GetEduTransactions(w http.ResponseWriter, r *http.Request) {
-//
-//	resp, err := handler.eduClient.GetAllTransaction("user")
-//	if err != nil {
-//		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
-//		fmt.Fprintln(w, "Error occurred while getting transactions")
-//		w.WriteHeader(http.StatusInternalServerError)
-//		return
-//	}
-//
-//	json.NewEncoder(w).Encode(resp)
-//}
+func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method == "POST" {
+		data := models.EduInfo{}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		res, err := handler.eduClient.BuyEduPin(data)
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			fmt.Fprintf(w, "An internal error occurred while purchasing edu pin, confirm purchase with id: %d", res.OrderID)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if r.Method == "GET" {
+		res, err := handler.eduClient.QueryTransaction("id")
+		if err != nil {
+			handler.logger.Error("Api response error", zap.Error(err))
+			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(res)
+	}
+
+}
+
+// To be used by admins to view transactions in the databases
+func (handler *HttpHandler) GetEduTransactions(w http.ResponseWriter, r *http.Request) {
+
+	resp, err := handler.eduClient.GetAllTransaction("user")
+	if err != nil {
+		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
+		fmt.Fprintln(w, "Error occurred while getting transactions")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(resp)
+}
