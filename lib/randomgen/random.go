@@ -27,3 +27,8 @@ func GenerateRandomNum(numberOfDigits int) (int, error) {
 	}
 	return randomNumberInt, nil
 }
+
+//Generate OTP
+func (handler *HttpHandler) GenerateOTP(string string) {
+
+}
