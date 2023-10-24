@@ -33,4 +33,5 @@ type AremxyStore interface {
 	SaveOTP(data models.OTP) error
 	GetOTP(email string) (models.OTP, error)
 }
-hjbhjb
+
+// Path: db/datastore.go
