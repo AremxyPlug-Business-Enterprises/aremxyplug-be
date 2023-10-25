@@ -39,6 +39,7 @@ func main() {
 	electSub := elect.NewElectricConn(store, logger)
 
 	config := httpSrv.ServerConfig{
+		Store:       store,
 		EmailClient: emailClient,
 		Logger:      logger,
 		Secrets:     secrets,
