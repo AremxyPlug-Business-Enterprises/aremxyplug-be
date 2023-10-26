@@ -289,7 +289,7 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 	email := userlogin.Email
 	// Checking if the user exists (replace with your actual user lookup logic)
 	user, err := handler.store.GetUserByEmail(userlogin.Email)
-	if user == nil {
+	if err != nil || user == nil {
 		render.Status(r, http.StatusUnauthorized)
 		render.JSON(w, r, map[string]string{"error": "Sorry, this user does not exist"})
 		return
@@ -371,6 +371,13 @@ func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request
 	var newPassword string
 	json.NewDecoder(r.Body).Decode(&newPassword)
 	hashedPassword, err := handler.encrypt.GenerateFromPassword(newPassword)
+	if err != nil {
+		handler.logger.Error("error hashing password", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "something unexpected occured, please try again"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 	newPassword = string(hashedPassword)
 
 	err = handler.store.UpdateUserPassword(anything.ID, newPassword)
