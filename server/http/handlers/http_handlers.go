@@ -38,6 +38,7 @@ import (
 const (
 	// email templates
 	PasswordResetAlias = "password-reset"
+	PasswordOTPAlias   = "password-otp"
 )
 
 var validate = validator.New()
@@ -59,6 +60,7 @@ type HttpHandler struct {
 	vtuClient            *airtime.AirtimeConn
 	tvClient             *tvsub.TvConn
 	electClient          *elect.ElectricConn
+	otp                  *otpgen.OTPConn
 }
 
 type HandlerOptions struct {
@@ -119,6 +121,7 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		vtuClient:            opt.VTU,
 		tvClient:             opt.TvSub,
 		electClient:          opt.ElectSub,
+		otp:                  opt.Otp,
 	}
 }
 
@@ -148,6 +151,18 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 
 	if !handler.isValidNewUser(user.Email) {
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "email exist", Data: map[string]interface{}{"data": "user already exist"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if !handler.isValidNewUser(user.Username) {
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "username exist", Data: map[string]interface{}{"data": "user already exist"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if !handler.isValidNewUser(user.PhoneNumber) {
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "PhoneNumber exist", Data: map[string]interface{}{"data": "user already exist"}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -211,7 +226,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	user, err := handler.store.GetUserByEmail(userlogin.Email)
+	user, err := handler.store.GetUserByUsernameOrEmail(userlogin.Email, userlogin.Username)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		w.Header().Set("Content-Type", "application/json")
@@ -234,11 +249,13 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	refreshTokenClaims := dto.Claims{
 		PersonId: user.ID,
 		Email:    user.Email,
+		Username: user.Username,
 	}
 
 	claims := dto.Claims{
 		PersonId: user.ID,
 		Email:    user.Email,
+		Username: user.Username,
 	}
 
 	jwtToken, err := handler.jwt.GenerateTokenWithExpiration(claims, handler.authTokenDuration)
@@ -253,6 +270,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	userResponse := dto.UserResponse{
 		FullName: user.FullName,
 		Email:    user.Email,
+		Username: user.Username,
 		Phone:    user.PhoneNumber,
 	}
 
@@ -350,6 +368,22 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 
 }
 
+func (handler *HttpHandler) ValidateToken(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	log.Print(token)
+
+	//validate the token
+	_, err := handler.jwt.ValidateToken(token)
+	if err != nil {
+		handler.logger.Error("fail to validate token", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+}
+
 // ResetPassword
 func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	//params := chi.URLParam(r, "token")
@@ -413,6 +447,17 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	otp, err := handler.otp.GenerateOTP(user.Email)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "error generating otp"}}
+		json.NewEncoder(w).Encode(response)
+		return
+
+	}
+	log.Println(otp)
+
 	// Creating Message
 	message := models.Message{
 		ID:         handler.idGenerator.Generate(),
@@ -420,13 +465,14 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 		Target:     user.Email,
 		Type:       "email",
 		Title:      "Password otp",
-		Body:       "",
-		TemplateID: PasswordResetAlias,
+		Body:       otp,
+		TemplateID: PasswordOTPAlias,
 		DataMap:    map[string]string{},
 		Ts:         handler.timeHelper.Now().Unix(),
 	}
 	message.DataMap["FullName"] = user.FullName
 	message.DataMap["Email"] = user.Email
+	message.DataMap["OTP"] = otp
 
 	// send message
 	fmt.Println("about send email")
@@ -451,58 +497,31 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 //PasswordReset
 
 func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
-	var userlogin dto.LoginInput
+	type otp struct {
+		OTP string `json:"otp"`
+	}
+	Otp := otp{}
 
 	// validate the request body
-	if err := json.NewDecoder(r.Body).Decode(&userlogin); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&Otp); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Header().Set("Content-Type", "application/json")
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	user, err := handler.store.GetUserByEmail(userlogin.Email)
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		w.Header().Set("Content-Type", "application/json")
-		response := responseFormat.CustomResponse{Status: http.StatusNotFound, Message: "user not found", Data: map[string]interface{}{"data": "user not found"}}
+
+	email := r.URL.Query().Get("email")
+	valid, err := handler.otp.ValidateOTP(Otp.OTP, email)
+	if !valid || err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-
-	// Creating Message
-	message := models.Message{
-		ID:         handler.idGenerator.Generate(),
-		CustomerID: user.ID,
-		Target:     user.Email,
-		Type:       "email",
-		Title:      "Password Reset",
-		Body:       "",
-		TemplateID: PasswordResetAlias,
-		DataMap:    map[string]string{},
-		Ts:         handler.timeHelper.Now().Unix(),
-	}
-	message.DataMap["FullName"] = user.FullName
-	message.DataMap["Email"] = user.Email
-
-	// send message
-	fmt.Println("about send email")
-	err = handler.emailClient.Send(&message)
-	fmt.Println("email sent")
-	if err != nil {
-		handler.logger.Error("error sending password reset email", zap.String("target", user.Email), zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Header().Set("Content-Type", "application/json")
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-	handler.logger.Info("password reset email sent", zap.String("target", user.Email))
-	w.WriteHeader(http.StatusCreated)
-	w.Header().Set("Content-Type", "application/json")
-	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"msg": "email sent successfully"}}
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "otp verification successful", Data: map[string]interface{}{"data": "success"}}
 	json.NewEncoder(w).Encode(response)
-
+	// Creating Message
 }
 
 func (handler *HttpHandler) validateToken(token string) (isValid bool, response *dto.Claims) {
