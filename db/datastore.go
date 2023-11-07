@@ -9,6 +9,8 @@ type DataStore interface {
 type AremxyStore interface {
 	SaveUser(user models.User) error
 	GetUserByEmail(email string) (*models.User, error)
+	GetUserByUsername(username string) (*models.User, error)
+	GetUserByUsernameOrEmail(email string, username string) (*models.User, error)
 	CreateMessage(message *models.Message) error
 	UpdateUserPassword(email string, password string) error
 	SaveDataTransaction(details interface{}) error
@@ -36,3 +38,5 @@ type AremxyStore interface {
 	GetAllBankTransactions(user string) (interface{}, error)
 	GetBankTransactionDetails(id string) (interface{}, error)
 }
+
+// Path: db/datastore.go

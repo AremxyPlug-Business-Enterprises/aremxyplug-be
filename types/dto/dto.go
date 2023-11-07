@@ -3,10 +3,12 @@ package dto
 type Claims struct {
 	PersonId string `json:"person_id"`
 	Email    string `json:"email"`
+	Username string `json:"username"`
 }
 
 type LoginInput struct {
 	Email    string `json:"email"`
+	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
@@ -17,6 +19,7 @@ type TokenInput struct {
 type UserResponse struct {
 	FullName string `json:"full_name"`
 	Email    string `json:"email"`
+	Username string `json:"username"`
 	Phone    string `json:"phone"`
 }
 
