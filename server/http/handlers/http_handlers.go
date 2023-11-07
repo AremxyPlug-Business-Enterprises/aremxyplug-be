@@ -198,6 +198,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		InvitationCode: user.InvitationCode,
 		CreatedAt:      timestamp,
 		UpdatedAt:      timestamp,
+		IsVerified:     false,
 	}
 
 	err = handler.store.SaveUser(newUser)
@@ -327,7 +328,7 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	//var uri string
-	uri := "/api/v1/reset-password?token="
+	uri := "/api/v1/verify-token?token="
 	Scheme := "http"
 	link := fmt.Sprintf("%s://%s%s%s", Scheme, r.Host, uri, token)
 	fmt.Println(link)
@@ -373,7 +374,8 @@ func (handler *HttpHandler) ValidateToken(w http.ResponseWriter, r *http.Request
 	log.Print(token)
 
 	//validate the token
-	_, err := handler.jwt.ValidateToken(token)
+
+	user, err := handler.jwt.ValidateToken(token)
 	if err != nil {
 		handler.logger.Error("fail to validate token", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -381,7 +383,9 @@ func (handler *HttpHandler) ValidateToken(w http.ResponseWriter, r *http.Request
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "email", Data: map[string]interface{}{"data": user.Email}}
+	json.NewEncoder(w).Encode(response)
 }
 
 // ResetPassword
@@ -389,22 +393,18 @@ func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request
 	//params := chi.URLParam(r, "token")
 	//token := chi.URLParam(r, "token")
 	//log.Print(token, params)
-	token := r.URL.Query().Get("token")
-	log.Print(token)
 
 	//validate the token
-	anything, err := handler.jwt.ValidateToken(token)
-	if err != nil {
-		handler.logger.Error("fail to validate token", zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
+	email := r.URL.Query().Get("email")
+
 	//	hashing and updating user's password
-	var newPassword string
+	type NewPassword struct {
+		Password string `json:"password"`
+	}
+	newPassword := NewPassword{}
+
 	json.NewDecoder(r.Body).Decode(&newPassword)
-	hashedPassword, err := handler.encrypt.GenerateFromPassword(newPassword)
+	hashedPassword, err := handler.encrypt.GenerateFromPassword(newPassword.Password)
 	if err != nil {
 		handler.logger.Error("error hashing password", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -412,9 +412,9 @@ func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	newPassword = string(hashedPassword)
+	newPassword.Password = string(hashedPassword)
 
-	err = handler.store.UpdateUserPassword(anything.ID, newPassword)
+	err = handler.store.UpdateUserPassword(email, newPassword.Password)
 	if err != nil {
 		handler.logger.Error("fail to update password", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -519,7 +519,7 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "otp verification successful", Data: map[string]interface{}{"data": "success"}}
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "otp verification successful", Data: map[string]interface{}{"data": email}}
 	json.NewEncoder(w).Encode(response)
 	// Creating Message
 }
