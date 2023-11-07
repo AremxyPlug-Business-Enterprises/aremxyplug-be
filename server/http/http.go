@@ -78,6 +78,8 @@ func MountServer(config ServerConfig) *chi.Mux {
 		// reset password
 		router.Patch("/reset-password", httpHandler.ResetPassword)
 
+		router.Get("/verify-token", httpHandler.ValidateToken)
+
 		router.Post("/send-otp", httpHandler.SendOTP)
 
 		router.Post("/verify-otp", httpHandler.VerifyOTP)

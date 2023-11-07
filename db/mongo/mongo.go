@@ -91,6 +91,37 @@ func (m *mongoStore) GetUserByEmail(email string) (*models.User, error) {
 	return user, nil
 }
 
+func (m *mongoStore) GetUserByUsername(username string) (*models.User, error) {
+	filter := bson.M{
+		"username": username,
+	}
+	user := &models.User{}
+	err := m.col(models.UserCollectionName).FindOne(context.Background(), filter).Decode(user)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+func (d *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*models.User, error) {
+	filter := bson.M{
+		"$or": []bson.M{
+			{"email": email},
+			{"username": username},
+		},
+	}
+	user := &models.User{}
+	err := d.mongoClient.
+		Database(d.databaseName).
+		Collection(models.UserCollectionName).
+		FindOne(context.Background(), filter).
+		Decode(user)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+
+}
+
 func (d *mongoStore) CreateMessage(message *models.Message) error {
 	ctx := context.Background()
 	var modelInDB models.Message
