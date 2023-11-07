@@ -42,6 +42,7 @@ var (
 	eduColl  = "edu"
 	airColl  = "airtime"
 	tvColl   = "tv-sub"
+	bankColl = "bank"
 )
 
 type mongoStore struct {
@@ -568,4 +569,53 @@ func (m *mongoStore) GetOTP(email string) (models.OTP, error) {
 	}
 
 	return data, nil
+}
+
+func (m *mongoStore) SaveBanktransaction(details interface{}) error {
+	err := m.saveTransaction(bankColl, details)
+	return err
+}
+
+// edit to bank transaction
+func (m *mongoStore) GetBankTransactionDetails(id string) (interface{}, error) {
+	ctx := context.Background()
+	res := []models.BillResult{}
+
+	cur, err := m.getAllTransaction(dataColl, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if cur.Next(ctx) {
+		resp := models.BillResult{}
+		if err := cur.Decode(&resp); err != nil {
+			return nil, err
+		}
+		res = append(res, resp)
+	}
+	defer cur.Close(ctx)
+
+	return res, nil
+}
+
+// edit to bank transaction
+func (m *mongoStore) GetAllBankTransactions(user string) (interface{}, error) {
+	ctx := context.Background()
+	res := []models.ElectricResult{}
+
+	cur, err := m.getAllTransaction(dataColl, user)
+	if err != nil {
+		return nil, err
+	}
+
+	if cur.Next(ctx) {
+		resp := models.ElectricResult{}
+		if err := cur.Decode(&resp); err != nil {
+			return nil, err
+		}
+		res = append(res, resp)
+	}
+	defer cur.Close(ctx)
+
+	return nil, nil
 }

@@ -34,6 +34,9 @@ type AremxyStore interface {
 	GetAllElectricSubTransactions(user string) ([]models.ElectricResult, error)
 	SaveOTP(data models.OTP) error
 	GetOTP(email string) (models.OTP, error)
+	SaveBanktransaction(details interface{}) error
+	GetAllBankTransactions(user string) (interface{}, error)
+	GetBankTransactionDetails(id string) (interface{}, error)
 }
 
 // Path: db/datastore.go

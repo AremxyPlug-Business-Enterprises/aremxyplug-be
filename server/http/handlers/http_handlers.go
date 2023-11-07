@@ -447,38 +447,7 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	otp, err := handler.otp.GenerateOTP(user.Email)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Header().Set("Content-Type", "application/json")
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "error generating otp"}}
-		json.NewEncoder(w).Encode(response)
-		return
-
-	}
-	log.Println(otp)
-
-	// Creating Message
-	message := models.Message{
-		ID:         handler.idGenerator.Generate(),
-		CustomerID: user.ID,
-		Target:     user.Email,
-		Type:       "email",
-		Title:      "Password otp",
-		Body:       otp,
-		TemplateID: PasswordOTPAlias,
-		DataMap:    map[string]string{},
-		Ts:         handler.timeHelper.Now().Unix(),
-	}
-	message.DataMap["FullName"] = user.FullName
-	message.DataMap["Email"] = user.Email
-	message.DataMap["OTP"] = otp
-
-	// send message
-	fmt.Println("about send email")
-	err = handler.emailClient.Send(&message)
-	fmt.Println("email sent")
-	if err != nil {
+	if err := handler.sendOTP(user, "Password OTP"); err != nil {
 		handler.logger.Error("error sending password reset email", zap.String("target", user.Email), zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Header().Set("Content-Type", "application/json")
@@ -486,6 +455,7 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+
 	handler.logger.Info("password reset email sent", zap.String("target", user.Email))
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
@@ -493,8 +463,6 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 
 }
-
-//PasswordReset
 
 func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	type otp struct {
@@ -537,6 +505,38 @@ func (handler *HttpHandler) validateToken(token string) (isValid bool, response 
 		PersonId: claims.ID,
 		Email:    claims.Email,
 	}
+}
+
+func (handler *HttpHandler) sendOTP(user *models.User, title string) error {
+	otp, err := handler.otp.GenerateOTP(user.Email)
+	if err != nil {
+		return err
+	}
+	log.Println(otp)
+
+	// Creating Message
+	message := models.Message{
+		ID:         handler.idGenerator.Generate(),
+		CustomerID: user.ID,
+		Target:     user.Email,
+		Type:       "email",
+		Title:      title,
+		Body:       otp,
+		TemplateID: PasswordOTPAlias,
+		DataMap:    map[string]string{},
+		Ts:         handler.timeHelper.Now().Unix(),
+	}
+	message.DataMap["FullName"] = user.FullName
+	message.DataMap["Email"] = user.Email
+	message.DataMap["OTP"] = otp
+
+	// send message
+	fmt.Println("about send email")
+	if err := handler.emailClient.Send(&message); err != nil {
+		return err
+	}
+	fmt.Println("email sent")
+	return nil
 }
 
 func (handler *HttpHandler) Testtoken(w http.ResponseWriter, r *http.Request) {
