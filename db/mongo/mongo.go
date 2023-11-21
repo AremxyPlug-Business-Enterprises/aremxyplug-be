@@ -619,3 +619,54 @@ func (m *mongoStore) GetAllBankTransactions(user string) (interface{}, error) {
 
 	return nil, nil
 }
+
+func (m *mongoStore) SaveBankList(banklist []models.BankDetails) error {
+	err := m.saveTransaction("", banklist)
+	return err
+}
+
+func (m *mongoStore) GetBankDetail(bankName string) (models.BankDetails, error) {
+	ctx := context.Background()
+	bankDetail := models.BankDetails{}
+
+	filter := bson.D{primitive.E{Key: "name", Value: bankName}}
+	res := m.col("").FindOne(ctx, filter)
+
+	err := res.Decode(&bankDetail)
+	if err != nil {
+		return models.BankDetails{}, err
+	}
+
+	return bankDetail, nil
+}
+
+func (m *mongoStore) SaveVirtualAccount(account models.AccountDetails) error {
+	err := m.saveTransaction("", account)
+	return err
+}
+
+func (m *mongoStore) SaveCounterParty(counterparty interface{}) error {
+	err := m.saveTransaction("", counterparty)
+	return err
+}
+
+func (m *mongoStore) SaveTransfer(transfer models.TransferResponse) error {
+	err := m.saveTransaction("", transfer)
+	return err
+}
+
+func (m *mongoStore) GetCounterParty(accountNumber, bankname string) (models.CounterParty, error) {
+	ctx := context.Background()
+	counterparty := models.CounterParty{}
+
+	// the filter should be using aggregate  search function since the fields that are to be acccessed are not on the top level.
+	filter := bson.D{primitive.E{Key: "account_number", Value: accountNumber}, primitive.E{Key: "bank_name", Value: bankname}}
+	res := m.col("").FindOne(ctx, filter)
+
+	err := res.Decode(&counterparty)
+	if err != nil {
+		return models.CounterParty{}, err
+	}
+
+	return counterparty, nil
+}
