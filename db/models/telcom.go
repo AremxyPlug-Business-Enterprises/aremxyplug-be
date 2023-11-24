@@ -51,11 +51,11 @@ type EduApiResponse struct {
 	Date             string  `json:"transaction_date"`
 	Status           string  `json:"status"`
 	Reference        string  `json:"reference_no"`
-	Pin              Pins
+	Pin              pins
 	Success_Response string `json:"success"`
 }
 
-type Pins struct {
+type pins struct {
 	Pin1 string `json:"pin1"`
 	Pin2 string `json:"pin2"`
 	Pin3 string `json:"pin3"`
@@ -124,17 +124,17 @@ type SmileInfo struct {
 
 type SmileAPIresponse struct {
 	Code      string           `json:"code"`
-	Content   SmileContent     `json:"content"`
-	Date      Transaction_Date `json:"transaction_date"`
+	Content   smileContent     `json:"content"`
+	Date      transaction_Date `json:"transaction_date"`
 	RequestID string           `json:"requestId"`
 	Response  string           `json:"response_description"`
 }
 
-type SmileContent struct {
-	Transcations Smile_Transactions `json:"transactions"`
+type smileContent struct {
+	Transcations smile_Transactions `json:"transactions"`
 }
 
-type Smile_Transactions struct {
+type smile_Transactions struct {
 	Status        string  `json:"status"`
 	Product_Desc  string  `json:"product_name"`
 	Unit_Price    float64 `json:"unit_price"`
@@ -146,7 +146,7 @@ type Smile_Transactions struct {
 	Type          string  `json:"type"`
 }
 
-type Transaction_Date struct {
+type transaction_Date struct {
 	Date string `json:"date"`
 }
 
@@ -177,20 +177,20 @@ type SpectranetInfo struct {
 	RequestID    string `json:"request_id"`
 }
 
-type SpectranetApi struct {
+type SpectranetApiResponse struct {
 	Code      string               `json:"code"`
-	Content   SpectranetContent    `json:"content"`
-	Date      SpecTransaction_Date `json:"transaction_date"`
+	Content   spectranetContent    `json:"content"`
+	Date      specTransaction_Date `json:"transaction_date"`
 	RequestID string               `json:"requestId"`
 	Response  string               `json:"response_description"`
-	Cards     []Card               `json:"cards"`
+	Cards     []card               `json:"cards"`
 }
 
-type SpectranetContent struct {
-	Transcations Spec_Content `json:"transactions"`
+type spectranetContent struct {
+	Transcations spec_Content `json:"transactions"`
 }
 
-type Spec_Content struct {
+type spec_Content struct {
 	Status        string `json:"status"`
 	Product_Desc  string `json:"product_name"`
 	Phone_Number  string `json:"unique_element"`
@@ -204,11 +204,11 @@ type Spec_Content struct {
 	Type          string `json:"type"`
 }
 
-type SpecTransaction_Date struct {
+type specTransaction_Date struct {
 	Date string `json:"date"`
 }
 
-type Card struct {
+type card struct {
 	SerialNumber string `json:"serialNumber"`
 	Pin          string `json:"pin"`
 	ExpiresOn    string `json:"expiresOn"`

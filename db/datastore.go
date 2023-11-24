@@ -37,6 +37,12 @@ type AremxyStore interface {
 	SaveBanktransaction(details interface{}) error
 	GetAllBankTransactions(user string) (interface{}, error)
 	GetBankTransactionDetails(id string) (interface{}, error)
+	SaveBankList(banklist []models.BankDetails) error
+	GetBankDetail(bankName string) (models.BankDetails, error)
+	SaveVirtualAccount(account models.AccountDetails) error
+	SaveCounterParty(counterparty interface{}) error
+	SaveTransfer(transfer models.TransferResponse) error
+	GetCounterParty(accountNumber, bankname string) (models.CounterParty, error)
 }
 
 // Path: db/datastore.go

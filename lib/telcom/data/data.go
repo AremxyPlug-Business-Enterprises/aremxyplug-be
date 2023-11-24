@@ -121,7 +121,7 @@ func (d *DataConn) BuySpecData(data models.SpectranetInfo) (*models.SpectranetRe
 	}
 	defer resp.Body.Close()
 
-	apiResponse := models.SpectranetApi{}
+	apiResponse := models.SpectranetApiResponse{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		if err == io.EOF {
 			return nil, d.logAndReturnError("Empty response body retured from server", err)
