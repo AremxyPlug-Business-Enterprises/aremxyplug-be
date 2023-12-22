@@ -13,9 +13,9 @@ import (
 )
 
 var (
-	api         = os.Getenv("ANCHOR_SANDBOX")
-	apikey      = os.Getenv("ANCHORAPI_KEY")
-	customer_id = os.Getenv("CUSTOMER_ID")
+	api        = os.Getenv("ANCHOR_SANDBOX")
+	apikey     = os.Getenv("ANCHORAPI_KEY")
+	deposit_id = os.Getenv("DEPOSIT_ID")
 )
 
 type BankConfig struct {
@@ -32,22 +32,24 @@ func NewBankConfig(store db.DataStore, logger *zap.Logger) *BankConfig {
 	}
 }
 
-func (b *BankConfig) VirtualAccount() (models.AccountDetails, error) {
+func (b *BankConfig) VirtualAccount(user models.User) (models.AccountDetails, error) {
 
 	// create a new virtual accout for new users as soon as their account is confirmed
 	// should be called at the moment that a user's account is verified
 
 	url := fmt.Sprintf("%s/%s", api, "virtualnuban")
 
+	name := fmt.Sprintf("%s/%s", "AremxyPlug", user.FullName)
+
 	payload := virtualNubanPayload{}
 	payload.Data.Type = "VirtualNuban"
 	payload.Data.Attributes.Provider = "providus"
 	payload.Data.Attributes.VirtualAccount.BVN = ""
-	payload.Data.Attributes.VirtualAccount.Name = ""
-	payload.Data.Attributes.VirtualAccount.Email = ""
+	payload.Data.Attributes.VirtualAccount.Name = name
+	payload.Data.Attributes.VirtualAccount.Email = user.Email
 	payload.Data.Attributes.VirtualAccount.Permanent = true
 	payload.Data.Relationships.SettlementAccount.Data.Type = "DepositAccount"
-	payload.Data.Relationships.SettlementAccount.Data.ID = ""
+	payload.Data.Relationships.SettlementAccount.Data.ID = deposit_id
 
 	requestBody, err := json.Marshal(payload)
 	if err != nil {

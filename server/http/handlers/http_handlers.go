@@ -10,6 +10,10 @@ import (
 	"github.com/go-chi/render"
 
 	"github.com/aremxyplug-be/db"
+	bankacc "github.com/aremxyplug-be/lib/bank/bank_acc"
+	"github.com/aremxyplug-be/lib/bank/deposit"
+	transactions "github.com/aremxyplug-be/lib/bank/transcations"
+	"github.com/aremxyplug-be/lib/bank/transfer"
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
@@ -62,6 +66,10 @@ type HttpHandler struct {
 	tvClient             *tvsub.TvConn
 	electClient          *elect.ElectricConn
 	otp                  *otpgen.OTPConn
+	virtualAcc           *bankacc.BankConfig
+	bankTranc            *transactions.Transaction
+	bankTrf              *transfer.Config
+	bankDep              *deposit.Config
 }
 
 type HandlerOptions struct {
@@ -75,6 +83,10 @@ type HandlerOptions struct {
 	Secrets     *config.Secrets
 	EmailClient emailclient.EmailClient
 	Otp         *otpgen.OTPConn
+	VirtualAcc  *bankacc.BankConfig
+	BankTranc   *transactions.Transaction
+	BankTrf     *transfer.Config
+	BankDep     *deposit.Config
 }
 
 func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
@@ -123,6 +135,10 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		tvClient:             opt.TvSub,
 		electClient:          opt.ElectSub,
 		otp:                  opt.Otp,
+		virtualAcc:           opt.VirtualAcc,
+		bankTranc:            opt.BankTranc,
+		bankTrf:              opt.BankTrf,
+		bankDep:              opt.BankDep,
 	}
 }
 
@@ -219,6 +235,14 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+
+	_, err = handler.virtualAcc.VirtualAccount(newUser)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
 	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"data": "user created"}}
@@ -297,6 +321,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Authorization", jwtToken)
 	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"auth_token": jwtToken, "refresh_token": refreshToken, "customer": userResponse}}
 	json.NewEncoder(w).Encode(response)
 
