@@ -39,6 +39,7 @@ const (
 	// email templates
 	PasswordResetAlias = "password-reset"
 	PasswordOTPAlias   = "password-otp"
+	verifyEmailAlias   = "verify-email"
 )
 
 var validate = validator.New()
@@ -199,6 +200,15 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:      timestamp,
 		UpdatedAt:      timestamp,
 		IsVerified:     false,
+	}
+
+	err = handler.sendOTP(&newUser, "verify-email", verifyEmailAlias)
+	if err != nil {
+		handler.logger.Error("error sending email verification otp", zap.String("target", user.Email), zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
 	}
 
 	err = handler.store.SaveUser(newUser)
@@ -447,7 +457,7 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := handler.sendOTP(user, "Password OTP"); err != nil {
+	if err := handler.sendOTP(user, "Password OTP", PasswordOTPAlias); err != nil {
 		handler.logger.Error("error sending password reset email", zap.String("target", user.Email), zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Header().Set("Content-Type", "application/json")
@@ -507,7 +517,7 @@ func (handler *HttpHandler) validateToken(token string) (isValid bool, response 
 	}
 }
 
-func (handler *HttpHandler) sendOTP(user *models.User, title string) error {
+func (handler *HttpHandler) sendOTP(user *models.User, title string, templateID string) error {
 	otp, err := handler.otp.GenerateOTP(user.Email)
 	if err != nil {
 		return err
@@ -522,7 +532,7 @@ func (handler *HttpHandler) sendOTP(user *models.User, title string) error {
 		Type:       "email",
 		Title:      title,
 		Body:       otp,
-		TemplateID: PasswordOTPAlias,
+		TemplateID: templateID,
 		DataMap:    map[string]string{},
 		Ts:         handler.timeHelper.Now().Unix(),
 	}
