@@ -34,15 +34,24 @@ type AremxyStore interface {
 	GetAllElectricSubTransactions(user string) ([]models.ElectricResult, error)
 	SaveOTP(data models.OTP) error
 	GetOTP(email string) (models.OTP, error)
-	SaveBanktransaction(details interface{}) error
-	GetAllBankTransactions(user string) (interface{}, error)
-	GetBankTransactionDetails(id string) (interface{}, error)
 	SaveBankList(banklist []models.BankDetails) error
 	GetBankDetail(bankName string) (models.BankDetails, error)
 	SaveVirtualAccount(account models.AccountDetails) error
+	GetVirtualNuban(name string) (string, error)
 	SaveCounterParty(counterparty interface{}) error
 	SaveTransfer(transfer models.TransferResponse) error
 	GetCounterParty(accountNumber, bankname string) (models.CounterParty, error)
+	GetTransferDetails(id string) (models.TransferResponse, error)
+	GetAllTransferHistory(user string) ([]models.TransferResponse, error)
+	GetDepositDetails(id string) (models.DepositResponse, error)
+	GetAllDepositHistory(user string) ([]models.DepositResponse, error)
+	GetAllBankTransactions(user string) ([]interface{}, error)
+	SaveDeposit(detail models.DepositResponse) error
+	GetDepositID(virtualNuban string) (result interface{}, err error)
+	SaveDepositID(detail interface{}) error
+	GetBalance(virtualNuban string) (balance float64, err error)
+	SaveBalance(virtualNuban string, balance models.Balance) error
+	UpdateBalance(virtualNuban string, balance float64) error
 }
 
 // Path: db/datastore.go

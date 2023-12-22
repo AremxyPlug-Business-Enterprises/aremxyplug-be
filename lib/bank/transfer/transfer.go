@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	api         = os.Getenv("ANCHOR_SANDBOX")
-	apikey      = os.Getenv("ANCHORAPI_KEY")
-	customer_id = os.Getenv("CUSTOMER_ID")
+	api        = os.Getenv("ANCHOR_SANDBOX")
+	apikey     = os.Getenv("ANCHORAPI_KEY")
+	deposit_id = os.Getenv("DEPOSIT_ID")
 )
 
 type Config struct {
@@ -30,7 +30,7 @@ func NewConfig(store db.DataStore) *Config {
 }
 
 // this endpoint should auto automatically initialize
-func (c *Config) listBanks() error {
+func (c *Config) ListBanks() error {
 	url := fmt.Sprintf("%s/%s", api, "banks")
 
 	req, _ := http.NewRequest("GET", url, nil)
@@ -207,7 +207,7 @@ func (c *Config) createCounterParty(info verifyAccountResponse) (models.CounterP
 	payload.Data.Attributes.BankCode = info.Data.Attributes.Bank.NipCode
 	payload.Data.Attributes.VerifyName = true
 	payload.Data.Attributes.AccountNumber = info.Data.AccountNumber
-	payload.Data.Relationships.Bank.Data.ID = customer_id
+	payload.Data.Relationships.Bank.Data.ID = deposit_id
 	payload.Data.Relationships.Bank.Data.Type = "DepositAccount"
 
 	requestBody, err := json.Marshal(payload)
