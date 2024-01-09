@@ -3,6 +3,11 @@ package http
 import (
 	"net/http"
 
+	"github.com/aremxyplug-be/lib/auth"
+	bankacc "github.com/aremxyplug-be/lib/bank/bank_acc"
+	"github.com/aremxyplug-be/lib/bank/deposit"
+	"github.com/aremxyplug-be/lib/bank/transactions"
+	"github.com/aremxyplug-be/lib/bank/transfer"
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
@@ -32,6 +37,11 @@ type ServerConfig struct {
 	TvSub       *tvsub.TvConn
 	ElectSub    *elect.ElectricConn
 	Otp         *otpgen.OTPConn
+	Auth        *auth.AuthConn
+	VirtualAcc  *bankacc.BankConfig
+	BankTranc   *transactions.Transaction
+	BankTrf     *transfer.Config
+	BankDep     *deposit.Config
 }
 
 func MountServer(config ServerConfig) *chi.Mux {
@@ -62,6 +72,10 @@ func MountServer(config ServerConfig) *chi.Mux {
 		TvSub:       config.TvSub,
 		ElectSub:    config.ElectSub,
 		Otp:         config.Otp,
+		VirtualAcc:  config.VirtualAcc,
+		BankTranc:   config.BankTranc,
+		BankTrf:     config.BankTrf,
+		BankDep:     config.BankDep,
 	})
 
 	// Routes
@@ -87,25 +101,38 @@ func MountServer(config ServerConfig) *chi.Mux {
 		// test
 		router.Post("/test", httpHandler.Testtoken)
 
+		router.Get("/banks", httpHandler.GetBanks)
+
+		router.Get("/deposit", httpHandler.DepositAccount)
+
+		authRouter := router.With(config.Auth.Authorize)
 		// Data Routes
-		dataRoutes(router, httpHandler)
+		dataRoutes(authRouter, httpHandler)
 		// smile data routes
-		smileDataRoutes(router, httpHandler)
+		smileDataRoutes(authRouter, httpHandler)
 		// spectranet data routes
-		spectranetDataRoutes(router, httpHandler)
+		spectranetDataRoutes(authRouter, httpHandler)
 
 		// Edu Routes
-		eduRoutes(router, httpHandler)
+		eduRoutes(authRouter, httpHandler)
 
 		//  Airtime Routes
-		airtimeRoutes(router, httpHandler)
+		airtimeRoutes(authRouter, httpHandler)
 
 		// TvSubscription Routes
-		tvSubscriptionRoutes(router, httpHandler)
+		tvSubscriptionRoutes(authRouter, httpHandler)
 
 		// Electricity bills routes
-		electricityBillRoutes(router, httpHandler)
+		electricityBillRoutes(authRouter, httpHandler)
 
+		// bank routes
+		bankRoutes(authRouter, httpHandler)
+
+		/*
+			transferMoneyRoutes(authRouter, httpHandler)
+
+			depositRoutes(authRouter, httpHandler)
+		*/
 	})
 
 	return router
@@ -185,3 +212,27 @@ func electricityBillRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 		router.Get("/transactions", httpHandler.GetElectricBills)
 	})
 }
+
+func bankRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/bank", func(router chi.Router) {
+		router.Route("/transfer", func(router chi.Router) {
+			router.Post("/", httpHandler.Transfer)
+			router.Get("/", httpHandler.Transfer)
+			router.Get("/{id}", httpHandler.GetTransferDetails)
+		})
+		router.Route("/deposit", func(router chi.Router) {
+			router.Get("/", httpHandler.GetDepositHistory)
+			router.Get("/{id}", httpHandler.GetDepositDetail)
+		})
+		router.Get("/transactions", httpHandler.GetAllBankTransactions)
+	})
+}
+
+/*
+func depositRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/deposit", func(router chi.Router) {
+		router.Get("/", httpHandler.GetDepositHistory)
+		router.Get("/{id}", httpHandler.GetDepositDetail)
+	})
+}
+*/

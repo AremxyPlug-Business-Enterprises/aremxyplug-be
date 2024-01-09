@@ -34,7 +34,7 @@ type AremxyStore interface {
 	GetAllElectricSubTransactions(user string) ([]models.ElectricResult, error)
 	SaveOTP(data models.OTP) error
 	GetOTP(email string) (models.OTP, error)
-	SaveBankList(banklist []models.BankDetails) error
+	SaveBankList(banklist models.BankDetails) error
 	GetBankDetail(bankName string) (models.BankDetails, error)
 	SaveVirtualAccount(account models.AccountDetails) error
 	GetVirtualNuban(name string) (string, error)

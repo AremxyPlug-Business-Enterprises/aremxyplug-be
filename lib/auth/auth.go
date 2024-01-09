@@ -1,17 +1,34 @@
 package auth
 
 import (
-	tokengenerator "github.com/aremxyplug-be/lib/tokekngenerator"
+	"log"
 	"net/http"
+
+	"github.com/aremxyplug-be/config"
+	"github.com/aremxyplug-be/lib/key_generator"
+	tokengenerator "github.com/aremxyplug-be/lib/tokekngenerator"
 )
 
 type AuthConn struct {
 	jwt tokengenerator.TokenGenerator
 }
 
-func NewAuthConn(jwt tokengenerator.TokenGenerator) *AuthConn {
+func NewAuthConn(secret *config.Secrets) *AuthConn {
+	publicKey, err := key_generator.GeneratePublicKey(secret.JWTPublicKey)
+	if err != nil {
+		log.Println(err)
+	}
+
+	privateKey, err := key_generator.GeneratePrivateKey(secret.JWTPublicKey)
+	if err != nil {
+		// do something with the error
+		log.Println(err)
+	}
 	return &AuthConn{
-		jwt: jwt,
+		jwt: tokengenerator.New(
+			publicKey,
+			privateKey,
+		),
 	}
 }
 
