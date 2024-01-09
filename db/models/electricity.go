@@ -39,16 +39,16 @@ type TransactionDate struct {
 }
 
 type ElectricResult struct {
-	DiscoType     string `json:"disco_type"`
-	MeterType     string `json:"meter_type"` // Prepaid
-	Name          string `json:"name"`
-	MeterNumber   string `json:"meter_number"`
-	Phone         string `json:"phone"`
-	Email         string `json:"email"`
-	Product       string `json:"product"`
-	Description   string `json:"description"` // append serviceID and variation code.
-	BillGenerated string `json:"bill_generated"`
-	OrderID       int    `json:"order_id"`
-	TransactionID string `json:"transaction_id"`
-	RequestID     string `json:"request_id"`
+	DiscoType     string `json:"disco_type" bson:"DiscoType"`
+	MeterType     string `json:"meter_type" bson:"meter_type"` // Prepaid
+	Name          string `json:"name" bson:"name"`
+	MeterNumber   string `json:"meter_number" bson:"meter_number"`
+	Phone         string `json:"phone" bson:"phone"`
+	Email         string `json:"email" bson:"email"`
+	Product       string `json:"product" bson:"product"`
+	Description   string `json:"description" bson:"description"` // append serviceID and variation code.
+	BillGenerated string `json:"bill_generated" bson:"bill_generated"`
+	OrderID       int    `json:"order_id" bson:"order_id"`
+	TransactionID string `json:"transaction_id" bson:"transaction_id"`
+	RequestID     string `json:"request_id" bson:"request_ID"`
 }

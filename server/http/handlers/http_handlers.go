@@ -8,23 +8,25 @@ import (
 	"time"
 
 	"github.com/go-chi/render"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"github.com/aremxyplug-be/db"
 	bankacc "github.com/aremxyplug-be/lib/bank/bank_acc"
 	"github.com/aremxyplug-be/lib/bank/deposit"
-	transactions "github.com/aremxyplug-be/lib/bank/transcations"
+	transactions "github.com/aremxyplug-be/lib/bank/transactions"
 	"github.com/aremxyplug-be/lib/bank/transfer"
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
 	"github.com/aremxyplug-be/lib/errorvalues"
+	"github.com/aremxyplug-be/lib/key_generator"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
 	"github.com/aremxyplug-be/types/dto"
-	"github.com/dgrijalva/jwt-go"
 	"github.com/go-chi/chi/v5"
 
 	"github.com/aremxyplug-be/config"
@@ -99,7 +101,7 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		time.Duration(opt.Secrets.AuthTokenDuration),
 	)
 
-	tokenGeneratorPublicKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(opt.Secrets.JWTPublicKey))
+	tokenGeneratorPublicKey, err := key_generator.GeneratePublicKey(opt.Secrets.JWTPublicKey)
 	if err != nil {
 		opt.Logger.Error(
 			"error parsing public key for token encryption",
@@ -107,7 +109,7 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		)
 	}
 
-	tokenGeneratorPrivateKey, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(opt.Secrets.JWTPrivateKey))
+	tokenGeneratorPrivateKey, err := key_generator.GeneratePrivateKey(opt.Secrets.JWTPrivateKey)
 	if err != nil {
 		opt.Logger.Error(
 			"error parsing private key for token encryption",
@@ -159,7 +161,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	// validate the request body
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Header().Set("Content-Type", "application/json")
+
 		//response := responseFormat.RespondWithError(w, http.StatusBadRequest, err.Error())
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
@@ -187,7 +189,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	// use the validator library to validate required fields
 	if validationErr := validate.Struct(&user); validationErr != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Header().Set("Content-Type", "application/json")
+
 		response := responseFormat.CustomResponse{
 			Status:  http.StatusBadRequest,
 			Message: "error",
@@ -204,9 +206,12 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	to := cases.Title(language.English)
+	full_name := to.String(user.FullName)
+
 	newUser := models.User{
 		ID:             userId,
-		FullName:       user.FullName,
+		FullName:       full_name,
 		Email:          user.Email,
 		Username:       user.Username,
 		Password:       string(hashedPassword),
@@ -230,7 +235,6 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	err = handler.store.SaveUser(newUser)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Header().Set("Content-Type", "application/json")
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -244,7 +248,6 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	w.Header().Set("Content-Type", "application/json")
 	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"data": "user created"}}
 	json.NewEncoder(w).Encode(response)
 }
@@ -256,7 +259,6 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	// validate the request body
 	if err := json.NewDecoder(r.Body).Decode(&userlogin); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Header().Set("Content-Type", "application/json")
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -264,7 +266,6 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	user, err := handler.store.GetUserByUsernameOrEmail(userlogin.Email, userlogin.Username)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		w.Header().Set("Content-Type", "application/json")
 		response := responseFormat.CustomResponse{Status: http.StatusNotFound, Message: "user not found", Data: map[string]interface{}{"data": "user not found"}}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -275,7 +276,6 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		handler.logger.Error("store validating password")
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Header().Set("Content-Type", "application/json")
 		response := responseFormat.CustomResponse{Status: http.StatusUnauthorized, Message: "error", Data: map[string]interface{}{"data": "password incorrect"}}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -297,7 +297,6 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		handler.logger.Error("fail to generate token", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Header().Set("Content-Type", "application/json")
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -313,15 +312,27 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		handler.logger.Error("fail to generate refresh token", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Header().Set("Content-Type", "application/json")
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	w.Header().Set("Content-Type", "application/json")
+	if err := handler.refreshBalance(user.FullName); err != nil {
+		if err == deposit.ErrEmptyVirtualNuban {
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "virtualNuban is empty"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		handler.logger.Error("failed to load user's balance", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
 	w.Header().Set("Authorization", jwtToken)
+	w.WriteHeader(http.StatusCreated)
 	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"auth_token": jwtToken, "refresh_token": refreshToken, "customer": userResponse}}
 	json.NewEncoder(w).Encode(response)
 
@@ -334,7 +345,6 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 	// validate the request body
 	if err := json.NewDecoder(r.Body).Decode(&userlogin); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Header().Set("Content-Type", "application/json")
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -391,14 +401,12 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		handler.logger.Error("error sending password reset email", zap.String("target", user.Email), zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Header().Set("Content-Type", "application/json")
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
 	handler.logger.Info("password reset email sent", zap.String("target", user.Email))
 	w.WriteHeader(http.StatusCreated)
-	w.Header().Set("Content-Type", "application/json")
 	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"msg": "email sent successfully"}}
 	json.NewEncoder(w).Encode(response)
 
@@ -468,7 +476,7 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 	// validate the request body
 	if err := json.NewDecoder(r.Body).Decode(&userlogin); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Header().Set("Content-Type", "application/json")
+
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -476,7 +484,7 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 	user, err := handler.store.GetUserByEmail(userlogin.Email)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		w.Header().Set("Content-Type", "application/json")
+
 		response := responseFormat.CustomResponse{Status: http.StatusNotFound, Message: "user not found", Data: map[string]interface{}{"data": "user not found"}}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -485,7 +493,7 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 	if err := handler.sendOTP(user, "Password OTP", PasswordOTPAlias); err != nil {
 		handler.logger.Error("error sending password reset email", zap.String("target", user.Email), zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Header().Set("Content-Type", "application/json")
+
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -493,7 +501,6 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 
 	handler.logger.Info("password reset email sent", zap.String("target", user.Email))
 	w.WriteHeader(http.StatusCreated)
-	w.Header().Set("Content-Type", "application/json")
 	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"msg": "email sent successfully"}}
 	json.NewEncoder(w).Encode(response)
 
@@ -580,7 +587,7 @@ func (handler *HttpHandler) Testtoken(w http.ResponseWriter, r *http.Request) {
 	// validate the request body
 	if err := json.NewDecoder(r.Body).Decode(&tokenIn); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Header().Set("Content-Type", "application/json")
+
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return

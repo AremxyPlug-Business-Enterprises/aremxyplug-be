@@ -7,6 +7,7 @@ var (
 	ErrCounterpartyCreationFailed = errors.New("failed to create counterparty")
 	ErrAPIConnectionFailed        = errors.New("error connecting to API server")
 	ErrCreatingHTTPRequest        = errors.New("error creating HTTP request")
+	ErrEmptyVirtualNuban          = errors.New("no virtual nuban available")
 )
 
 func JSONError(err error) error {
