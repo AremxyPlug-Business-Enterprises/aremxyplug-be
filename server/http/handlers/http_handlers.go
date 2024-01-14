@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	//"strconv"
 	"time"
 
 	"github.com/go-chi/render"
@@ -168,20 +170,8 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !handler.isValidNewUser(user.Email) {
+	if !handler.isValidNewUser(user) {
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "email exist", Data: map[string]interface{}{"data": "user already exist"}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
-	if !handler.isValidNewUser(user.Username) {
-		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "username exist", Data: map[string]interface{}{"data": "user already exist"}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
-	if !handler.isValidNewUser(user.PhoneNumber) {
-		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "PhoneNumber exist", Data: map[string]interface{}{"data": "user already exist"}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -283,14 +273,10 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	refreshTokenClaims := dto.Claims{
 		PersonId: user.ID,
-		Email:    user.Email,
-		Username: user.Username,
 	}
 
 	claims := dto.Claims{
 		PersonId: user.ID,
-		Email:    user.Email,
-		Username: user.Username,
 	}
 
 	jwtToken, err := handler.jwt.GenerateTokenWithExpiration(claims, handler.authTokenDuration)
@@ -350,7 +336,6 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	email := userlogin.Email
 	// Checking if the user exists (replace with your actual user lookup logic)
 	user, err := handler.store.GetUserByEmail(userlogin.Email)
 	if err != nil || user == nil {
@@ -361,7 +346,6 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 
 	claims := dto.Claims{
 		PersonId: user.ID,
-		Email:    email,
 	}
 
 	token, err := handler.jwt.GenerateToken(claims)
@@ -418,7 +402,7 @@ func (handler *HttpHandler) ValidateToken(w http.ResponseWriter, r *http.Request
 
 	//validate the token
 
-	user, err := handler.jwt.ValidateToken(token)
+	id, err := handler.jwt.ValidateToken(token)
 	if err != nil {
 		handler.logger.Error("fail to validate token", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -427,7 +411,7 @@ func (handler *HttpHandler) ValidateToken(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "email", Data: map[string]interface{}{"data": user.Email}}
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "email", Data: map[string]interface{}{"data": id}}
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -545,7 +529,6 @@ func (handler *HttpHandler) validateToken(token string) (isValid bool, response 
 	// Response
 	return true, &dto.Claims{
 		PersonId: claims.ID,
-		Email:    claims.Email,
 	}
 }
 
@@ -598,14 +581,24 @@ func (handler *HttpHandler) Testtoken(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(claims)
 }
 
-func (handler *HttpHandler) isValidNewUser(email string) bool {
-	_, err := handler.store.GetUserByEmail(email)
+func (handler *HttpHandler) isValidNewUser(user models.User) bool {
+
+	userDetails, err := handler.store.GetUserByEmail(user.Email)
 	if err != nil {
 		switch err {
 		case mongodb.ErrNoDocuments:
 			return true
 		}
 	}
+
+	email := userDetails.Email
+	phone := userDetails.PhoneNumber
+	username := userDetails.Username
+
+	if user.Email == email || user.PhoneNumber == phone || user.Username == username {
+		return false
+	}
+
 	return false
 }
 
@@ -626,9 +619,16 @@ func (handler *HttpHandler) PingUser(w http.ResponseWriter, r *http.Request) {
 
 // Data send a call to the API to buy data(POST) or return users transaction history(GET)
 func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
-
-	// Get username from request or token
-
+	/*
+		userDetails, err := handler.GetUserDetails(r)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		id := userDetails.ID
+	*/
 	if r.Method == "POST" {
 		data := models.DataInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -637,6 +637,31 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			return
 
 		}
+		/*
+			bal, err := handler.getBalance(id)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+
+			amount, err := strconv.Atoi(data.Amount)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+			}
+
+			newBal, valid, err := handler.checkTransfer(bal, float64(amount))
+			if !valid || err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
 		res, err := handler.dataClient.BuyData(data)
 		if err != nil {
 			handler.logger.Error("Api response error", zap.Error(err))
@@ -644,6 +669,14 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		/*
+			if err := handler.updateBalance(id, newBal); err != nil {
+				w.WriteHeader(http.StatusNotModified)
+				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
 		json.NewEncoder(w).Encode(res)
 	}
 
@@ -695,7 +728,16 @@ func (handler *HttpHandler) GetDataTransactions(w http.ResponseWriter, r *http.R
 
 // EduPins is use to carry out buying of education pins(POST) and returning all the transactions made by the user(GET)
 func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
-
+	/*
+		userDetails, err := handler.GetUserDetails(r)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		id := userDetails.ID
+	*/
 	if r.Method == "POST" {
 		data := models.EduInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -709,13 +751,47 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		_, err := handler.eduClient.BuyEduPin(data)
+		/*
+			bal, err := handler.getBalance(id)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+
+			amount, err := strconv.Atoi(data.Amount)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+			}
+
+			newBal, valid, err := handler.checkTransfer(bal, float64(amount))
+			if !valid || err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
+		res, err := handler.eduClient.BuyEduPin(data)
 		if err != nil {
 			handler.logger.Error("Api response error", zap.Error(err))
 			fmt.Fprintf(w, "An internal error occurred while purchasing %s pin, please try again...", data.Exam_Type)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		/*
+			if err := handler.updateBalance(id, newBal); err != nil {
+				w.WriteHeader(http.StatusNotModified)
+				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
+		json.NewEncoder(w).Encode(res)
 	}
 
 	if r.Method == "GET" {
@@ -765,7 +841,16 @@ func (handler *HttpHandler) GetEduTransactions(w http.ResponseWriter, r *http.Re
 
 // Airtime is use to carry out buying of airtime(POST) and returning all the transactions made by the user(GET)
 func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
-
+	/*
+		userDetails, err := handler.GetUserDetails(r)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		id := userDetails.ID
+	*/
 	if r.Method == "POST" {
 		data := models.AirtimeInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -779,6 +864,31 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		/*
+			bal, err := handler.getBalance(id)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+
+			amount, err := strconv.Atoi(data.Amount)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+			}
+
+			newBal, valid, err := handler.checkTransfer(bal, float64(amount))
+			if !valid || err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
 		res, err := handler.vtuClient.BuyAirtime(data)
 		if err != nil {
 			handler.logger.Error("Api response error", zap.Error(err))
@@ -786,6 +896,14 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		/*
+			if err := handler.updateBalance(id, newBal); err != nil {
+				w.WriteHeader(http.StatusNotModified)
+				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
 		json.NewEncoder(w).Encode(res)
 	}
 
@@ -832,6 +950,16 @@ func (handler *HttpHandler) GetAirtimeInfo(w http.ResponseWriter, r *http.Reques
 }
 
 func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Request) {
+	/*
+		userDetails, err := handler.GetUserDetails(r)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		id := userDetails.ID
+	*/
 	if r.Method == "POST" {
 		data := models.TvInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -840,6 +968,30 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 
 		}
+		/*
+			bal, err := handler.getBalance(id)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+			}
+
+			newBal, valid, err := handler.checkTransfer(bal, float64(data.Amount))
+			if !valid || err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
 		res, err := handler.tvClient.BuySub(data)
 		if err != nil {
 			handler.logger.Error("Api response error", zap.Error(err))
@@ -848,6 +1000,14 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		/*
+			if err := handler.updateBalance(id, newBal); err != nil {
+				w.WriteHeader(http.StatusNotModified)
+				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
 		json.NewEncoder(w).Encode(res)
 	}
 
@@ -891,6 +1051,16 @@ func (handler *HttpHandler) GetTvSubDetails(w http.ResponseWriter, r *http.Reque
 }
 
 func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request) {
+	/*
+		userDetails, err := handler.GetUserDetails(r)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		id := userDetails.ID
+	*/
 	if r.Method == "POST" {
 		data := models.ElectricInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -899,6 +1069,30 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			return
 
 		}
+		/*
+			bal, err := handler.getBalance(id)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+			}
+
+			newBal, valid, err := handler.checkTransfer(bal, float64(data.Amount))
+			if !valid || err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
 		res, err := handler.electClient.PayBill(data)
 		if err != nil {
 			handler.logger.Error("Api response error", zap.Error(err))
@@ -907,6 +1101,14 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		/*
+			if err := handler.updateBalance(id, newBal); err != nil {
+				w.WriteHeader(http.StatusNotModified)
+				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
 		json.NewEncoder(w).Encode(res)
 	}
 
@@ -950,8 +1152,16 @@ func (handler *HttpHandler) GetElectricBillDetails(w http.ResponseWriter, r *htt
 }
 
 func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Request) {
-
-	// Get username from request or token
+	/*
+		userDetails, err := handler.GetUserDetails(r)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		id := userDetails.ID
+	*/
 
 	if r.Method == "POST" {
 		data := models.SpectranetInfo{}
@@ -961,6 +1171,30 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			return
 
 		}
+		/*
+			bal, err := handler.getBalance(id)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+			}
+
+			newBal, valid, err := handler.checkTransfer(bal, float64(data.Amount))
+			if !valid || err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
 		res, err := handler.dataClient.BuySpecData(data)
 		if err != nil {
 			handler.logger.Error("Api response error", zap.Error(err))
@@ -968,6 +1202,14 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		/*
+			if err := handler.updateBalance(id, newBal); err != nil {
+				w.WriteHeader(http.StatusNotModified)
+				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
 		json.NewEncoder(w).Encode(res)
 	}
 
@@ -1016,8 +1258,16 @@ func (handler *HttpHandler) GetSpectranetTransactions(w http.ResponseWriter, r *
 }
 
 func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
-
-	// Get username from request or token
+	/*
+		userDetails, err := handler.GetUserDetails(r)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		id := userDetails.ID
+	*/
 
 	if r.Method == "POST" {
 		data := models.SmileInfo{}
@@ -1027,6 +1277,31 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 			return
 
 		}
+		/*
+			bal, err := handler.getBalance(id)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+
+			amount, err := strconv.Atoi(data.Amount)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+			}
+
+			newBal, valid, err := handler.checkTransfer(bal, float64(amount))
+			if !valid || err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
 		res, err := handler.dataClient.BuySmileData(data)
 		if err != nil {
 			handler.logger.Error("Api response error", zap.Error(err))
@@ -1034,6 +1309,14 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		/*
+			if err := handler.updateBalance(id, newBal); err != nil {
+				w.WriteHeader(http.StatusNotModified)
+				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		*/
 		json.NewEncoder(w).Encode(res)
 	}
 
