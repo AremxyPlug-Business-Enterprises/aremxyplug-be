@@ -1,37 +1,32 @@
 package deposit
 
-import "time"
-
 type paymentResponse struct {
 	Data []paymentData `json:"data"`
 }
 
 type paymentData struct {
-	ID               string               `json:"id"`
-	Type             string               `json:"type"`
-	Attributes       paymentAttributes    `json:"attributes"`
-	Relationships    paymentRelationships `json:"relationships"`
-	Reference        string               `json:"reference"`
-	PaymentReference string               `json:"paymentReference"`
-	Currency         string               `json:"currency"`
-	Amount           float64              `json:"amount"`
-	Fee              int                  `json:"fee"`
-	CreatedAt        time.Time            `json:"createdAt"`
-	PaidAt           time.Time            `json:"paidAt"`
-	Narration        string               `json:"narration"`
+	ID            string               `json:"id"`
+	Type          string               `json:"type"`
+	Attributes    paymentAttributes    `json:"attributes"`
+	Relationships paymentRelationships `json:"relationships"`
 }
 
 type paymentAttributes struct {
-	CounterParty counterParty `json:"counterParty"`
+	CreatedAt        string       `json:"createdAt"`
+	Amount           float64      `json:"amount"`
+	PaymentReference string       `json:"paymentReference"`
+	Fee              int          `json:"fee"`
+	Narration        string       `json:"narration"`
+	PaidAt           string       `json:"paidAt"`
+	CounterParty     counterParty `json:"counterParty"`
+	Currency         string       `json:"currency"`
+	Type             string       `json:"type"`
 }
 
 type counterParty struct {
-	ID            string    `json:"id"`
-	Type          string    `json:"type"`
-	CreatedAt     time.Time `json:"createdAt"`
-	AccountNumber string    `json:"accountNumber"`
-	AccountName   string    `json:"accountName"`
-	Bank          bank      `json:"bank"`
+	AccountNumber string `json:"accountNumber"`
+	AccountName   string `json:"accountName"`
+	Bank          bank   `json:"bank"`
 }
 
 type bank struct {
@@ -42,13 +37,9 @@ type bank struct {
 }
 
 type paymentRelationships struct {
-	SettlementAccount relationship  `json:"settlementAccount"`
-	SubAccount        relationship  `json:"subAccount"`
-	Customer          relationship  `json:"customer"`
-	VirtualNuban      relationship  `json:"virtualNuban"`
-	VirtualNubans     virtualNubans `json:"virtualNubans"`
-	SubAccounts       subAccounts   `json:"subAccounts"`
-	Settlements       settlements   `json:"settlements"`
+	SettlementAccount relationship `json:"settlementAccount"`
+	VirtualNuban      relationship `json:"virtualNuban"`
+	Settlements       settlements  `json:"settlements"`
 }
 
 type relationship struct {
@@ -58,14 +49,6 @@ type relationship struct {
 type relationshipData struct {
 	ID   string `json:"id"`
 	Type string `json:"type"`
-}
-
-type virtualNubans struct {
-	Data []relationshipData `json:"data"`
-}
-
-type subAccounts struct {
-	Data []relationshipData `json:"data"`
 }
 
 type settlements struct {

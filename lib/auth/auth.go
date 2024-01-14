@@ -41,7 +41,7 @@ func (a *AuthConn) Authorize(next http.Handler) http.Handler {
 		_, err := a.jwt.ValidateToken(token)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte("Unauthorized"))
+			w.Write([]byte("Unauthorized: invalid or missing token: " + err.Error()))
 			return
 		}
 		next.ServeHTTP(w, r)
