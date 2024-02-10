@@ -1,11 +1,11 @@
 package models
 
 type TransferInfo struct {
-	Bank_name      string `json:"bank_name"`
-	Account_Number string `json:"account_number"`
-	Account_Name   string `json:"account_name"`
-	Amount         string `json:"amount"`
-	Reason         string `json:"message"`
+	Bank_name      string  `json:"bank_name"`
+	Account_Number string  `json:"account_number"`
+	Account_Name   string  `json:"account_name"`
+	Amount         float64 `json:"amount"`
+	Reason         string  `json:"message"`
 }
 
 type TransferResponse struct {
@@ -22,9 +22,11 @@ type TransferResponse struct {
 }
 
 type AccountDetails struct {
-	Bank_Name    string `json:"bank_name"`
-	Account_Name string `json:"account_name"`
-	Account_No   string `json:"account_no"`
+	Bank_Name        string `json:"bank_name" bson:"bank_name"`
+	User_ID          string `json:"user_id" bson:"user_id"`
+	Account_Name     string `json:"account_name" bson:"account_name"`
+	Account_No       string `json:"account_no" bson:"account_no"`
+	VirtualAccountID string `json:"virtualaccountid" bson:"virtualaccountid"`
 }
 
 type CounterParty struct {
@@ -35,8 +37,8 @@ type CounterParty struct {
 	NIPCode       string `json:"nipCode"`
 }
 type BankDetails struct {
-	Name    string `json:"name"`
-	NIPCode string `json:"nipCode"`
+	Name    string `json:"name" bson:"name"`
+	NIPCode string `json:"nipCode" bson:"nipCode"`
 }
 
 type DepositResponse struct {
@@ -55,5 +57,6 @@ type DepositResponse struct {
 
 type Balance struct {
 	VirtualNuban string  `json:"virtualNuban"`
+	UserID       string  `json:"user_id"`
 	Balance      float64 `json:"balance"`
 }
