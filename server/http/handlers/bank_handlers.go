@@ -2,8 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/balance"
@@ -12,6 +13,14 @@ import (
 )
 
 func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
+
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
 	if r.Method == "POST" {
 
@@ -23,32 +32,39 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(response)
 			return
 		}
-		// verify all needed parameters
 
-		// call the transferMoney function
-		bal, valid, err := handler.checkPayment(info.Amount)
+		bal, err := handler.getBalance(userDetails.ID)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		newBal, valid, err := handler.checkTransfer(bal, info.Amount)
 		if !valid || err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
+
 		resp, err := handler.bankTrf.TransferToBank(info)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
-			// log the error
-			// return the error to the user
 
 		}
-		if err := handler.updateBalance("", bal); err != nil {
+
+		if err := handler.updateBalance(userDetails.ID, newBal); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
+
 		// if successfull return the Transfer receipt, otherwise return the error
 
 		w.WriteHeader(http.StatusOK)
@@ -57,7 +73,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		resp, err := handler.bankTranc.GetTransferHistory("")
+		resp, err := handler.bankTranc.GetTransferHistory(userDetails.Username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -80,6 +96,7 @@ func (handler *HttpHandler) GetTransferDetails(w http.ResponseWriter, r *http.Re
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+
 	// should be call the function to get the transfer history.
 	w.WriteHeader(http.StatusOK)
 	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"transfer": resp}}
@@ -88,6 +105,7 @@ func (handler *HttpHandler) GetTransferDetails(w http.ResponseWriter, r *http.Re
 
 }
 
+// Admin handler function
 func (handler *HttpHandler) GetTransferHistory(w http.ResponseWriter, r *http.Request) {
 	trsf, err := handler.bankTranc.GetTransferHistory("")
 	if err != nil {
@@ -122,7 +140,7 @@ func (handler *HttpHandler) GetAllBankTransactions(w http.ResponseWriter, r *htt
 func (handler *HttpHandler) GetDepositDetail(w http.ResponseWriter, r *http.Request) {
 
 	id := chi.URLParam(r, "id")
-	resp, err := handler.bankTranc.GetTransferDetails(id)
+	resp, err := handler.bankTranc.GetDepositDetails(id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -138,7 +156,16 @@ func (handler *HttpHandler) GetDepositDetail(w http.ResponseWriter, r *http.Requ
 
 func (handler *HttpHandler) GetDepositHistory(w http.ResponseWriter, r *http.Request) {
 	// should call the function for loading all the deposit history
-	dept, err := handler.bankTranc.GetDepositHistory("")
+
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	dept, err := handler.bankTranc.GetDepositHistory(userDetails.Username)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -152,34 +179,83 @@ func (handler *HttpHandler) GetDepositHistory(w http.ResponseWriter, r *http.Req
 	// return successful and deposit history, if an error is encountered, return the error
 }
 
-// There should be a function or method to call for payment.
-func (handler *HttpHandler) checkPayment(amount string) (float64, bool, error) {
-	// call the payment function to verify if the user has enough money to carry out payment
-	bal, err := handler.bankTranc.GetBalance("")
+func (handler *HttpHandler) GetAllDepositHistory(w http.ResponseWriter, r *http.Request) {
+	dept, err := handler.bankTranc.GetDepositHistory("")
 	if err != nil {
-		return 0, false, err
-		// do something with the error
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
 	}
 
-	payValue, err := strconv.Atoi(amount)
-	if err != nil {
-		return 0, false, err
-	}
-	valid, err := balance.CanPay(bal, float64(payValue))
-	if !valid || err != nil {
-		return 0, false, err
-	}
-
-	newBalance := balance.NewBalancePayment(bal, float64(payValue))
-
-	return newBalance, true, nil
-	// if payment is allowed, should return true and then proceed with payment
-	// if payment is not allowed, should return false and the error
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"deposits": dept}}
+	json.NewEncoder(w).Encode(response)
 }
 
-func (handler *HttpHandler) updateBalance(name string, newBalance float64) error {
-	// get the user's name at this point
-	virtualNuban, err := handler.getVirtualNuban(name)
+func (handler *HttpHandler) GetBanks(w http.ResponseWriter, r *http.Request) {
+
+	err := handler.bankTrf.ListBanks()
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success"}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) DepositAccount(w http.ResponseWriter, r *http.Request) {
+	err := handler.virtualAcc.CreateDepositAccount()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success"}
+	json.NewEncoder(w).Encode(response)
+}
+
+// Call this fucction before payments.
+func (handler *HttpHandler) checkPayment(bal, payValue float64) (newBal float64, canPay bool, err error) {
+	paymentERROR := errors.New("insufficient funds to complete payment")
+
+	valid, err := balance.CanPay(bal, payValue)
+	if !valid || err != nil {
+		return 0, false, paymentERROR
+	}
+
+	newBalance := balance.NewBalancePayment(bal, payValue)
+
+	return newBalance, true, nil
+}
+
+func (handler *HttpHandler) checkTransfer(bal, amount float64) (newBal float64, canTrsf bool, err error) {
+
+	transferERROR := errors.New("insufficient funds to complete transfer")
+
+	valid, err := balance.CanTransfer(bal, amount)
+	if !valid || err != nil {
+
+		return 0, false, transferERROR
+	}
+
+	newBalance := balance.NewBalanceTransfer(bal, amount)
+
+	return newBalance, true, nil
+
+}
+
+func (handler *HttpHandler) updateBalance(id string, newBalance float64) error {
+
+	virtualNuban, err := handler.getVirtualNuban(id)
 	if err != nil {
 		return err
 	}
@@ -191,9 +267,10 @@ func (handler *HttpHandler) updateBalance(name string, newBalance float64) error
 
 }
 
-func (handler *HttpHandler) getVirtualNuban(name string) (string, error) {
-	virtualNuban, err := handler.store.GetVirtualNuban(name)
+func (handler *HttpHandler) getVirtualNuban(id string) (string, error) {
+	virtualNuban, err := handler.store.GetVirtualNuban(id)
 	if err != nil {
+		handler.logger.Error(err.Error())
 		return "", err
 	}
 
@@ -203,18 +280,47 @@ func (handler *HttpHandler) getVirtualNuban(name string) (string, error) {
 func (handler *HttpHandler) refreshBalance(name string) error {
 	virtualNuban, err := handler.getVirtualNuban(name)
 	if err != nil {
+		handler.logger.Error(err.Error())
 		return err
 	}
 
 	if err := handler.bankDep.Deposit(virtualNuban); err != nil {
+		handler.logger.Error(err.Error())
 		return err
 	}
 
 	return nil
 }
 
-/*
-func (handler *HttpHandler) getUser() string {
+func (handler *HttpHandler) getBalance(virtualNuban string) (balance float64, err error) {
 
+	bal, err := handler.bankTranc.GetBalance(virtualNuban)
+	if err != nil {
+		return 0, err
+	}
+
+	return bal, nil
 }
-*/
+
+// with the username, or email, you should be able to get the full user's details
+func (handler *HttpHandler) GetUserDetails(r *http.Request) (user *models.User, err error) {
+
+	token := r.Header.Get("Authorization")
+
+	claim, err := handler.jwt.ValidateToken(token)
+	if err != nil {
+		return nil, fmt.Errorf("could not get user's details: %v", err)
+	}
+
+	userDetails, err := handler.store.GetUserByID(claim.ID)
+	if err != nil {
+		return nil, fmt.Errorf("could not get user's details: %v", err)
+	}
+
+	return userDetails, nil
+}
+
+// update the user balance using the UserID
+// get the user balance using the UserID
+
+// create a delete user operation, delete the user and all associated virtualNuban. Save the transaction details.

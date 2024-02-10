@@ -107,23 +107,23 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		authRouter := router.With(config.Auth.Authorize)
 		// Data Routes
-		dataRoutes(authRouter, httpHandler)
+		dataRoutes(router, httpHandler)
 		// smile data routes
 		smileDataRoutes(authRouter, httpHandler)
 		// spectranet data routes
 		spectranetDataRoutes(authRouter, httpHandler)
 
 		// Edu Routes
-		eduRoutes(authRouter, httpHandler)
+		eduRoutes(router, httpHandler)
 
 		//  Airtime Routes
-		airtimeRoutes(authRouter, httpHandler)
+		airtimeRoutes(router, httpHandler)
 
 		// TvSubscription Routes
-		tvSubscriptionRoutes(authRouter, httpHandler)
+		tvSubscriptionRoutes(router, httpHandler)
 
 		// Electricity bills routes
-		electricityBillRoutes(authRouter, httpHandler)
+		electricityBillRoutes(router, httpHandler)
 
 		// bank routes
 		bankRoutes(authRouter, httpHandler)

@@ -102,6 +102,20 @@ func (m *mongoStore) GetUserByUsername(username string) (*models.User, error) {
 	}
 	return user, nil
 }
+
+func (m *mongoStore) GetUserByID(id string) (*models.User, error) {
+
+	filter := bson.M{
+		"id": id,
+	}
+	user := &models.User{}
+	err := m.col(models.UserCollectionName).FindOne(context.Background(), filter).Decode(user)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
 func (d *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*models.User, error) {
 	filter := bson.M{
 		"$or": []bson.M{

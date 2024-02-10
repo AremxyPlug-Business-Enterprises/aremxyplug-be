@@ -3,47 +3,56 @@ package deposit
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/db/mongo"
 	"github.com/aremxyplug-be/lib/balance"
 	"github.com/aremxyplug-be/lib/randomgen"
+	"go.uber.org/zap"
 )
 
+/*
 var (
 	api    = os.Getenv("ANCHOR_SANDBOX")
 	apikey = os.Getenv("ANCHORAPI_KEY")
 )
+*/
+
+var (
+	api    = os.Getenv("ANCHOR_API")
+	apikey = os.Getenv("ANCHORAPI_PROD")
+)
 
 type Config struct {
-	db db.DataStore
+	db     db.DataStore
+	logger *zap.Logger
 }
 
 type depositID struct {
-	VirtualNuban string `json:"virtualNuban"`
-	ID           string `json:"id"`
+	VirtualNuban string `json:"virtualNuban" bson:"virtualNuban"`
+	ID           string `json:"id" bson:"ID"`
 }
 
-func NewDepositConfig(db db.DataStore) *Config {
-	return &Config{db: db}
+func NewDepositConfig(db db.DataStore, logger *zap.Logger) *Config {
+	return &Config{
+		db:     db,
+		logger: logger,
+	}
 }
 
 func (c *Config) Deposit(virtualNuban string) error {
 	// using the list payment endpoint.
 	url := fmt.Sprintf("%s/%s?%s=%s", api, "payments", "virtualNubanId", virtualNuban)
 
-	// first get the user's associated account number from the database
-	// add the virtualNuban to the request
-
-	orderID, err := randomgen.GenerateOrderID()
-	if err != nil {
-		// log the error
-		return err
+	if virtualNuban == "" {
+		c.logger.Error("missing virtualNuban")
+		return ErrEmptyVirtualNuban
 	}
-
-	transctionID := randomgen.GenerateTransactionID("dep")
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -57,17 +66,31 @@ func (c *Config) Deposit(virtualNuban string) error {
 	resp, err := client.Do(req)
 	if err != nil {
 		// log the error
+		c.logger.Error(err.Error())
 		return ErrAPIConnectionFailed
 	}
 	defer resp.Body.Close()
 
 	apiResponse := paymentResponse{}
-
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		// log the error
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return JSONError(err)
-
 	}
+	c.logger.Log(c.logger.Level(), string(body))
+
+	/*
+		if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+			// log the error
+			c.logger.Error(err.Error())
+			return JSONError(err)
+
+		}
+	*/
+
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		return JSONError(err)
+	}
+	log.Printf("%+v", apiResponse)
 
 	// create a separate collection for saving virtualNubans and their associated deposit ID
 
@@ -78,78 +101,81 @@ func (c *Config) Deposit(virtualNuban string) error {
 	// the value of the new deposits should be added to the previous balance of the user.
 	paymentData := apiResponse.Data
 	for _, data := range paymentData {
+
+		orderID, err := randomgen.GenerateOrderID()
+		if err != nil {
+			// log the error
+			return err
+		}
+
+		transctionID := randomgen.GenerateTransactionID("dep")
 		attributes := data.Attributes
 		virtualNuban := data.Relationships.VirtualNuban.Data.ID
-		result, err := c.db.GetDepositID(virtualNuban)
-		if err != nil {
-			// do something with the error
-			// log the error
+		deposit := depositID{
+			VirtualNuban: virtualNuban,
+			ID:           data.ID,
+		}
+
+		log.Printf("%s", virtualNuban)
+		log.Printf("%s", deposit.ID)
+
+		if err := c.db.SaveDepositID(deposit); err != nil {
+			if err == mongo.ErrDepositIDExist {
+				continue
+			}
+
+			c.logger.Error(err.Error())
 			return DBConnectionError(err)
 		}
-		var id string
-		if deposit_struct, ok := result.(depositID); ok {
-			id = deposit_struct.ID
 
+		bal, err := c.db.GetBalance(virtualNuban)
+		if err != nil {
+			c.logger.Error(err.Error())
+			return DBConnectionError(err)
 		}
-		if id != "" {
-			continue
-		} else if id == "" {
-			// first run through the database to see if that particular depositID already
-			// if it does exist skip that deposit and run for the next, if doesn't exist add the amount to the users balance and continue.
-			bal, err := c.db.GetBalance(virtualNuban)
-			if err != nil {
-				// log the error
-				return DBConnectionError(err)
-			}
+		log.Println(bal)
 
-			deposit_amount := data.Amount
+		deposit_amount := data.Attributes.Amount
+		log.Println(deposit_amount)
 
-			newBalance := balance.NewBalanceDeposit(bal, deposit_amount)
-			userBalance := models.Balance{
-				VirtualNuban: virtualNuban,
-				Balance:      newBalance,
-			}
-			if err = c.db.SaveBalance(virtualNuban, userBalance); err != nil {
-				// log the error and return
-				return DBConnectionError(err)
-			}
-
-			deposit := depositID{
-				VirtualNuban: virtualNuban,
-				ID:           data.ID,
-			}
-
-			c.db.SaveDepositID(deposit)
-
-			result := models.DepositResponse{
-				Amount:         fmt.Sprintf("%v", deposit_amount),
-				WalletType:     "Nigerian NGN Wallet",
-				Bank_Name:      attributes.CounterParty.Bank.Name,
-				Account_Name:   attributes.CounterParty.AccountName,
-				Account_No:     attributes.CounterParty.AccountNumber,
-				Product:        "Virtual Account",
-				Description:    "NGN Wallet Top Up",
-				Message:        data.Narration,
-				Order_ID:       orderID,
-				Transaction_ID: transctionID,
-				Session_ID:     data.PaymentReference,
-			}
-
-			if err := c.saveTransaction(result); err != nil {
-				// log the error and return
-				return DBConnectionError(err)
-			}
+		newBalance, depositAmount := balance.NewBalanceDeposit(bal, deposit_amount)
+		log.Println(newBalance)
+		userBalance := models.Balance{
+			VirtualNuban: virtualNuban,
+			Balance:      newBalance,
+		}
+		if err = c.db.SaveBalance(virtualNuban, userBalance); err != nil {
+			// log the error and return
+			return DBConnectionError(err)
 		}
 
-		// then save the transaction to the database as well
+		log.Printf("%+v", data)
+
+		result := models.DepositResponse{
+			Amount:         fmt.Sprintf("%v", depositAmount),
+			WalletType:     "Nigerian NGN Wallet",
+			Bank_Name:      attributes.CounterParty.Bank.Name,
+			Account_Name:   attributes.CounterParty.AccountName,
+			Account_No:     attributes.CounterParty.AccountNumber,
+			Product:        "Virtual Account",
+			Description:    "NGN Wallet Top Up",
+			Message:        data.Attributes.Narration,
+			Order_ID:       orderID,
+			Transaction_ID: transctionID,
+			Session_ID:     data.Attributes.PaymentReference,
+		}
+
+		log.Printf("%+v", result)
+
+		if err := c.saveTransaction(result); err != nil {
+			// log the error and return
+			return DBConnectionError(err)
+		}
 
 	}
 
-	// return the balance.
 	return nil
 }
-
-// before any transaction, there should first be a check to see if the user has the ability to carry out the transaction.
 
 // write to save transaction to the database
 func (c *Config) saveTransaction(detail models.DepositResponse) error {

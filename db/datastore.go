@@ -11,6 +11,7 @@ type AremxyStore interface {
 	GetUserByEmail(email string) (*models.User, error)
 	GetUserByUsername(username string) (*models.User, error)
 	GetUserByUsernameOrEmail(email string, username string) (*models.User, error)
+	GetUserByID(id string) (*models.User, error)
 	CreateMessage(message *models.Message) error
 	UpdateUserPassword(email string, password string) error
 	SaveDataTransaction(details interface{}) error

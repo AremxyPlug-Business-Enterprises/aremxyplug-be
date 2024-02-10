@@ -2,12 +2,16 @@ package mongo
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aremxyplug-be/db/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var (
@@ -16,17 +20,39 @@ var (
 	bankColl      = "bank"
 	virtualColl   = "virtualAccount"
 	counterColl   = "counterParty"
+	deptColl      = "deposit"
 )
 
-func (m *mongoStore) SaveBankList(banklist []models.BankDetails) error {
+var (
+	ErrDepositIDExist = errors.New("deposit_id already exists")
+)
+
+func (m *mongoStore) deptColl() (*mongo.Collection, error) {
+	col := m.mongoClient.Database(m.databaseName).Collection("deposit_IDs")
+	ctx := context.Background()
+	indexModel := mongo.IndexModel{
+		Keys:    bson.D{primitive.E{Key: "ID", Value: 1}},
+		Options: options.Index().SetUnique(true),
+	}
+
+	_, err := col.Indexes().CreateOne(ctx, indexModel)
+	if err != nil {
+		return nil, err
+	}
+
+	return col, nil
+}
+
+func (m *mongoStore) SaveBankList(banklist models.BankDetails) error {
 	err := m.saveTransaction(bankColl, banklist)
 	return err
 }
 
-func (m *mongoStore) GetBankDetail(bankName string) (models.BankDetails, error) {
+func (m *mongoStore) GetBankDetail(name string) (models.BankDetails, error) {
 	ctx := context.Background()
 	bankDetail := models.BankDetails{}
 
+	bankName := strings.ToUpper(name)
 	filter := bson.D{primitive.E{Key: "name", Value: bankName}}
 	res := m.col(bankColl).FindOne(ctx, filter)
 
@@ -45,7 +71,13 @@ func (m *mongoStore) SaveVirtualAccount(account models.AccountDetails) error {
 
 func (m *mongoStore) GetVirtualNuban(name string) (string, error) {
 	ctx := context.Background()
-	filter := bson.D{primitive.E{Key: "account_name", Value: name}}
+	account_name := fmt.Sprintf("ANC(AREMXYPLUG/%s)", name)
+	fmt.Println(account_name)
+	filter := bson.D{primitive.E{Key: "account_name", Value: account_name}}
+
+	/*
+		filter = bson.D{primitive.E{Key: "user_id", Value: id}}
+	*/
 
 	acc_details := models.AccountDetails{}
 
@@ -58,7 +90,7 @@ func (m *mongoStore) GetVirtualNuban(name string) (string, error) {
 		return "", err
 	}
 
-	return acc_details.Account_Name, nil
+	return acc_details.VirtualAccountID, nil
 }
 
 func (m *mongoStore) SaveCounterParty(counterparty interface{}) error {
@@ -74,9 +106,10 @@ func (m *mongoStore) SaveTransfer(transfer models.TransferResponse) error {
 func (m *mongoStore) GetCounterParty(accountNumber, bankname string) (models.CounterParty, error) {
 	ctx := context.Background()
 	counterparty := models.CounterParty{}
+	bankName := strings.ToUpper(bankname)
 
 	// the filter should be using aggregate  search function since the fields that are to be acccessed are not on the top level.
-	filter := bson.D{primitive.E{Key: "account_number", Value: accountNumber}, primitive.E{Key: "bank_name", Value: bankname}}
+	filter := bson.D{primitive.E{Key: "accountnumber", Value: accountNumber}, primitive.E{Key: "bankname", Value: bankName}}
 	res := m.col(counterColl).FindOne(ctx, filter)
 
 	err := res.Decode(&counterparty)
@@ -204,12 +237,35 @@ func (m *mongoStore) SaveDeposit(detail models.DepositResponse) error {
 }
 
 func (m *mongoStore) SaveDepositID(detail interface{}) error {
-	err := m.saveTransaction("", detail)
-	return err
+	ctx := context.Background()
+
+	col, err := m.deptColl()
+	if err != nil {
+		return err
+	}
+
+	_, err = col.InsertOne(ctx, detail)
+	if err != nil {
+		if writeException, ok := err.(mongo.WriteException); ok {
+			for _, writeError := range writeException.WriteErrors {
+				var detailedError bson.Raw
+				err := bson.Unmarshal([]byte(writeError.Error()), &detailedError)
+				if err == nil {
+					errMsg := detailedError.Lookup("errmsg").StringValue()
+					fmt.Printf("Error: %s\n", errMsg)
+				}
+			}
+			return ErrDepositIDExist
+		} else {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (m *mongoStore) GetDepositID(virtualNuban string) (result interface{}, err error) {
-	id_Result := m.getTransaction(bankTransColl, virtualNuban)
+	id_Result := m.getTransaction(deptColl, virtualNuban)
 
 	// change this result to struct
 	var resp interface{}
@@ -229,7 +285,7 @@ func (m *mongoStore) GetBalance(virtualNuban string) (balance float64, err error
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.D{primitive.E{Key: "virtualNuban", Value: virtualNuban}}
+	filter := bson.D{primitive.E{Key: "virtualnuban", Value: virtualNuban}}
 
 	result := m.col(balColl).FindOne(ctx, filter)
 
@@ -248,32 +304,31 @@ func (m *mongoStore) SaveBalance(virtualNuban string, balance models.Balance) er
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.D{primitive.E{Key: "virtualNuban", Value: virtualNuban}}
+	filter := bson.D{primitive.E{Key: "virtualnuban", Value: virtualNuban}}
 
 	result := m.col(balColl).FindOne(ctx, filter)
 
 	var resp models.Balance
 	err := result.Decode(&resp)
 	if err != nil {
-		return err
-	} else if err == mongo.ErrNoDocuments {
-		_, err := m.col(balColl).InsertOne(ctx, balance)
-		if err != nil {
-			return err
+		if err == mongo.ErrNoDocuments {
+			// Collection or document not found, insert the new balance
+			_, err := m.col(balColl).InsertOne(ctx, balance)
+			if err != nil {
+				return err
+			}
+			return nil
 		}
+		// Handle other errors
+		return err
 	}
 
+	// Document found, update the existing balance
 	updateFilter := bson.D{{Key: "$set", Value: bson.D{primitive.E{Key: "balance", Value: balance.Balance}}}}
-
 	_, err = m.col(balColl).UpdateOne(ctx, filter, updateFilter)
 	if err != nil {
 		return err
 	}
-
-	// to update the balance, first from the struct you'll need to use a filter updating the balance in the document
-
-	// should be used to update the balance.
-	// first check if there was a previous balance, if non then save
 
 	return nil
 }
