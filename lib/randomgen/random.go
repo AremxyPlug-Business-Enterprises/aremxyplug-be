@@ -14,7 +14,7 @@ import (
 
 var (
 	charset = os.Getenv("CHARSET")
-	numbset = os.Getenv(("NUMBSET"))
+	numbset = os.Getenv("NUMBSET")
 )
 
 func GenerateRandomNum(numberOfDigits int) (int, error) {
