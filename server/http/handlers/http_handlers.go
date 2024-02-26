@@ -892,7 +892,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		res, err := handler.vtuClient.BuyAirtime(data)
 		if err != nil {
 			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
+			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...\n %s\n", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}

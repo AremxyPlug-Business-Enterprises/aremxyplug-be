@@ -14,7 +14,7 @@ import (
 
 var (
 	charset = os.Getenv("CHARSET")
-	numbset = os.Getenv("NUMBSET")
+	// numbset = os.Getenv("NUMBSET")
 )
 
 func GenerateRandomNum(numberOfDigits int) (int, error) {
@@ -58,6 +58,13 @@ func GenerateTransactionID(product string) string {
 
 // generateOrderID generates a unique OrderID
 func GenerateOrderID() (int, error) {
+
+	numbset, valid := os.LookupEnv("NUMBSET")
+	if !valid {
+		fmt.Printf("%s", "Could not find NUMBSET environment variable")
+		numbset = "1234567890"
+	}
+
 	seedRand := random.New(random.NewSource(int64(time.Now().UnixNano())))
 
 	b := make([]byte, 10)
