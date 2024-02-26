@@ -12,11 +12,14 @@ import (
 	"time"
 )
 
+/*
 var (
+
 	charset = os.Getenv("CHARSET")
 	numbset = os.Getenv("NUMBSET")
-)
 
+)
+*/
 func GenerateRandomNum(numberOfDigits int) (int, error) {
 	maxLimit := int64(int(math.Pow10(numberOfDigits)) - 1)
 	lowLimit := int(math.Pow10(numberOfDigits - 1))
@@ -40,6 +43,12 @@ func GenerateRandomNum(numberOfDigits int) (int, error) {
 }
 
 func GenerateTransactionID(product string) string {
+
+	charset, valid := os.LookupEnv("CHARSET")
+	if !valid {
+		fmt.Printf("%s", "Could not find NUMBSET environment variable")
+		charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	}
 
 	prod_type := strings.ToUpper(product)
 	seedRand := random.New(random.NewSource(time.Now().UnixNano()))
