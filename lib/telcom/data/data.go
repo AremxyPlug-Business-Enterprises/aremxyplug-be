@@ -57,7 +57,7 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Access-Control-Allow-Origin", "*")
+	//req.Header.Set("Access-Control-Allow-Origin", "*")
 	req.Header.Add("Authorization", token)
 	req.Header.Add("Content-Type", "application/json")
 
@@ -100,8 +100,13 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 		log.Println(resp.StatusCode)
 		return result, nil
 	} else {
-		d.Logger.Error("Api Call Error: %v", zap.String("status", fmt.Sprint((resp.StatusCode))))
-		return nil, d.logAndReturnError("Api Call Error", nil)
+		d.Logger.Error("Api Call Error: %s", zap.String("status", fmt.Sprint((resp.Status))))
+		body, err := json.Marshal(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		log.Print(string(body))
+		return nil, fmt.Errorf("%v", resp.Status)
 	}
 
 }

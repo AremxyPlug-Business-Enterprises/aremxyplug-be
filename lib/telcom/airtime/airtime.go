@@ -40,6 +40,7 @@ func (a *AirtimeConn) BuyAirtime(airtime models.AirtimeInfo) (*models.AirtimeRes
 	id, err := randomgen.GenerateOrderID()
 	if err != nil {
 		a.logger.Error("unable to generate orderID", zap.Any("error:", "failed to generate orderID"))
+		return nil, err
 	}
 	resp, err := a.buy(airtime)
 	if err != nil {
