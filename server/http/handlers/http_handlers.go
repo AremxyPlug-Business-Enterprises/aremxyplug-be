@@ -854,8 +854,8 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		data := models.AirtimeInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
 			return
 
 		}
@@ -891,9 +891,9 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		*/
 		res, err := handler.vtuClient.BuyAirtime(data)
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...\n %s\n", err)
-			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		/*
