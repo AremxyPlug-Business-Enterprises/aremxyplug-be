@@ -632,8 +632,9 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		data := models.DataInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "%v", err)
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
 			return
 
 		}
@@ -664,9 +665,9 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		*/
 		res, err := handler.dataClient.BuyData(data)
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
-			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		/*
@@ -683,9 +684,9 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		res, err := handler.dataClient.GetUserTransactions("user")
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			fmt.Fprintln(w, "Errror occurred while getting user's records")
-			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
@@ -702,9 +703,9 @@ func (handler *HttpHandler) GetDataInfo(w http.ResponseWriter, r *http.Request) 
 
 	res, err := handler.dataClient.GetTransactionDetail(id)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Api response error", zap.Error(err))
 		fmt.Fprintln(w, "Error getting transaction detail.")
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -716,9 +717,9 @@ func (handler *HttpHandler) GetDataTransactions(w http.ResponseWriter, r *http.R
 
 	resp, err := handler.dataClient.GetAllTransactions()
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Api response error", zap.Error(err))
 		fmt.Fprintf(w, "Error getting users transactions records: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -741,14 +742,15 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		data := models.EduInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			fmt.Fprintf(w, "%v", err)
 			return
 		}
 		if data.Quantity >= 5 && data.Quantity < 10 {
+			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("invalid number of buy pins")
 			fmt.Fprintf(w, "Invalid number of pins!! Pins between %d and %d are not allowed. Try again...", 5, 10)
-			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		/*
@@ -778,9 +780,9 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 		*/
 		res, err := handler.eduClient.BuyEduPin(data)
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			fmt.Fprintf(w, "An internal error occurred while purchasing %s pin, please try again...", data.Exam_Type)
-			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		/*
@@ -797,9 +799,9 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		res, err := handler.eduClient.QueryTransaction("id")
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			fmt.Fprintln(w, "Errror occurred while getting user's records")
-			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
@@ -816,9 +818,9 @@ func (handler *HttpHandler) GetEduInfo(w http.ResponseWriter, r *http.Request) {
 
 	res, err := handler.dataClient.GetTransactionDetail(id)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Api response error", zap.Error(err))
 		fmt.Fprintln(w, "Error getting transaction detail.")
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -830,9 +832,9 @@ func (handler *HttpHandler) GetEduTransactions(w http.ResponseWriter, r *http.Re
 
 	resp, err := handler.eduClient.GetAllTransaction("user")
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
 		fmt.Fprintln(w, "Error occurred while getting transactions")
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -856,12 +858,13 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			fmt.Fprintf(w, "%v", err)
 			return
 
 		}
 		if len(data.Phone_no) != 11 {
-			fmt.Fprintf(w, "Phone number must be %d digits, got %d. Check the phone number and try again.", 11, len(data.Phone_no))
 			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, "Phone number must be %d digits, got %d. Check the phone number and try again.", 11, len(data.Phone_no))
 			return
 		}
 		/*
@@ -910,9 +913,9 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		res, err := handler.vtuClient.GetUserTransaction("user")
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			fmt.Fprintln(w, "Errror occurred while getting user's records")
-			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
@@ -925,9 +928,9 @@ func (handler *HttpHandler) GetAirtimeTransactions(w http.ResponseWriter, r *htt
 
 	resp, err := handler.vtuClient.GetAllTransactions()
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
 		fmt.Fprintln(w, "Error occurred while getting transactions")
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -940,9 +943,9 @@ func (handler *HttpHandler) GetAirtimeInfo(w http.ResponseWriter, r *http.Reques
 
 	res, err := handler.dataClient.GetTransactionDetail(id)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Api response error", zap.Error(err))
 		fmt.Fprintln(w, "Error getting transaction detail.")
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -963,8 +966,9 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 	if r.Method == "POST" {
 		data := models.TvInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			fmt.Fprintf(w, "%v", err)
 			return
 
 		}
@@ -994,10 +998,10 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 		*/
 		res, err := handler.tvClient.BuySub(data)
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			// change error message
-			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
-			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "An internal error occurred while purchasing tv subscription, please try again...")
 			return
 		}
 		/*
@@ -1014,9 +1018,9 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 	if r.Method == "GET" {
 		res, err := handler.tvClient.GetUserTransactions("user")
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			fmt.Fprintln(w, "Errror occurred while getting user's records")
-			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
@@ -1027,9 +1031,9 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 func (handler *HttpHandler) GetTvSubscriptions(w http.ResponseWriter, r *http.Request) {
 	resp, err := handler.tvClient.GetAllTransactions()
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
 		fmt.Fprintln(w, "Error occurred while getting transactions")
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -1041,9 +1045,9 @@ func (handler *HttpHandler) GetTvSubDetails(w http.ResponseWriter, r *http.Reque
 
 	res, err := handler.tvClient.GetTransactionDetails(id)
 	if err != nil {
-		handler.logger.Error("Api response error", zap.Error(err))
-		fmt.Fprintln(w, "Error getting transaction detail.")
 		w.WriteHeader(http.StatusInternalServerError)
+		handler.logger.Error("Api response error", zap.Error(err))
+		fmt.Fprintln(w, "Error getting transaction details...")
 		return
 	}
 
@@ -1064,10 +1068,10 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 	if r.Method == "POST" {
 		data := models.ElectricInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			fmt.Fprintf(w, "%v", err)
 			return
-
 		}
 		/*
 			bal, err := handler.getBalance(id)
@@ -1095,10 +1099,10 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 		*/
 		res, err := handler.electClient.PayBill(data)
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			// change error message
-			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
-			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "An internal error occurred while paying electricity bill, please try again...")
 			return
 		}
 		/*
@@ -1115,9 +1119,9 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 	if r.Method == "GET" {
 		res, err := handler.electClient.GetUserTransactions("user")
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			fmt.Fprintln(w, "Errror occurred while getting user's records")
-			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
@@ -1128,9 +1132,9 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 func (handler *HttpHandler) GetElectricBills(w http.ResponseWriter, r *http.Request) {
 	resp, err := handler.electClient.GetAllTransactions()
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
 		fmt.Fprintln(w, "Error occurred while getting transactions")
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -1142,9 +1146,9 @@ func (handler *HttpHandler) GetElectricBillDetails(w http.ResponseWriter, r *htt
 
 	res, err := handler.electClient.GetTransactionDetails(id)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Api response error", zap.Error(err))
 		fmt.Fprintln(w, "Error getting transaction detail.")
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -1166,8 +1170,9 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 	if r.Method == "POST" {
 		data := models.SpectranetInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			fmt.Fprintf(w, "%v", err)
 			return
 
 		}
@@ -1197,9 +1202,9 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 		*/
 		res, err := handler.dataClient.BuySpecData(data)
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
-			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		/*
@@ -1216,9 +1221,9 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 	if r.Method == "GET" {
 		res, err := handler.dataClient.GetSpecUserTransactions("user")
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			fmt.Fprintln(w, "Errror occurred while getting user's records")
-			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
@@ -1234,9 +1239,9 @@ func (handler *HttpHandler) GetSpecDataDetails(w http.ResponseWriter, r *http.Re
 
 	res, err := handler.dataClient.GetSpecTransDetails(id)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Api response error", zap.Error(err))
 		fmt.Fprintln(w, "Error getting transaction detail.")
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -1248,9 +1253,9 @@ func (handler *HttpHandler) GetSpectranetTransactions(w http.ResponseWriter, r *
 
 	resp, err := handler.dataClient.GetAllSpecTransactions()
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
 		fmt.Fprintln(w, "Error occurred while getting transactions")
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -1272,8 +1277,9 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		data := models.SmileInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			fmt.Fprintf(w, "%v", err)
 			return
 
 		}
@@ -1304,9 +1310,9 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 		*/
 		res, err := handler.dataClient.BuySmileData(data)
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
-			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		/*
@@ -1323,9 +1329,9 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		res, err := handler.dataClient.GetSmileUserTransactions("user")
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
 			fmt.Fprintln(w, "Errror occurred while getting user's records")
-			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
@@ -1341,9 +1347,9 @@ func (handler *HttpHandler) GetSmileDataDetails(w http.ResponseWriter, r *http.R
 
 	res, err := handler.dataClient.GetSmileTransDetails(id)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Api response error", zap.Error(err))
 		fmt.Fprintln(w, "Error getting transaction detail.")
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
@@ -1355,9 +1361,9 @@ func (handler *HttpHandler) GetSmileTransactions(w http.ResponseWriter, r *http.
 
 	resp, err := handler.dataClient.GetAllSmileTransactions()
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
 		fmt.Fprintln(w, "Error occurred while getting transactions")
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
