@@ -5,7 +5,7 @@ type ElectricInfo struct {
 	Meter_No   string `json:"meter_no"`   // meter number
 	Meter_Type string `json:"meter_type"` // meter type
 	Amount     int    `json:"amount"`
-	Phone      int    `json:"phone"`
+	Phone      string `json:"phone"`
 	Email      string `json:"email"`
 	RequestID  string `json:"request_id"`
 }

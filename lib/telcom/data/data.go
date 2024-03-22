@@ -28,11 +28,11 @@ var (
 )
 
 type DataConn struct {
-	Dbconn db.DataStore
+	Dbconn db.TelcomStore
 	Logger *zap.Logger
 }
 
-func NewData(DbConn db.DataStore, logger *zap.Logger) *DataConn {
+func NewData(DbConn db.TelcomStore, logger *zap.Logger) *DataConn {
 	return &DataConn{
 		Dbconn: DbConn,
 		Logger: logger,
@@ -69,6 +69,8 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 	defer resp.Body.Close()
 
 	apiResponse := models.APIResponse{}
+
+	log.Println(resp.StatusCode)
 	if resp.StatusCode == http.StatusCreated {
 
 		if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
@@ -97,7 +99,6 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 			return nil, errors.New("Database Insert Error...")
 		}
 
-		log.Println(resp.StatusCode)
 		return result, nil
 	} else {
 		d.Logger.Error("Api Call Error: %s", zap.String("status", fmt.Sprint((resp.Status))))

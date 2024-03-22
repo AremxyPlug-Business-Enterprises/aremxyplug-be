@@ -24,11 +24,11 @@ var (
 )
 
 type ElectricConn struct {
-	db     db.DataStore
+	db     db.UtiliesStore
 	logger *zap.Logger
 }
 
-func NewElectricConn(db db.DataStore, logger *zap.Logger) *ElectricConn {
+func NewElectricConn(db db.UtiliesStore, logger *zap.Logger) *ElectricConn {
 	return &ElectricConn{
 		db:     db,
 		logger: logger,
@@ -65,14 +65,13 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 	}
 	log.Println(apiResponse)
 	transDetails := apiResponse.Contents.Transactions
-	phone := strconv.Itoa(data.Phone)
 	description := data.DiscoType + data.Meter_Type
 
 	result := &models.ElectricResult{
 		DiscoType:     data.DiscoType,
 		MeterType:     data.Meter_Type,
 		MeterNumber:   transDetails.Meter_No,
-		Phone:         phone,
+		Phone:         data.Phone,
 		Email:         data.Email,
 		Product:       transDetails.Type,
 		Description:   description,
@@ -148,7 +147,7 @@ func (e *ElectricConn) GetAllTransactions() ([]models.ElectricResult, error) {
 func (e *ElectricConn) payBill(data models.ElectricInfo) (*http.Response, error) {
 
 	amount := strconv.Itoa(data.Amount)
-	phone := strconv.Itoa(data.Phone)
+	phone := data.Phone
 
 	formdata := url.Values{
 		"request_id":     {data.RequestID},

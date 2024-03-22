@@ -348,3 +348,53 @@ func (m *mongoStore) UpdateBalance(virtualNuban string, balance float64) error {
 
 	return nil
 }
+
+// first create the collection for pin
+// code to save pin to the database
+func (m *mongoStore) SavePin(data models.UserPin) error {
+	ctx := context.Background()
+
+	_, err := m.col("").InsertOne(ctx, data)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// code to get the pin from the database
+func (m *mongoStore) GetPin(userID string) (string, error) {
+	ctx := context.Background()
+	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
+
+	result := m.col("").FindOne(ctx, filter)
+	var resp models.UserPin
+	err := result.Decode(&resp)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+
+			return "", err
+		}
+
+		return "", err
+	}
+
+	return resp.Pin, nil
+}
+
+// code to update the pin in the database
+func (m *mongoStore) UpdatePin(data models.UserPin) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.D{primitive.E{Key: "user_id", Value: data.UserID}}
+
+	updateFilter := bson.D{{Key: "$set", Value: bson.D{primitive.E{Key: "pin", Value: data.Pin}}}}
+
+	_, err := m.col("").UpdateOne(ctx, filter, updateFilter)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
