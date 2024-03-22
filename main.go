@@ -39,7 +39,7 @@ func main() {
 	otp := otpgen.NewOTP(store)
 	data := data.NewData(store, logger)
 	edu := edu.NewEdu(store, logger)
-	vtu := vtu.NewAirtimeConn(logger, store)
+	vtu := vtu.NewAirtimeConn(store, logger)
 	tvSub := tvsub.NewTvConn(store, logger)
 	electSub := elect.NewElectricConn(store, logger)
 	auth := auth.NewAuthConn(secrets)
