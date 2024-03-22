@@ -25,10 +25,10 @@ var (
 
 type AirtimeConn struct {
 	logger *zap.Logger
-	db     db.DataStore
+	db     db.TelcomStore
 }
 
-func NewAirtimeConn(logger *zap.Logger, store db.DataStore) *AirtimeConn {
+func NewAirtimeConn(store db.TelcomStore, logger *zap.Logger) *AirtimeConn {
 	return &AirtimeConn{
 		logger: logger,
 		db:     store,

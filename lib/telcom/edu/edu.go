@@ -24,11 +24,11 @@ var (
 )
 
 type EduConn struct {
-	Dbconn db.DataStore
+	Dbconn db.UtiliesStore
 	Logger *zap.Logger
 }
 
-func NewEdu(DbConn db.DataStore, logger *zap.Logger) *EduConn {
+func NewEdu(DbConn db.UtiliesStore, logger *zap.Logger) *EduConn {
 	return &EduConn{
 		Dbconn: DbConn,
 		Logger: logger,
@@ -101,7 +101,7 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 	}
 
 	// write to database
-	if saveErr := edu.saveTransaction(result); err != nil {
+	if saveErr := edu.saveTransaction(result); saveErr != nil {
 		edu.Logger.Error("Database error try again...", zap.Error(saveErr))
 		return nil, errors.New("database insert error")
 	}
