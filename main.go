@@ -8,6 +8,7 @@ import (
 	"github.com/aremxyplug-be/config"
 	"github.com/aremxyplug-be/db/mongo"
 	"github.com/aremxyplug-be/lib/auth"
+	auth_pin "github.com/aremxyplug-be/lib/auth/pin"
 	bankacc "github.com/aremxyplug-be/lib/bank/bank_acc"
 	"github.com/aremxyplug-be/lib/bank/deposit"
 	"github.com/aremxyplug-be/lib/bank/transactions"
@@ -17,6 +18,8 @@ import (
 	"github.com/aremxyplug-be/lib/emailclient/postmark"
 	zapLogger "github.com/aremxyplug-be/lib/logger"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
+	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
+	"github.com/aremxyplug-be/lib/referral"
 	vtu "github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
@@ -47,6 +50,9 @@ func main() {
 	bankTransc := transactions.NewTransaction(store)
 	bankTrf := transfer.NewConfig(store, logger)
 	bankDep := deposit.NewDepositConfig(store, logger)
+	ref := referral.NewRefConfig(store)
+	point := pointredeem.NewPointConfig(store)
+	pin := auth_pin.NewPinConfig(logger, store)
 
 	config := httpSrv.ServerConfig{
 		Store:       store,
@@ -64,6 +70,9 @@ func main() {
 		BankTranc:   bankTransc,
 		BankTrf:     bankTrf,
 		BankDep:     bankDep,
+		Referral:    ref,
+		Point:       point,
+		Pin:         pin,
 	}
 
 	httpRouter := httpSrv.MountServer(config)
