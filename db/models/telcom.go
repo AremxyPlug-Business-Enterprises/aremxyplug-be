@@ -36,49 +36,6 @@ type APIResponse struct {
 	Status        string `json:"Status"`
 }
 
-type EduInfo struct {
-	Exam_Type    string `json:"exam_type"`
-	Phone_Number string `json:"phone_no"`
-	Amount       string `json:"amount"`
-	Email        string `json:"email"`
-	Quantity     int    `json:"quantity"`
-	Wallet_Type  string `json:"wallet_type"`
-}
-
-type EduApiResponse struct {
-	Message          string  `json:"message"`
-	Amount           float64 `json:"amount"`
-	Date             string  `json:"transaction_date"`
-	Status           string  `json:"status"`
-	Reference        string  `json:"reference_no"`
-	Pin              pins
-	Success_Response string `json:"success"`
-}
-
-type pins struct {
-	Pin1 string `json:"pin1"`
-	Pin2 string `json:"pin2"`
-	Pin3 string `json:"pin3"`
-	Pin4 string `json:"pin4"`
-	Pin5 string `json:"pin5"`
-}
-
-type EduResponse struct {
-	OrderID         int      `json:"order_id" bson:"order_id"`
-	Email           string   `json:"email" bson:"email"`
-	Phone           string   `json:"phone_no" bson:"phone_no"`
-	TransactionID   string   `json:"transaction_id"`
-	Name            string   `json:"name" bson:"name"`
-	ReferenceNumber string   `json:"reference_no" bson:"reference_no"`
-	Product         string   `json:"product" bson:"product"`
-	Amount          float64  `json:"amount" bson:"amount"`
-	Exam_Type       string   `json:"exam_type" bson:"exam_type"`
-	Description     string   `json:"description" bson:"description"`
-	Status          string   `json:"status" bson:"status"`
-	Pin_Generated   []string `json:"pins_generated" bson:"pins_generated"`
-	CreatedAt       string   `json:"created_at" bson:"created_at"`
-}
-
 type AirtimeInfo struct {
 	Network     string `json:"network"`
 	Amount      string `json:"amount"`

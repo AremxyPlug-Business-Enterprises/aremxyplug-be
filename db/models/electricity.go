@@ -15,7 +15,7 @@ type ElectricAPI struct {
 	Contents        Content         `json:"content"`
 	TransactionDate TransactionDate `json:"transaction_date"`
 	RequestID       string          `json:"requestId"`
-	Amount          float64         `json:"amount"`
+	Amount          string          `json:"amount"`
 }
 
 type Content struct {

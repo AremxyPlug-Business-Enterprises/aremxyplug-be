@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/aremxyplug-be/db"
+	auth_pin "github.com/aremxyplug-be/lib/auth/pin"
 	bankacc "github.com/aremxyplug-be/lib/bank/bank_acc"
 	"github.com/aremxyplug-be/lib/bank/deposit"
 	transactions "github.com/aremxyplug-be/lib/bank/transactions"
@@ -13,6 +14,8 @@ import (
 	"github.com/aremxyplug-be/lib/emailclient"
 	"github.com/aremxyplug-be/lib/key_generator"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
+	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
+	"github.com/aremxyplug-be/lib/referral"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
@@ -58,6 +61,9 @@ type HttpHandler struct {
 	bankTranc            *transactions.Transaction
 	bankTrf              *transfer.Config
 	bankDep              *deposit.Config
+	referral             *referral.RefConfig
+	point                *pointredeem.PointConfig
+	pin                  *auth_pin.PinConfig
 }
 
 type HandlerOptions struct {
@@ -75,6 +81,9 @@ type HandlerOptions struct {
 	BankTranc   *transactions.Transaction
 	BankTrf     *transfer.Config
 	BankDep     *deposit.Config
+	Referral    *referral.RefConfig
+	Point       *pointredeem.PointConfig
+	Pin         *auth_pin.PinConfig
 }
 
 func NewHttpHandler(opt *HandlerOptions) *HttpHandler {

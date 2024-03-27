@@ -18,6 +18,7 @@ type Extras interface {
 	SavePin(data models.UserPin) error
 	UpdateReferralCount(referralCode string) error
 	CreateUserReferral(userID, refcode string) error
+	GetReferral(userID string) (string, error)
 	UpdatePoint(userID string, points int) error
 	CreatePointDoc(userID string) error
 	CanRedeemPoints(userID string, points int) bool

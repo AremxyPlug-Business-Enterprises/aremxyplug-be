@@ -57,19 +57,40 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 	}
 	defer resp.Body.Close()
 	apiResponse := models.EduApiResponse{}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println(err)
+		return nil, errors.New("could not unmarshal response body")
+	}
+	log.Println(string(body))
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		if err == io.EOF {
+			log.Println("No response from body")
+			// edu.Logger.Error("Empty response body", zap.Error(err))
+			return nil, errors.New("empty response from server")
+		} else {
+			log.Println("other error:", err)
+			// edu.Logger.Error("error returned from server: ", zap.Error(err))
+			return nil, errors.New("could not unmarshal response body")
+		}
+
+	}
+	log.Printf("%+v", apiResponse)
 
 	log.Println("Status: ", resp.Status)
-	err = json.NewDecoder(resp.Body).Decode(&apiResponse)
-	log.Println(apiResponse)
-	if err == io.EOF {
-		log.Println("No response from body")
-		// edu.Logger.Error("Empty response body", zap.Error(err))
-		return nil, errors.New("empty response from server")
-	} else if err != nil {
-		log.Println("other error:", err)
-		// edu.Logger.Error("error returned from server: ", zap.Error(err))
-		return nil, errors.New("error returned from server")
-	}
+	/*
+		err = json.NewDecoder(resp.Body).Decode(&apiResponse)
+		log.Println(apiResponse)
+		if err == io.EOF {
+			log.Println("No response from body")
+			// edu.Logger.Error("Empty response body", zap.Error(err))
+			return nil, errors.New("empty response from server")
+		} else if err != nil {
+			log.Println("other error:", err)
+			// edu.Logger.Error("error returned from server: ", zap.Error(err))
+			return nil, errors.New("error returned from server")
+		}
+	*/
 
 	if apiResponse.Success_Response == "false" {
 		log.Println(apiResponse.Message)
@@ -77,12 +98,23 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 	}
 
 	transactionID := randomgen.GenerateTransactionID("edu")
-	pinGenerated := []string{
-		apiResponse.Pin.Pin1,
-		apiResponse.Pin.Pin2,
-		apiResponse.Pin.Pin3,
-		apiResponse.Pin.Pin4,
-		apiResponse.Pin.Pin5,
+	pins := []string{
+		apiResponse.Pin1,
+		apiResponse.Pin2,
+		apiResponse.Pin3,
+		apiResponse.Pin4,
+		apiResponse.Pin5,
+		apiResponse.Pin6,
+		apiResponse.Pin7,
+		apiResponse.Pin8,
+		apiResponse.Pin9,
+		apiResponse.Pin10,
+	}
+	var pinGenerated []string
+	for _, pin := range pins {
+		if pin != "" {
+			pinGenerated = append(pinGenerated, pin)
+		}
 	}
 
 	// associate the responses for the api
