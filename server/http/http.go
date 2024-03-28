@@ -247,15 +247,14 @@ func pinRoute(r chi.Router, httpHandler *handlers.HttpHandler) {
 }
 
 func extraRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
-	r.Route("", func(router chi.Router) {
+	r.Route("/extra", func(router chi.Router) {
 		router.Route("/referral", func(router chi.Router) {
 			router.Get("/", httpHandler.Referral)
-			router.Post("", httpHandler.Referral)
+			router.Post("/", httpHandler.Referral)
 		})
 		router.Route("/point", func(router chi.Router) {
 			router.Get("/", httpHandler.Points)
-			router.Post("", httpHandler.Points)
-			router.Post("", httpHandler.Points)
+			router.Post("/", httpHandler.Points)
 		})
 	})
 }
