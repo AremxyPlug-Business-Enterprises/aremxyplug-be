@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/aremxyplug-be/lib/auth"
+	auth_pin "github.com/aremxyplug-be/lib/auth/pin"
 	bankacc "github.com/aremxyplug-be/lib/bank/bank_acc"
 	"github.com/aremxyplug-be/lib/bank/deposit"
 	"github.com/aremxyplug-be/lib/bank/transactions"
@@ -12,6 +13,8 @@ import (
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
+	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
+	"github.com/aremxyplug-be/lib/referral"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
@@ -42,6 +45,9 @@ type ServerConfig struct {
 	BankTranc   *transactions.Transaction
 	BankTrf     *transfer.Config
 	BankDep     *deposit.Config
+	Referral    *referral.RefConfig
+	Point       *pointredeem.PointConfig
+	Pin         *auth_pin.PinConfig
 }
 
 func MountServer(config ServerConfig) *chi.Mux {
@@ -76,6 +82,9 @@ func MountServer(config ServerConfig) *chi.Mux {
 		BankTranc:   config.BankTranc,
 		BankTrf:     config.BankTrf,
 		BankDep:     config.BankDep,
+		Referral:    config.Referral,
+		Point:       config.Point,
+		Pin:         config.Pin,
 	})
 
 	// Routes
@@ -128,6 +137,9 @@ func MountServer(config ServerConfig) *chi.Mux {
 		// bank routes
 		bankRoutes(authRouter, httpHandler)
 
+		pinRoute(router, httpHandler)
+
+		extraRoutes(router, httpHandler)
 		/*
 			transferMoneyRoutes(authRouter, httpHandler)
 
@@ -225,6 +237,26 @@ func bankRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 			router.Get("/{id}", httpHandler.GetDepositDetail)
 		})
 		router.Get("/transactions", httpHandler.GetAllBankTransactions)
+	})
+}
+
+func pinRoute(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/pin", func(router chi.Router) {
+		router.Post("/", httpHandler.Pin)
+	})
+}
+
+func extraRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("", func(router chi.Router) {
+		router.Route("/referral", func(router chi.Router) {
+			router.Get("/", httpHandler.Referral)
+			router.Post("", httpHandler.Referral)
+		})
+		router.Route("/point", func(router chi.Router) {
+			router.Get("/", httpHandler.Points)
+			router.Post("", httpHandler.Points)
+			router.Post("", httpHandler.Points)
+		})
 	})
 }
 
