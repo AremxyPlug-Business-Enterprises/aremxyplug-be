@@ -109,7 +109,7 @@ func (a *AirtimeConn) QueryTransaction(id string) (*models.AirtimeResponse, erro
 	}
 	defer resp.Body.Close()
 
-	apiResponse := models.EduApiResponse{}
+	apiResponse := models.AirtimeApiResponse{}
 	result := &models.AirtimeResponse{}
 	jsonerr := json.NewDecoder(resp.Body).Decode(&apiResponse)
 	if jsonerr != nil {
