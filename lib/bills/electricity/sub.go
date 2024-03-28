@@ -65,7 +65,7 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 	}
 	log.Println(apiResponse)
 	transDetails := apiResponse.Contents.Transactions
-	description := data.DiscoType + data.Meter_Type
+	description := data.DiscoType + " " + data.Meter_Type
 
 	result := &models.ElectricResult{
 		DiscoType:     data.DiscoType,

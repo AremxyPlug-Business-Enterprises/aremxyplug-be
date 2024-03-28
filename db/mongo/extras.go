@@ -42,6 +42,21 @@ func (m *mongoStore) CreateUserReferral(userID, refcode string) error {
 	return nil
 }
 
+func (m *mongoStore) GetReferral(userID string) (string, error) {
+	// TODO: get user referral code from the user's document
+	ctx := context.Background()
+
+	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
+	refDoc := models.Referral{}
+
+	findResult := m.col("").FindOne(ctx, filter)
+	if err := findResult.Decode(&refDoc); err != nil {
+		return "", err
+	}
+
+	return refDoc.RefCode, nil
+}
+
 func (m *mongoStore) UpdatePoint(userID string, points int) error {
 	// TODO: update the point doucument using the userID as the filter and adding the points to the previous point balance
 	ctx := context.Background()
