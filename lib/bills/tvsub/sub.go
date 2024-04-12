@@ -24,7 +24,7 @@ var (
 )
 
 type TvConn struct {
-	db     db.UtiliesStore
+	db     db.UtilitiesStore
 	logger *zap.Logger
 }
 
@@ -32,7 +32,7 @@ type responses struct {
 	Code string `json:"code"`
 }
 
-func NewTvConn(db db.UtiliesStore, Logger *zap.Logger) *TvConn {
+func NewTvConn(db db.UtilitiesStore, Logger *zap.Logger) *TvConn {
 	return &TvConn{
 		db:     db,
 		logger: Logger,

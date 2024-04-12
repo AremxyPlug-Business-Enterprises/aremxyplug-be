@@ -16,6 +16,7 @@ type ElectricAPI struct {
 	TransactionDate TransactionDate `json:"transaction_date"`
 	RequestID       string          `json:"requestId"`
 	Amount          string          `json:"amount"`
+	Purchased_Token string          `json:"purchased_code"`
 }
 
 type Content struct {
@@ -38,7 +39,19 @@ type TransactionDate struct {
 	Date string `json:"date"`
 }
 
+type VerifyMeterResponse struct {
+	Code    string        `json:"code"`
+	Content verifyContent `json:"content"`
+}
+
+type verifyContent struct {
+	Name         string `json:"name"`
+	Meter_Number string `json:"meter_number"`
+	Err          string `json:"error,omitempty"`
+}
+
 type ElectricResult struct {
+	Amount        string `json:"amount"`
 	DiscoType     string `json:"disco_type" bson:"DiscoType"`
 	MeterType     string `json:"meter_type" bson:"meter_type"` // Prepaid
 	Name          string `json:"name" bson:"name"`

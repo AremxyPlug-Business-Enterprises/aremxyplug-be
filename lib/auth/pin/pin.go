@@ -50,6 +50,25 @@ func (p *PinConfig) VerifyPin(userID, pin string) bool {
 	return true
 }
 
+func (p *PinConfig) UpdatePin(userID string, newPin string) error {
+
+	hashpin, err := generatePin(newPin)
+	if err != nil {
+		return err
+	}
+
+	pin := models.UserPin{
+		UserID: userID,
+		Pin:    hashpin,
+	}
+
+	if err := p.dbConn.UpdatePin(pin); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func generatePin(pin string) (string, error) {
 	pinByte, err := bcrypt.GenerateFromPassword([]byte(pin), 10)
 

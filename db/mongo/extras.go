@@ -72,6 +72,21 @@ func (m *mongoStore) UpdatePoint(userID string, points int) error {
 	return nil
 }
 
+func (m *mongoStore) GetPoint(userID string) (models.Points, error) {
+
+	ctx := context.Background()
+
+	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
+	points := models.Points{}
+
+	result := m.col("").FindOne(ctx, filter)
+	if err := result.Decode(&points); err != nil {
+		return models.Points{}, nil
+	}
+
+	return points, nil
+}
+
 func (m *mongoStore) CreatePointDoc(userID string) error {
 	// TODO: Create a document on the collection points for the user on signUp
 	ctx := context.Background()
