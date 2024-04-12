@@ -1,6 +1,9 @@
 package pointredeem
 
-import "github.com/aremxyplug-be/db"
+import (
+	"github.com/aremxyplug-be/db"
+	"github.com/aremxyplug-be/db/models"
+)
 
 type PointConfig struct {
 	db db.Extras
@@ -30,6 +33,17 @@ func (p *PointConfig) UpdatePoints(userID string, points int) error {
 	}
 
 	return nil
+}
+
+func (p *PointConfig) GetPoints(userID string) (models.Points, error) {
+
+	point, err := p.db.GetPoint(userID)
+	if err != nil {
+		return models.Points{}, err
+	}
+
+	return point, nil
+
 }
 
 func (p *PointConfig) UserPoints(userID string) error {

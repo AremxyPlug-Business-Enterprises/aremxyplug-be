@@ -243,6 +243,8 @@ func bankRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 func pinRoute(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/pin", func(router chi.Router) {
 		router.Post("/", httpHandler.Pin)
+		router.Patch("/", httpHandler.UpdatePin)
+		router.Post("/verify", httpHandler.VerifyPIN)
 	})
 }
 

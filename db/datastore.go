@@ -7,7 +7,7 @@ type DataStore interface {
 	BankStore
 	UserStore
 	TelcomStore
-	UtiliesStore
+	UtilitiesStore
 }
 
 type Extras interface {
@@ -22,6 +22,7 @@ type Extras interface {
 	UpdatePoint(userID string, points int) error
 	CreatePointDoc(userID string) error
 	CanRedeemPoints(userID string, points int) bool
+	GetPoint(userID string) (models.Points, error)
 }
 
 type BankStore interface {
@@ -68,7 +69,7 @@ type TelcomStore interface {
 	GetAllAirtimeTransactions(user string) ([]models.AirtimeResponse, error)
 }
 
-type UtiliesStore interface {
+type UtilitiesStore interface {
 	SaveEduTransaction(details *models.EduResponse) error
 	GetEduTransactionDetails(id string) (models.EduResponse, error)
 	GetAllEduTransactions(user string) ([]models.EduResponse, error)

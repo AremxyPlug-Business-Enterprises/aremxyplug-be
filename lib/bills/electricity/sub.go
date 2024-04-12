@@ -24,11 +24,11 @@ var (
 )
 
 type ElectricConn struct {
-	db     db.UtiliesStore
+	db     db.UtilitiesStore
 	logger *zap.Logger
 }
 
-func NewElectricConn(db db.UtiliesStore, logger *zap.Logger) *ElectricConn {
+func NewElectricConn(db db.UtilitiesStore, logger *zap.Logger) *ElectricConn {
 	return &ElectricConn{
 		db:     db,
 		logger: logger,
@@ -68,10 +68,12 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 	description := data.DiscoType + " " + data.Meter_Type
 
 	result := &models.ElectricResult{
+		Amount:        apiResponse.Amount,
 		DiscoType:     data.DiscoType,
 		MeterType:     data.Meter_Type,
 		MeterNumber:   transDetails.Meter_No,
 		Phone:         data.Phone,
+		BillGenerated: apiResponse.Purchased_Token,
 		Email:         data.Email,
 		Product:       transDetails.Type,
 		Description:   description,
@@ -231,12 +233,13 @@ func (d *ElectricConn) logAndReturnError(errorMsg string, err error) error {
 	return errors.New(errorMsg)
 }
 
+// return an error message for when the meter number is not correct
 func (d *ElectricConn) verifyMeterNo(discoType, meterNo, meterType string) (bool, error) {
 
 	formdata := url.Values{
-		"serviceID":      {discoType},
-		"billersCode":    {meterNo},
-		"variation_code": {meterType},
+		"serviceID":   {discoType},
+		"billersCode": {meterNo},
+		"type":        {meterType},
 	}
 
 	body := bytes.NewBufferString(formdata.Encode())
@@ -251,10 +254,19 @@ func (d *ElectricConn) verifyMeterNo(discoType, meterNo, meterType string) (bool
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	client := &http.Client{}
-	_, err = client.Do(req)
+	resp, err := client.Do(req)
+
 	if err != nil {
 		return false, err
 	}
 
+	apiResponse := models.VerifyMeterResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+		return false, err
+	}
+
+	if apiResponse.Content.Err != "" {
+		return false, errors.New(apiResponse.Content.Err)
+	}
 	return true, nil
 }
