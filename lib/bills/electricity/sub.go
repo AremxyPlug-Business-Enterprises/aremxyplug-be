@@ -38,6 +38,8 @@ func NewElectricConn(db db.UtilitiesStore, logger *zap.Logger) *ElectricConn {
 // pay electricity bill
 func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult, error) {
 
+	log.Printf("%+v", data)
+
 	data.RequestID = randomgen.GenerateRequestID()
 	orderID, err := randomgen.GenerateOrderID()
 	if err != nil {
