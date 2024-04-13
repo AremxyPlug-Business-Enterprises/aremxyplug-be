@@ -236,6 +236,10 @@ func (d *ElectricConn) logAndReturnError(errorMsg string, err error) error {
 // return an error message for when the meter number is not correct
 func (d *ElectricConn) verifyMeterNo(discoType, meterNo, meterType string) (bool, error) {
 
+	if meterNo == "" {
+		return false, errors.New("no meter number")
+	}
+
 	formdata := url.Values{
 		"serviceID":   {discoType},
 		"billersCode": {meterNo},
