@@ -46,7 +46,7 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 		return nil, e.logAndReturnError("error generating orderID", err)
 	}
 	transactionID := randomgen.GenerateTransactionID("ele")
-
+	log.Printf("%+v", data)
 	validNo, err := e.verifyMeterNo(data.DiscoType, data.Meter_No, data.Meter_Type)
 	if err != nil {
 		return nil, e.logAndReturnError("error verifying meter number", err)
