@@ -238,6 +238,18 @@ func (edu *EduConn) buyPin(examType string, pinNumber string) (*http.Response, e
 
 func (edu *EduConn) saveTransaction(detail *models.EduResponse) error {
 
+	if edu == nil {
+		return errors.New("edu is nil")
+	}
+	if edu.logger == nil {
+		return errors.New("logger is nil")
+	}
+	if edu.db == nil {
+		return errors.New("db is nil")
+	}
+
+	log.Println(detail)
+
 	err := edu.db.SaveEduTransaction(detail)
 	if err != nil {
 		return err

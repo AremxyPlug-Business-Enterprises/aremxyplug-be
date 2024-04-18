@@ -126,6 +126,7 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		refreshTokenDuration: refreshTokenDuration,
 		authTokenDuration:    authTokenDuration,
 		uuidGenerator:        uuidgenerator.NewGoogleUUIDGenerator(),
+		eduClient:            opt.Edu,
 		emailClient:          opt.EmailClient,
 		dataClient:           opt.Data,
 		vtuClient:            opt.VTU,

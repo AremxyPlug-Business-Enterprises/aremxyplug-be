@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
@@ -69,13 +70,18 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 	transDetails := apiResponse.Contents.Transactions
 	description := data.DiscoType + " " + data.Meter_Type
 
+	parts := strings.Split(apiResponse.Purchased_Token, ":")
+
+	token_generated := strings.TrimSpace(parts[1])
+	billGenerated := token_generated
+
 	result := &models.ElectricResult{
 		Amount:        apiResponse.Amount,
 		DiscoType:     data.DiscoType,
 		MeterType:     data.Meter_Type,
 		MeterNumber:   transDetails.Meter_No,
 		Phone:         data.Phone,
-		BillGenerated: apiResponse.Purchased_Token,
+		BillGenerated: billGenerated,
 		Email:         data.Email,
 		Product:       transDetails.Type,
 		Description:   description,
@@ -230,13 +236,13 @@ func (e *ElectricConn) queryTransaction(requestID string) (*http.Response, error
 	return resp, nil
 }
 
-func (d *ElectricConn) logAndReturnError(errorMsg string, err error) error {
-	d.logger.Error(errorMsg, zap.Error(err))
+func (e *ElectricConn) logAndReturnError(errorMsg string, err error) error {
+	e.logger.Error(errorMsg, zap.Error(err))
 	return errors.New(errorMsg)
 }
 
 // return an error message for when the meter number is not correct
-func (d *ElectricConn) verifyMeterNo(discoType, meterNo, meterType string) (bool, error) {
+func (e *ElectricConn) verifyMeterNo(discoType, meterNo, meterType string) (bool, error) {
 
 	if meterNo == "" {
 		return false, errors.New("no meter number")
