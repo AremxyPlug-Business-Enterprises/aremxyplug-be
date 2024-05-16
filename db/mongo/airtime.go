@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/db/models/telcom"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -20,19 +21,19 @@ func (m *mongoStore) SaveDataTransaction(details interface{}) error {
 }
 
 // GetTransactionDetails returns a data transaction detail.
-func (m *mongoStore) GetDataTransactionDetails(id string) (models.DataResult, error) {
-	res := models.DataResult{}
+func (m *mongoStore) GetDataTransactionDetails(id string) (telcom.DataResult, error) {
+	res := telcom.DataResult{}
 
 	findResult := m.getTransaction(id, dataColl)
 	err := findResult.Decode(&res)
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return models.DataResult{}, nil
+			return telcom.DataResult{}, nil
 		}
 		// write for errors
 		log.Println(err)
-		return models.DataResult{}, err
+		return telcom.DataResult{}, err
 	}
 
 	return res, nil
@@ -40,17 +41,17 @@ func (m *mongoStore) GetDataTransactionDetails(id string) (models.DataResult, er
 }
 
 // GetAllTransaction returns all the data transactions associated to a user, if an empty string is passed it returns all data transactions.
-func (m *mongoStore) GetAllDataTransactions(user string) ([]models.DataResult, error) {
+func (m *mongoStore) GetAllDataTransactions(user string) ([]telcom.DataResult, error) {
 	ctx := context.Background()
-	res := []models.DataResult{}
+	res := []telcom.DataResult{}
 
 	cur, err := m.getAllTransaction(dataColl, user)
 	if err != nil {
-		return []models.DataResult{}, err
+		return []telcom.DataResult{}, err
 	}
 
 	for cur.Next(ctx) {
-		resp := models.DataResult{}
+		resp := telcom.DataResult{}
 		if err := cur.Decode(&resp); err != nil {
 			return nil, err
 		}
@@ -140,7 +141,7 @@ func (m *mongoStore) GetAllSmileDataTransactions(user string) ([]models.SmileRes
 	return res, nil
 }
 
-func (m *mongoStore) SaveAirtimeTransaction(details *models.AirtimeResponse) error {
+func (m *mongoStore) SaveAirtimeTransaction(details *telcom.AirtimeResponse) error {
 	err := m.saveTransaction(airColl, details)
 	if err != nil {
 		return err
@@ -148,8 +149,8 @@ func (m *mongoStore) SaveAirtimeTransaction(details *models.AirtimeResponse) err
 	return nil
 }
 
-func (m *mongoStore) GetAirtimeTransactionDetails(id string) (models.AirtimeResponse, error) {
-	res := models.AirtimeResponse{}
+func (m *mongoStore) GetAirtimeTransactionDetails(id string) (telcom.AirtimeResponse, error) {
+	res := telcom.AirtimeResponse{}
 
 	result := m.getTransaction(id, eduColl)
 
@@ -157,26 +158,26 @@ func (m *mongoStore) GetAirtimeTransactionDetails(id string) (models.AirtimeResp
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return models.AirtimeResponse{}, nil
+			return telcom.AirtimeResponse{}, nil
 		}
 		// return error
-		return models.AirtimeResponse{}, err
+		return telcom.AirtimeResponse{}, err
 	}
 
 	return res, nil
 }
 
-func (m *mongoStore) GetAllAirtimeTransactions(user string) ([]models.AirtimeResponse, error) {
+func (m *mongoStore) GetAllAirtimeTransactions(user string) ([]telcom.AirtimeResponse, error) {
 	ctx := context.Background()
-	res := []models.AirtimeResponse{}
+	res := []telcom.AirtimeResponse{}
 
 	cur, err := m.getAllTransaction(dataColl, user)
 	if err != nil {
-		return []models.AirtimeResponse{}, err
+		return []telcom.AirtimeResponse{}, err
 	}
 
 	for cur.Next(ctx) {
-		resp := models.AirtimeResponse{}
+		resp := telcom.AirtimeResponse{}
 		if err := cur.Decode(&resp); err != nil {
 			return nil, err
 		}

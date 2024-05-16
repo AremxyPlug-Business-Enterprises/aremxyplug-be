@@ -14,6 +14,7 @@ import (
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/aremxyplug-be/lib/randomgen"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -40,7 +41,7 @@ func NewData(DbConn db.TelcomStore, logger *zap.Logger) *DataConn {
 }
 
 // BuyData makes a call to the api to initiate a purchase
-func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
+func (d *DataConn) BuyData(data telcom.DataInfo) (*telcom.DataResult, error) {
 	data.Ported_number = true
 
 	var buf bytes.Buffer
@@ -68,7 +69,7 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 	}
 	defer resp.Body.Close()
 
-	apiResponse := models.APIResponse{}
+	apiResponse := telcom.APIResponse{}
 
 	log.Println(resp.StatusCode)
 	if resp.StatusCode == http.StatusCreated {
@@ -81,7 +82,7 @@ func (d *DataConn) BuyData(data models.DataInfo) (*models.DataResult, error) {
 		}
 
 		transactionID := randomgen.GenerateTransactionID("dat")
-		result := &models.DataResult{
+		result := &telcom.DataResult{
 			Network:         apiResponse.Plan_network,
 			Phone_Number:    apiResponse.Mobile_number,
 			ReferenceNumber: apiResponse.Ident,
@@ -209,8 +210,8 @@ func (d *DataConn) BuySmileData(data models.SmileInfo) (*models.SmileResult, err
 }
 
 // GetTransactionDetail takes a  id and returns the details of the transaction
-func (d *DataConn) GetTransactionDetail(id string) (models.DataResult, error) {
-	resp := models.DataResult{}
+func (d *DataConn) GetTransactionDetail(id string) (telcom.DataResult, error) {
+	resp := telcom.DataResult{}
 	res, err := d.getTransactionDetails(id)
 	if err != nil {
 		return resp, d.logAndReturnError("error while communicating with database", err)
@@ -220,7 +221,7 @@ func (d *DataConn) GetTransactionDetail(id string) (models.DataResult, error) {
 }
 
 // GetUserTransactions return all the data transactions associated to a user
-func (d *DataConn) GetUserTransactions(user string) ([]models.DataResult, error) {
+func (d *DataConn) GetUserTransactions(user string) ([]telcom.DataResult, error) {
 
 	res, err := d.getAllTransactions(user)
 	if err != nil {
@@ -257,7 +258,7 @@ func (d *DataConn) PingUser(w http.ResponseWriter) (*http.Response, error) {
 }
 
 // GetAllTransactions returns a list of all data transactions.
-func (d *DataConn) GetAllTransactions() ([]models.DataResult, error) {
+func (d *DataConn) GetAllTransactions() ([]telcom.DataResult, error) {
 	var user string
 	result, err := d.getAllTransactions(user)
 	if err != nil {
@@ -435,13 +436,13 @@ func (d *DataConn) saveTransacation(details interface{}) error {
 }
 
 // getTransacationDetails returns the details of a transaction
-func (d *DataConn) getTransactionDetails(id string) (models.DataResult, error) {
+func (d *DataConn) getTransactionDetails(id string) (telcom.DataResult, error) {
 	result, err := d.Dbconn.GetDataTransactionDetails(id)
 	return result, err
 }
 
 // getAllTransaction returns all transactions, if an empty string is passed, it returns all transaction in the database
-func (d *DataConn) getAllTransactions(user string) ([]models.DataResult, error) {
+func (d *DataConn) getAllTransactions(user string) ([]telcom.DataResult, error) {
 	results, err := d.Dbconn.GetAllDataTransactions(user)
 	return results, err
 }

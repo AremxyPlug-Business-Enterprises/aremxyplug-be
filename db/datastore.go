@@ -1,6 +1,9 @@
 package db
 
-import "github.com/aremxyplug-be/db/models"
+import (
+	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/db/models/telcom"
+)
 
 type DataStore interface {
 	Extras
@@ -58,15 +61,15 @@ type UserStore interface {
 
 type TelcomStore interface {
 	SaveDataTransaction(details interface{}) error
-	GetDataTransactionDetails(id string) (models.DataResult, error)
-	GetAllDataTransactions(user string) ([]models.DataResult, error)
+	GetDataTransactionDetails(id string) (telcom.DataResult, error)
+	GetAllDataTransactions(user string) ([]telcom.DataResult, error)
 	GetSpecTransDetails(id string) (models.SpectranetResult, error)
 	GetAllSpecDataTransactions(user string) ([]models.SpectranetResult, error)
 	GetSmileTransDetails(id string) (models.SmileResult, error)
 	GetAllSmileDataTransactions(user string) ([]models.SmileResult, error)
-	SaveAirtimeTransaction(details *models.AirtimeResponse) error
-	GetAirtimeTransactionDetails(id string) (models.AirtimeResponse, error)
-	GetAllAirtimeTransactions(user string) ([]models.AirtimeResponse, error)
+	SaveAirtimeTransaction(details *telcom.AirtimeResponse) error
+	GetAirtimeTransactionDetails(id string) (telcom.AirtimeResponse, error)
+	GetAllAirtimeTransactions(user string) ([]telcom.AirtimeResponse, error)
 }
 
 type UtilitiesStore interface {

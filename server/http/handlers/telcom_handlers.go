@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
@@ -23,7 +24,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		id := userDetails.ID
 	*/
 	if r.Method == "POST" {
-		data := models.AirtimeInfo{}
+		data := telcom.AirtimeInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Decoding JSON response", zap.Error(err))
@@ -134,7 +135,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		id := userDetails.ID
 	*/
 	if r.Method == "POST" {
-		data := models.DataInfo{}
+		data := telcom.DataInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, "%v", err)
