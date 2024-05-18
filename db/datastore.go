@@ -57,6 +57,7 @@ type UserStore interface {
 	GetUserByID(id string) (*models.User, error)
 	CreateMessage(message *models.Message) error
 	UpdateUserPassword(email string, password string) error
+	UpdateBVNField(user models.User) error
 }
 
 type TelcomStore interface {

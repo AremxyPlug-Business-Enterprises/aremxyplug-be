@@ -141,7 +141,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		extraRoutes(router, httpHandler)
 
-		virtualAccRoutes(router, httpHandler)
+		virtualAccRoutes(authRouter, httpHandler)
 		/*
 			transferMoneyRoutes(authRouter, httpHandler)
 

@@ -116,7 +116,7 @@ func (m *mongoStore) GetUserByID(id string) (*models.User, error) {
 	return user, nil
 }
 
-func (d *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*models.User, error) {
+func (m *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*models.User, error) {
 	filter := bson.M{
 		"$or": []bson.M{
 			{"email": email},
@@ -124,8 +124,8 @@ func (d *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*m
 		},
 	}
 	user := &models.User{}
-	err := d.mongoClient.
-		Database(d.databaseName).
+	err := m.mongoClient.
+		Database(m.databaseName).
 		Collection(models.UserCollectionName).
 		FindOne(context.Background(), filter).
 		Decode(user)
@@ -136,11 +136,11 @@ func (d *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*m
 
 }
 
-func (d *mongoStore) CreateMessage(message *models.Message) error {
+func (m *mongoStore) CreateMessage(message *models.Message) error {
 	ctx := context.Background()
 	var modelInDB models.Message
-	err := d.mongoClient.
-		Database(d.databaseName).
+	err := m.mongoClient.
+		Database(m.databaseName).
 		Collection(models.MessagesCollectionName).
 		FindOne(ctx, bson.M{"id": message.ID}).
 		Decode(&modelInDB)
@@ -156,8 +156,8 @@ func (d *mongoStore) CreateMessage(message *models.Message) error {
 		return nil
 	}
 
-	_, err = d.mongoClient.
-		Database(d.databaseName).
+	_, err = m.mongoClient.
+		Database(m.databaseName).
 		Collection(models.MessagesCollectionName).
 		InsertOne(ctx, message)
 	if err != nil {
@@ -168,12 +168,26 @@ func (d *mongoStore) CreateMessage(message *models.Message) error {
 }
 
 // update user password
-func (d *mongoStore) UpdateUserPassword(email string, password string) error {
+func (m *mongoStore) UpdateUserPassword(email string, password string) error {
 	ctx := context.Background()
 	filter := bson.M{"email": email}
 	update := bson.M{"$set": bson.M{"password": password}}
-	_, err := d.mongoClient.
-		Database(d.databaseName).
+	_, err := m.mongoClient.
+		Database(m.databaseName).
+		Collection(models.UserCollectionName).
+		UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *mongoStore) UpdateBVNField(user models.User) error {
+	ctx := context.Background()
+	filter := bson.M{"userID": user.ID}
+	update := bson.M{"$set": bson.M{"bvn": user.BVN}}
+	_, err := m.mongoClient.
+		Database(m.databaseName).
 		Collection(models.UserCollectionName).
 		UpdateOne(ctx, filter, update)
 	if err != nil {

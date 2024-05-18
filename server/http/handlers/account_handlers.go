@@ -42,6 +42,13 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
+		if err := handler.store.UpdateBVNField(user); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		response := responseFormat.CustomResponse{
 			Status:  http.StatusCreated,
 			Message: "success",
