@@ -12,5 +12,7 @@ type User struct {
 	InvitationCode string `json:"invitation_code" bson:"invitation_Code"`
 	CreatedAt      int64  `json:"created_at" bson:"created_at"`
 	UpdatedAt      int64  `json:"updated_at" bson:"updated_at"`
+	BVN            string `json:"bvn" bson:"bvn"`
+	IsActive       bool   `json:"is_active" bson:"is_active"`
 	IsVerified     bool   `json:"is_verified" bson:"is_verified"`
 }

@@ -106,13 +106,6 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = handler.virtualAcc.VirtualAccount(newUser)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
 	w.WriteHeader(http.StatusCreated)
 	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"data": "user created"}}
 	json.NewEncoder(w).Encode(response)

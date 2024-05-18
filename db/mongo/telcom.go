@@ -3,16 +3,19 @@ package mongo
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // SaveTransaction saves a data transaction to the database.
 func (m *mongoStore) SaveDataTransaction(details interface{}) error {
 
-	err := m.saveTransaction(dataColl, details)
+	err := m.saveToDB(dataColl, details)
 	if err != nil {
 		return err
 	}
@@ -20,11 +23,11 @@ func (m *mongoStore) SaveDataTransaction(details interface{}) error {
 	return nil
 }
 
-// GetTransactionDetails returns a data transaction detail.
+// getRecordDetails returns a data transaction detail.
 func (m *mongoStore) GetDataTransactionDetails(id string) (telcom.DataResult, error) {
 	res := telcom.DataResult{}
 
-	findResult := m.getTransaction(id, dataColl)
+	findResult := m.getRecord(id, dataColl)
 	err := findResult.Decode(&res)
 
 	if err != nil {
@@ -40,12 +43,12 @@ func (m *mongoStore) GetDataTransactionDetails(id string) (telcom.DataResult, er
 
 }
 
-// GetAllTransaction returns all the data transactions associated to a user, if an empty string is passed it returns all data transactions.
+// getAllRecords returns all the data transactions associated to a user, if an empty string is passed it returns all data transactions.
 func (m *mongoStore) GetAllDataTransactions(user string) ([]telcom.DataResult, error) {
 	ctx := context.Background()
 	res := []telcom.DataResult{}
 
-	cur, err := m.getAllTransaction(dataColl, user)
+	cur, err := m.getAllRecords(dataColl, user)
 	if err != nil {
 		return []telcom.DataResult{}, err
 	}
@@ -66,7 +69,7 @@ func (m *mongoStore) GetAllDataTransactions(user string) ([]telcom.DataResult, e
 func (m *mongoStore) GetSpecTransDetails(id string) (models.SpectranetResult, error) {
 	res := models.SpectranetResult{}
 
-	findResult := m.getTransaction(id, dataColl)
+	findResult := m.getRecord(id, dataColl)
 	err := findResult.Decode(&res)
 
 	if err != nil {
@@ -85,7 +88,7 @@ func (m *mongoStore) GetAllSpecDataTransactions(user string) ([]models.Spectrane
 	ctx := context.Background()
 	res := []models.SpectranetResult{}
 
-	cur, err := m.getAllTransaction(dataColl, user)
+	cur, err := m.getAllRecords(dataColl, user)
 	if err != nil {
 		return []models.SpectranetResult{}, err
 	}
@@ -105,7 +108,7 @@ func (m *mongoStore) GetAllSpecDataTransactions(user string) ([]models.Spectrane
 func (m *mongoStore) GetSmileTransDetails(id string) (models.SmileResult, error) {
 	res := models.SmileResult{}
 
-	findResult := m.getTransaction(id, dataColl)
+	findResult := m.getRecord(id, dataColl)
 	err := findResult.Decode(&res)
 
 	if err != nil {
@@ -124,7 +127,7 @@ func (m *mongoStore) GetAllSmileDataTransactions(user string) ([]models.SmileRes
 	ctx := context.Background()
 	res := []models.SmileResult{}
 
-	cur, err := m.getAllTransaction(dataColl, user)
+	cur, err := m.getAllRecords(dataColl, user)
 	if err != nil {
 		return []models.SmileResult{}, err
 	}
@@ -142,7 +145,7 @@ func (m *mongoStore) GetAllSmileDataTransactions(user string) ([]models.SmileRes
 }
 
 func (m *mongoStore) SaveAirtimeTransaction(details *telcom.AirtimeResponse) error {
-	err := m.saveTransaction(airColl, details)
+	err := m.saveToDB(airColl, details)
 	if err != nil {
 		return err
 	}
@@ -152,7 +155,7 @@ func (m *mongoStore) SaveAirtimeTransaction(details *telcom.AirtimeResponse) err
 func (m *mongoStore) GetAirtimeTransactionDetails(id string) (telcom.AirtimeResponse, error) {
 	res := telcom.AirtimeResponse{}
 
-	result := m.getTransaction(id, eduColl)
+	result := m.getRecord(id, eduColl)
 
 	err := result.Decode(&res)
 
@@ -171,7 +174,7 @@ func (m *mongoStore) GetAllAirtimeTransactions(user string) ([]telcom.AirtimeRes
 	ctx := context.Background()
 	res := []telcom.AirtimeResponse{}
 
-	cur, err := m.getAllTransaction(dataColl, user)
+	cur, err := m.getAllRecords(dataColl, user)
 	if err != nil {
 		return []telcom.AirtimeResponse{}, err
 	}
@@ -186,4 +189,97 @@ func (m *mongoStore) GetAllAirtimeTransactions(user string) ([]telcom.AirtimeRes
 	defer cur.Close(ctx)
 
 	return res, nil
+}
+
+func (m *mongoStore) SaveAirtimeRecipient(data telcom.AirtimeRecipient) error {
+
+	err := m.saveToDB("airtime-Recipient", data)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *mongoStore) GetAirtimeRecipients(userID string) ([]telcom.AirtimeRecipient, error) {
+
+	ctx := context.Background()
+	res := make([]telcom.AirtimeRecipient, 0)
+
+	cur, err := m.getRecipientRecord("airtime-Recipient", userID)
+	if err != nil {
+		return []telcom.AirtimeRecipient{}, err
+	}
+
+	for cur.Next(ctx) {
+		resp := telcom.AirtimeRecipient{}
+		if err := cur.Decode(&resp); err != nil {
+			return nil, err
+		}
+		res = append(res, resp)
+	}
+	defer cur.Close(ctx)
+
+	return res, nil
+
+}
+
+func (m *mongoStore) EditAirtimeRecipient(userID string, data telcom.AirtimeRecipient) error {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	filter := bson.D{primitive.E{Key: "userID", Value: userID}}
+
+	// Define update fields based on what is provided
+	updateFields := bson.M{}
+	if data.Phone_no != "" {
+		updateFields["phone"] = data.Phone_no
+	}
+	if data.Name != "" {
+		updateFields["name"] = data.Name
+	}
+
+	// Prepare the update statement
+	updateFilter := bson.M{"$set": updateFields}
+
+	_, err := m.col("").UpdateOne(ctx, filter, updateFilter)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *mongoStore) DeleteAIrtimeRecipient(name, userID string) error {
+
+	ctx := context.Background()
+
+	filter := bson.M{
+		"name":   name,
+		"userID": userID,
+	}
+
+	delResult := m.col("").FindOneAndDelete(ctx, filter)
+	if delResult.Err() != nil {
+		return delResult.Err()
+	}
+
+	return nil
+}
+
+func (m *mongoStore) getRecipientRecord(collectionName, userID string) (*mongo.Cursor, error) {
+	ctx := context.Background()
+	var filter bson.D
+
+	if userID == "" {
+		filter = bson.D{}
+	} else {
+		filter = bson.D{primitive.E{Key: "userID", Value: userID}}
+	}
+
+	cur, err := m.col(collectionName).Find(ctx, filter)
+	return cur, err
+
 }

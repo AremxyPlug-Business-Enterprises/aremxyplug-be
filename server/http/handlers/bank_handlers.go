@@ -268,13 +268,13 @@ func (handler *HttpHandler) updateBalance(id string, newBalance float64) error {
 }
 
 func (handler *HttpHandler) getVirtualNuban(id string) (string, error) {
-	virtualNuban, err := handler.store.GetVirtualNuban(id)
+	acc_details, err := handler.store.GetVirtualNuban(id)
 	if err != nil {
 		handler.logger.Error(err.Error())
 		return "", err
 	}
 
-	return virtualNuban, nil
+	return acc_details.VirtualAccountID, nil
 }
 
 func (handler *HttpHandler) refreshBalance(name string) error {

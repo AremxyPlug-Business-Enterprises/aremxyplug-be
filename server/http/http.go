@@ -140,6 +140,8 @@ func MountServer(config ServerConfig) *chi.Mux {
 		pinRoute(router, httpHandler)
 
 		extraRoutes(router, httpHandler)
+
+		virtualAccRoutes(router, httpHandler)
 		/*
 			transferMoneyRoutes(authRouter, httpHandler)
 
@@ -204,6 +206,13 @@ func airtimeRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 		router.Get("/", httpHandler.Airtime)
 		router.Get("/{id}", httpHandler.GetAirtimeInfo)
 		router.Get("/transactions", httpHandler.GetAirtimeTransactions)
+
+		router.Route("/recipient", func(route chi.Router) {
+			route.Post("/", httpHandler.AirtimeRecipient)
+			route.Get("/", httpHandler.AirtimeRecipient)
+			router.Patch("/", httpHandler.AirtimeRecipient)
+			route.Delete("/", httpHandler.AirtimeRecipient)
+		})
 	})
 }
 
@@ -258,6 +267,13 @@ func extraRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 			router.Get("/", httpHandler.Points)
 			router.Post("/", httpHandler.Points)
 		})
+	})
+}
+
+func virtualAccRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/virtualacc", func(router chi.Router) {
+		r.Get("/", httpHandler.VirtualAccount)
+		r.Post("/", httpHandler.VirtualAccount)
 	})
 }
 

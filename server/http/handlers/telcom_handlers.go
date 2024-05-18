@@ -7,6 +7,7 @@ import (
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
+	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
@@ -120,6 +121,92 @@ func (handler *HttpHandler) GetAirtimeInfo(w http.ResponseWriter, r *http.Reques
 	}
 
 	json.NewEncoder(w).Encode(res)
+}
+
+func (handler *HttpHandler) AirtimeRecipient(w http.ResponseWriter, r *http.Request) {
+
+	/*
+		userDetails, err := handler.GetUserDetails(r)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		id := userDetails.ID
+	*/
+
+	if r.Method == "POST" {
+		data := telcom.AirtimeRecipient{}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+
+		data.UserID = "aremxyplug"
+		if err := handler.vtuClient.SaveRecipient(data); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+		}
+
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "recipient saved successfully"}}
+
+		json.NewEncoder(w).Encode(response)
+
+	}
+
+	if r.Method == "PATCH" {
+		data := telcom.AirtimeRecipient{}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+
+		userID := "aremxyplug"
+		if err := handler.vtuClient.UpdateRecipient(userID, data); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+		}
+
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "recipient saved successfully"}}
+
+		json.NewEncoder(w).Encode(response)
+	}
+
+	if r.Method == "GET" {
+		data := telcom.AirtimeRecipient{}
+		userID := "aremxyplug"
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+		handler.vtuClient.GetRecipients(userID)
+	}
+
+	if r.Method == "DELETE" {
+
+		userID := "aremxyplug"
+		var name string
+		json.NewDecoder(r.Body).Decode(&name)
+		if err := handler.vtuClient.DeleteRecipient(name, userID); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+		}
+
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "successfully deleted recipient"}}
+
+		json.NewEncoder(w).Encode(response)
+	}
+
 }
 
 // Data send a call to the API to buy data(POST) or return users transaction history(GET)

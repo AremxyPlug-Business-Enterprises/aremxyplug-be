@@ -182,7 +182,7 @@ func (d *mongoStore) UpdateUserPassword(email string, password string) error {
 	return nil
 }
 
-func (m *mongoStore) getTransaction(id, collectionName string) *mongo.SingleResult {
+func (m *mongoStore) getRecord(id, collectionName string) *mongo.SingleResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	oID, err := strconv.Atoi(id)
@@ -198,7 +198,7 @@ func (m *mongoStore) getTransaction(id, collectionName string) *mongo.SingleResu
 
 }
 
-func (m *mongoStore) saveTransaction(collectionName string, details interface{}) error {
+func (m *mongoStore) saveToDB(collectionName string, details interface{}) error {
 	ctx := context.Background()
 
 	_, err := m.col(collectionName).InsertOne(ctx, details)
@@ -210,7 +210,7 @@ func (m *mongoStore) saveTransaction(collectionName string, details interface{})
 	return nil
 }
 
-func (m *mongoStore) getAllTransaction(collectionName, user string) (*mongo.Cursor, error) {
+func (m *mongoStore) getAllRecords(collectionName, user string) (*mongo.Cursor, error) {
 	ctx := context.Background()
 	var filter bson.D
 

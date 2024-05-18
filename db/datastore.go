@@ -32,7 +32,7 @@ type BankStore interface {
 	SaveBankList(banklist models.BankDetails) error
 	GetBankDetail(bankName string) (models.BankDetails, error)
 	SaveVirtualAccount(account models.AccountDetails) error
-	GetVirtualNuban(name string) (string, error)
+	GetVirtualNuban(name string) (models.AccountDetails, error)
 	SaveCounterParty(counterparty interface{}) error
 	SaveTransfer(transfer models.TransferResponse) error
 	GetCounterParty(accountNumber, bankname string) (models.CounterParty, error)
@@ -70,6 +70,10 @@ type TelcomStore interface {
 	SaveAirtimeTransaction(details *telcom.AirtimeResponse) error
 	GetAirtimeTransactionDetails(id string) (telcom.AirtimeResponse, error)
 	GetAllAirtimeTransactions(user string) ([]telcom.AirtimeResponse, error)
+	SaveAirtimeRecipient(data telcom.AirtimeRecipient) error
+	GetAirtimeRecipients(username string) ([]telcom.AirtimeRecipient, error)
+	EditAirtimeRecipient(userID string, data telcom.AirtimeRecipient) error
+	DeleteAIrtimeRecipient(name, userID string) error
 }
 
 type UtilitiesStore interface {

@@ -63,7 +63,7 @@ func (b *BankConfig) VirtualAccount(user models.User) (models.AccountDetails, er
 	payload := virtualNubanPayload{}
 	payload.Data.Type = "VirtualNuban"
 	payload.Data.Attributes.Provider = "providus"
-	payload.Data.Attributes.VirtualAccount.BVN = "22462300638"
+	payload.Data.Attributes.VirtualAccount.BVN = user.BVN
 	payload.Data.Attributes.VirtualAccount.Name = name
 	payload.Data.Attributes.VirtualAccount.Email = user.Email
 	payload.Data.Attributes.VirtualAccount.Permanent = true
