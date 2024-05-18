@@ -116,7 +116,7 @@ func (m *mongoStore) GetUserByID(id string) (*models.User, error) {
 	return user, nil
 }
 
-func (d *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*models.User, error) {
+func (m *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*models.User, error) {
 	filter := bson.M{
 		"$or": []bson.M{
 			{"email": email},
@@ -124,8 +124,8 @@ func (d *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*m
 		},
 	}
 	user := &models.User{}
-	err := d.mongoClient.
-		Database(d.databaseName).
+	err := m.mongoClient.
+		Database(m.databaseName).
 		Collection(models.UserCollectionName).
 		FindOne(context.Background(), filter).
 		Decode(user)
@@ -136,11 +136,11 @@ func (d *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*m
 
 }
 
-func (d *mongoStore) CreateMessage(message *models.Message) error {
+func (m *mongoStore) CreateMessage(message *models.Message) error {
 	ctx := context.Background()
 	var modelInDB models.Message
-	err := d.mongoClient.
-		Database(d.databaseName).
+	err := m.mongoClient.
+		Database(m.databaseName).
 		Collection(models.MessagesCollectionName).
 		FindOne(ctx, bson.M{"id": message.ID}).
 		Decode(&modelInDB)
@@ -156,8 +156,8 @@ func (d *mongoStore) CreateMessage(message *models.Message) error {
 		return nil
 	}
 
-	_, err = d.mongoClient.
-		Database(d.databaseName).
+	_, err = m.mongoClient.
+		Database(m.databaseName).
 		Collection(models.MessagesCollectionName).
 		InsertOne(ctx, message)
 	if err != nil {
@@ -168,12 +168,12 @@ func (d *mongoStore) CreateMessage(message *models.Message) error {
 }
 
 // update user password
-func (d *mongoStore) UpdateUserPassword(email string, password string) error {
+func (m *mongoStore) UpdateUserPassword(email string, password string) error {
 	ctx := context.Background()
 	filter := bson.M{"email": email}
 	update := bson.M{"$set": bson.M{"password": password}}
-	_, err := d.mongoClient.
-		Database(d.databaseName).
+	_, err := m.mongoClient.
+		Database(m.databaseName).
 		Collection(models.UserCollectionName).
 		UpdateOne(ctx, filter, update)
 	if err != nil {
@@ -182,7 +182,21 @@ func (d *mongoStore) UpdateUserPassword(email string, password string) error {
 	return nil
 }
 
-func (m *mongoStore) getTransaction(id, collectionName string) *mongo.SingleResult {
+func (m *mongoStore) UpdateBVNField(user models.User) error {
+	ctx := context.Background()
+	filter := bson.M{"userID": user.ID}
+	update := bson.M{"$set": bson.M{"bvn": user.BVN}}
+	_, err := m.mongoClient.
+		Database(m.databaseName).
+		Collection(models.UserCollectionName).
+		UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *mongoStore) getRecord(id, collectionName string) *mongo.SingleResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	oID, err := strconv.Atoi(id)
@@ -198,7 +212,7 @@ func (m *mongoStore) getTransaction(id, collectionName string) *mongo.SingleResu
 
 }
 
-func (m *mongoStore) saveTransaction(collectionName string, details interface{}) error {
+func (m *mongoStore) saveToDB(collectionName string, details interface{}) error {
 	ctx := context.Background()
 
 	_, err := m.col(collectionName).InsertOne(ctx, details)
@@ -210,7 +224,7 @@ func (m *mongoStore) saveTransaction(collectionName string, details interface{})
 	return nil
 }
 
-func (m *mongoStore) getAllTransaction(collectionName, user string) (*mongo.Cursor, error) {
+func (m *mongoStore) getAllRecords(collectionName, user string) (*mongo.Cursor, error) {
 	ctx := context.Background()
 	var filter bson.D
 

@@ -8,7 +8,7 @@ import (
 )
 
 func (m *mongoStore) SaveTVSubcriptionTransaction(details *models.BillResult) error {
-	err := m.saveTransaction(tvColl, details)
+	err := m.saveToDB(tvColl, details)
 	if err != nil {
 		return err
 	}
@@ -19,7 +19,7 @@ func (m *mongoStore) SaveTVSubcriptionTransaction(details *models.BillResult) er
 func (m *mongoStore) GetTvSubscriptionDetails(id string) (models.BillResult, error) {
 	res := models.BillResult{}
 
-	result := m.getTransaction(id, tvColl)
+	result := m.getRecord(id, tvColl)
 
 	err := result.Decode(&res)
 
@@ -38,7 +38,7 @@ func (m *mongoStore) GetAllTvSubTransactions(user string) ([]models.BillResult, 
 	ctx := context.Background()
 	res := []models.BillResult{}
 
-	cur, err := m.getAllTransaction(dataColl, user)
+	cur, err := m.getAllRecords(dataColl, user)
 	if err != nil {
 		return []models.BillResult{}, err
 	}
@@ -56,7 +56,7 @@ func (m *mongoStore) GetAllTvSubTransactions(user string) ([]models.BillResult, 
 }
 
 func (m *mongoStore) SaveElectricTransaction(details *models.ElectricResult) error {
-	err := m.saveTransaction(tvColl, details)
+	err := m.saveToDB(tvColl, details)
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (m *mongoStore) SaveElectricTransaction(details *models.ElectricResult) err
 func (m *mongoStore) GetElectricSubDetails(id string) (models.ElectricResult, error) {
 	res := models.ElectricResult{}
 
-	result := m.getTransaction(id, tvColl)
+	result := m.getRecord(id, tvColl)
 
 	err := result.Decode(&res)
 
@@ -86,7 +86,7 @@ func (m *mongoStore) GetAllElectricSubTransactions(user string) ([]models.Electr
 	ctx := context.Background()
 	res := []models.ElectricResult{}
 
-	cur, err := m.getAllTransaction(dataColl, user)
+	cur, err := m.getAllRecords(dataColl, user)
 	if err != nil {
 		return []models.ElectricResult{}, err
 	}
@@ -105,7 +105,7 @@ func (m *mongoStore) GetAllElectricSubTransactions(user string) ([]models.Electr
 
 // SaveEduTransactions saves the result of the edu transaction to the database.
 func (m *mongoStore) SaveEduTransaction(details *models.EduResponse) error {
-	err := m.saveTransaction(eduColl, details)
+	err := m.saveToDB(eduColl, details)
 	if err != nil {
 		return err
 	}
@@ -116,7 +116,7 @@ func (m *mongoStore) SaveEduTransaction(details *models.EduResponse) error {
 func (m *mongoStore) GetEduTransactionDetails(id string) (models.EduResponse, error) {
 	res := models.EduResponse{}
 
-	result := m.getTransaction(id, eduColl)
+	result := m.getRecord(id, eduColl)
 
 	err := result.Decode(&res)
 
@@ -136,7 +136,7 @@ func (m *mongoStore) GetAllEduTransactions(user string) ([]models.EduResponse, e
 	ctx := context.Background()
 	res := []models.EduResponse{}
 
-	cur, err := m.getAllTransaction(dataColl, user)
+	cur, err := m.getAllRecords(dataColl, user)
 	if err != nil {
 		return []models.EduResponse{}, err
 	}

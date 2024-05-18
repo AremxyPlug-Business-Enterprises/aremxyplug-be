@@ -1,6 +1,9 @@
 package db
 
-import "github.com/aremxyplug-be/db/models"
+import (
+	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/db/models/telcom"
+)
 
 type DataStore interface {
 	Extras
@@ -29,7 +32,7 @@ type BankStore interface {
 	SaveBankList(banklist models.BankDetails) error
 	GetBankDetail(bankName string) (models.BankDetails, error)
 	SaveVirtualAccount(account models.AccountDetails) error
-	GetVirtualNuban(name string) (string, error)
+	GetVirtualNuban(name string) (models.AccountDetails, error)
 	SaveCounterParty(counterparty interface{}) error
 	SaveTransfer(transfer models.TransferResponse) error
 	GetCounterParty(accountNumber, bankname string) (models.CounterParty, error)
@@ -54,19 +57,24 @@ type UserStore interface {
 	GetUserByID(id string) (*models.User, error)
 	CreateMessage(message *models.Message) error
 	UpdateUserPassword(email string, password string) error
+	UpdateBVNField(user models.User) error
 }
 
 type TelcomStore interface {
 	SaveDataTransaction(details interface{}) error
-	GetDataTransactionDetails(id string) (models.DataResult, error)
-	GetAllDataTransactions(user string) ([]models.DataResult, error)
+	GetDataTransactionDetails(id string) (telcom.DataResult, error)
+	GetAllDataTransactions(user string) ([]telcom.DataResult, error)
 	GetSpecTransDetails(id string) (models.SpectranetResult, error)
 	GetAllSpecDataTransactions(user string) ([]models.SpectranetResult, error)
 	GetSmileTransDetails(id string) (models.SmileResult, error)
 	GetAllSmileDataTransactions(user string) ([]models.SmileResult, error)
-	SaveAirtimeTransaction(details *models.AirtimeResponse) error
-	GetAirtimeTransactionDetails(id string) (models.AirtimeResponse, error)
-	GetAllAirtimeTransactions(user string) ([]models.AirtimeResponse, error)
+	SaveAirtimeTransaction(details *telcom.AirtimeResponse) error
+	GetAirtimeTransactionDetails(id string) (telcom.AirtimeResponse, error)
+	GetAllAirtimeTransactions(user string) ([]telcom.AirtimeResponse, error)
+	SaveAirtimeRecipient(data telcom.AirtimeRecipient) error
+	GetAirtimeRecipients(username string) ([]telcom.AirtimeRecipient, error)
+	EditAirtimeRecipient(userID string, data telcom.AirtimeRecipient) error
+	DeleteAIrtimeRecipient(name, userID string) error
 }
 
 type UtilitiesStore interface {

@@ -44,7 +44,7 @@ func (m *mongoStore) deptColl() (*mongo.Collection, error) {
 }
 
 func (m *mongoStore) SaveBankList(banklist models.BankDetails) error {
-	err := m.saveTransaction(bankColl, banklist)
+	err := m.saveToDB(bankColl, banklist)
 	return err
 }
 
@@ -65,11 +65,11 @@ func (m *mongoStore) GetBankDetail(name string) (models.BankDetails, error) {
 }
 
 func (m *mongoStore) SaveVirtualAccount(account models.AccountDetails) error {
-	err := m.saveTransaction(virtualColl, account)
+	err := m.saveToDB(virtualColl, account)
 	return err
 }
 
-func (m *mongoStore) GetVirtualNuban(name string) (string, error) {
+func (m *mongoStore) GetVirtualNuban(name string) (models.AccountDetails, error) {
 	ctx := context.Background()
 	account_name := fmt.Sprintf("ANC(AREMXYPLUG/%s)", name)
 	fmt.Println(account_name)
@@ -84,22 +84,22 @@ func (m *mongoStore) GetVirtualNuban(name string) (string, error) {
 	resp := m.col(virtualColl).FindOne(ctx, filter)
 	if err := resp.Decode(&acc_details); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return "", nil
+			return models.AccountDetails{}, nil
 		}
 
-		return "", err
+		return models.AccountDetails{}, err
 	}
 
-	return acc_details.VirtualAccountID, nil
+	return acc_details, nil
 }
 
 func (m *mongoStore) SaveCounterParty(counterparty interface{}) error {
-	err := m.saveTransaction(counterColl, counterparty)
+	err := m.saveToDB(counterColl, counterparty)
 	return err
 }
 
 func (m *mongoStore) SaveTransfer(transfer models.TransferResponse) error {
-	err := m.saveTransaction(bankTransColl, transfer)
+	err := m.saveToDB(bankTransColl, transfer)
 	return err
 }
 
@@ -121,7 +121,7 @@ func (m *mongoStore) GetCounterParty(accountNumber, bankname string) (models.Cou
 }
 
 func (m *mongoStore) GetTransferDetails(id string) (models.TransferResponse, error) {
-	resp := m.getTransaction(id, bankTransColl)
+	resp := m.getRecord(id, bankTransColl)
 	result := models.TransferResponse{}
 	err := resp.Decode(&result)
 	if err != nil {
@@ -135,7 +135,7 @@ func (m *mongoStore) GetAllTransferHistory(user string) ([]models.TransferRespon
 	ctx := context.Background()
 	result := []models.TransferResponse{}
 
-	findResult, err := m.getAllTransaction(bankTransColl, user)
+	findResult, err := m.getAllRecords(bankTransColl, user)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func (m *mongoStore) GetAllTransferHistory(user string) ([]models.TransferRespon
 }
 
 func (m *mongoStore) GetDepositDetails(id string) (models.DepositResponse, error) {
-	resp := m.getTransaction(id, bankTransColl)
+	resp := m.getRecord(id, bankTransColl)
 	result := models.DepositResponse{}
 	err := resp.Decode(&result)
 	if err != nil {
@@ -169,7 +169,7 @@ func (m *mongoStore) GetAllDepositHistory(user string) ([]models.DepositResponse
 	ctx := context.Background()
 	result := []models.DepositResponse{}
 
-	findResult, err := m.getAllTransaction(bankTransColl, user)
+	findResult, err := m.getAllRecords(bankTransColl, user)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func (m *mongoStore) GetAllDepositHistory(user string) ([]models.DepositResponse
 
 func (m *mongoStore) GetAllBankTransactions(user string) ([]interface{}, error) {
 	ctx := context.Background()
-	cur, err := m.getAllTransaction(bankTransColl, user)
+	cur, err := m.getAllRecords(bankTransColl, user)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +232,7 @@ func (m *mongoStore) GetAllBankTransactions(user string) ([]interface{}, error) 
 }
 
 func (m *mongoStore) SaveDeposit(detail models.DepositResponse) error {
-	err := m.saveTransaction(bankTransColl, detail)
+	err := m.saveToDB(bankTransColl, detail)
 	return err
 }
 
@@ -265,7 +265,7 @@ func (m *mongoStore) SaveDepositID(detail interface{}) error {
 }
 
 func (m *mongoStore) GetDepositID(virtualNuban string) (result interface{}, err error) {
-	id_Result := m.getTransaction(deptColl, virtualNuban)
+	id_Result := m.getRecord(deptColl, virtualNuban)
 
 	// change this result to struct
 	var resp interface{}
