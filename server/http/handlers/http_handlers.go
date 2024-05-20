@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/aremxyplug-be/db/models"
-	"github.com/aremxyplug-be/lib/bank/deposit"
 	"github.com/aremxyplug-be/lib/errorvalues"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/aremxyplug-be/types/dto"
@@ -172,19 +171,21 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := handler.refreshBalance(user.FullName); err != nil {
-		if err == deposit.ErrEmptyVirtualNuban {
-			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "virtualNuban is empty"}}
+	/*
+		if err := handler.refreshBalance(user.FullName); err != nil {
+			if err == deposit.ErrEmptyVirtualNuban {
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "virtualNuban is empty"}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+			handler.logger.Error("failed to load user's balance", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
-		handler.logger.Error("failed to load user's balance", zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
+	*/
 
 	// should check if the user already has pin set otherwise return an status that should redirect the frontend to the pin endpoint
 
