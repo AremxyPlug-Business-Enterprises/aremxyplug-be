@@ -123,7 +123,7 @@ func (handler *HttpHandler) GetAirtimeInfo(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(res)
 }
 
-func (handler *HttpHandler) AirtimeRecipient(w http.ResponseWriter, r *http.Request) {
+func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Request) {
 
 	/*
 		userDetails, err := handler.GetUserDetails(r)
@@ -137,7 +137,7 @@ func (handler *HttpHandler) AirtimeRecipient(w http.ResponseWriter, r *http.Requ
 	*/
 
 	if r.Method == "POST" {
-		data := telcom.AirtimeRecipient{}
+		data := telcom.TelcomRecipient{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Decoding JSON response", zap.Error(err))
@@ -146,20 +146,20 @@ func (handler *HttpHandler) AirtimeRecipient(w http.ResponseWriter, r *http.Requ
 		}
 
 		data.UserID = "aremxyplug"
-		if err := handler.vtuClient.SaveRecipient(data); err != nil {
+		if err := handler.vtuClient.SaveTelcomRecipient(data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 		}
 
-		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "recipient saved successfully"}}
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "telcom recipient saved successfully"}}
 
 		json.NewEncoder(w).Encode(response)
 
 	}
 
 	if r.Method == "PATCH" {
-		data := telcom.AirtimeRecipient{}
+		data := telcom.TelcomRecipient{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Decoding JSON response", zap.Error(err))
@@ -168,19 +168,19 @@ func (handler *HttpHandler) AirtimeRecipient(w http.ResponseWriter, r *http.Requ
 		}
 
 		userID := "aremxyplug"
-		if err := handler.vtuClient.UpdateRecipient(userID, data); err != nil {
+		if err := handler.vtuClient.UpdateTelcomRecipient(userID, data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 		}
 
-		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "recipient saved successfully"}}
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "telcom recipient saved successfully"}}
 
 		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {
-		data := telcom.AirtimeRecipient{}
+		data := telcom.TelcomRecipient{}
 		userID := "aremxyplug"
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -188,7 +188,7 @@ func (handler *HttpHandler) AirtimeRecipient(w http.ResponseWriter, r *http.Requ
 			fmt.Fprintf(w, "%v", err)
 			return
 		}
-		handler.vtuClient.GetRecipients(userID)
+		handler.vtuClient.GetTelcomRecipients(userID)
 	}
 
 	if r.Method == "DELETE" {
@@ -196,13 +196,13 @@ func (handler *HttpHandler) AirtimeRecipient(w http.ResponseWriter, r *http.Requ
 		userID := "aremxyplug"
 		var name string
 		json.NewDecoder(r.Body).Decode(&name)
-		if err := handler.vtuClient.DeleteRecipient(name, userID); err != nil {
+		if err := handler.vtuClient.DeleteTelcomRecipient(name, userID); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 		}
 
-		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "successfully deleted recipient"}}
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "successfully deleted telcom recipient"}}
 
 		json.NewEncoder(w).Encode(response)
 	}

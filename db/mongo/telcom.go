@@ -191,7 +191,7 @@ func (m *mongoStore) GetAllAirtimeTransactions(user string) ([]telcom.AirtimeRes
 	return res, nil
 }
 
-func (m *mongoStore) SaveAirtimeRecipient(data telcom.AirtimeRecipient) error {
+func (m *mongoStore) SaveTelcomRecipient(data telcom.TelcomRecipient) error {
 
 	err := m.saveToDB("airtime-Recipient", data)
 
@@ -202,18 +202,18 @@ func (m *mongoStore) SaveAirtimeRecipient(data telcom.AirtimeRecipient) error {
 	return nil
 }
 
-func (m *mongoStore) GetAirtimeRecipients(userID string) ([]telcom.AirtimeRecipient, error) {
+func (m *mongoStore) GetTelcomRecipients(userID string) ([]telcom.TelcomRecipient, error) {
 
 	ctx := context.Background()
-	res := make([]telcom.AirtimeRecipient, 0)
+	res := make([]telcom.TelcomRecipient, 0)
 
-	cur, err := m.getRecipientRecord("airtime-Recipient", userID)
+	cur, err := m.getTelcomRecipientRecord("telcom-Recipient", userID)
 	if err != nil {
-		return []telcom.AirtimeRecipient{}, err
+		return []telcom.TelcomRecipient{}, err
 	}
 
 	for cur.Next(ctx) {
-		resp := telcom.AirtimeRecipient{}
+		resp := telcom.TelcomRecipient{}
 		if err := cur.Decode(&resp); err != nil {
 			return nil, err
 		}
@@ -225,7 +225,7 @@ func (m *mongoStore) GetAirtimeRecipients(userID string) ([]telcom.AirtimeRecipi
 
 }
 
-func (m *mongoStore) EditAirtimeRecipient(userID string, data telcom.AirtimeRecipient) error {
+func (m *mongoStore) EditTelcomRecipient(userID string, data telcom.TelcomRecipient) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -252,7 +252,7 @@ func (m *mongoStore) EditAirtimeRecipient(userID string, data telcom.AirtimeReci
 	return nil
 }
 
-func (m *mongoStore) DeleteAIrtimeRecipient(name, userID string) error {
+func (m *mongoStore) DeleteTelcomRecipient(name, userID string) error {
 
 	ctx := context.Background()
 
@@ -269,7 +269,7 @@ func (m *mongoStore) DeleteAIrtimeRecipient(name, userID string) error {
 	return nil
 }
 
-func (m *mongoStore) getRecipientRecord(collectionName, userID string) (*mongo.Cursor, error) {
+func (m *mongoStore) getTelcomRecipientRecord(collectionName, userID string) (*mongo.Cursor, error) {
 	ctx := context.Background()
 	var filter bson.D
 

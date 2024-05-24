@@ -207,11 +207,11 @@ func airtimeRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 		router.Get("/{id}", httpHandler.GetAirtimeInfo)
 		router.Get("/transactions", httpHandler.GetAirtimeTransactions)
 
-		router.Route("/recipient", func(route chi.Router) {
-			route.Post("/", httpHandler.AirtimeRecipient)
-			route.Get("/", httpHandler.AirtimeRecipient)
-			router.Patch("/", httpHandler.AirtimeRecipient)
-			route.Delete("/", httpHandler.AirtimeRecipient)
+		router.Route("/telcom/recipient", func(route chi.Router) {
+			route.Post("/", httpHandler.TelcomRecipient)
+			route.Get("/", httpHandler.TelcomRecipient)
+			router.Patch("/", httpHandler.TelcomRecipient)
+			route.Delete("/", httpHandler.TelcomRecipient)
 		})
 	})
 }
