@@ -120,6 +120,7 @@ func (handler *HttpHandler) addPoints(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
+
 	user, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -128,24 +129,51 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var newPin string
-	if err := json.NewDecoder(r.Body).Decode(&newPin); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
+	if r.Method == "POST" {
+
+		var newPin string
+		if err := json.NewDecoder(r.Body).Decode(&newPin); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		pin := models.UserPin{
+			UserID: user.ID,
+			Pin:    newPin,
+		}
+
+		if err := handler.pin.SavePin(pin); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
 	}
 
-	pin := models.UserPin{
-		UserID: user.ID,
-		Pin:    newPin,
-	}
+	if r.Method == "PATCH" {
 
-	if err := handler.pin.SavePin(pin); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
+		type userPin struct {
+			Pin string `json:"pin"`
+		}
+
+		updatePin := userPin{}
+
+		if err := json.NewDecoder(r.Body).Decode(&updatePin); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		if err := handler.pin.UpdatePin(user.ID, updatePin.Pin); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 	}
 
 }
@@ -178,33 +206,6 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "pin OK"}}
 	json.NewEncoder(w).Encode(response)
-
-}
-
-func (handler *HttpHandler) UpdatePin(w http.ResponseWriter, r *http.Request) {
-
-	user, err := handler.GetUserDetails(r)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
-	var userPin string
-	if err := json.NewDecoder(r.Body).Decode(&userPin); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
-	if err := handler.pin.UpdatePin(user.ID, userPin); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
 
 }
 

@@ -170,6 +170,13 @@ func dataRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 		router.Get("/", httpHandler.Data)
 		router.Get("/{id}", httpHandler.GetDataInfo)
 		router.Get("/transactions", httpHandler.GetDataTransactions)
+
+		router.Route("/recipient", func(route chi.Router) {
+			route.Post("/", httpHandler.TelcomRecipient)
+			route.Get("/", httpHandler.TelcomRecipient)
+			route.Put("/", httpHandler.TelcomRecipient)
+			route.Delete("/", httpHandler.TelcomRecipient)
+		})
 	})
 }
 
@@ -208,10 +215,10 @@ func airtimeRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 		router.Get("/transactions", httpHandler.GetAirtimeTransactions)
 
 		router.Route("/recipient", func(route chi.Router) {
-			route.Post("/", httpHandler.AirtimeRecipient)
-			route.Get("/", httpHandler.AirtimeRecipient)
-			router.Patch("/", httpHandler.AirtimeRecipient)
-			route.Delete("/", httpHandler.AirtimeRecipient)
+			route.Post("/", httpHandler.TelcomRecipient)
+			route.Get("/", httpHandler.TelcomRecipient)
+			route.Put("/", httpHandler.TelcomRecipient)
+			route.Delete("/", httpHandler.TelcomRecipient)
 		})
 	})
 }
@@ -252,7 +259,7 @@ func bankRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 func pinRoute(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/pin", func(router chi.Router) {
 		router.Post("/", httpHandler.Pin)
-		router.Patch("/", httpHandler.UpdatePin)
+		router.Patch("/", httpHandler.Pin)
 		router.Post("/verify", httpHandler.VerifyPIN)
 	})
 }
