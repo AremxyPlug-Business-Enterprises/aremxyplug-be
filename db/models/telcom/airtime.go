@@ -35,7 +35,7 @@ type AirtimeResponse struct {
 	ReferenceNumber string `json:"reference_number" bson:"reference_number"`
 }
 
-type AirtimeRecipient struct {
+type TelcomRecipient struct {
 	Network  string `json:"network" bson:"network"`
 	Phone_no string `json:"phone" bson:"phone"`
 	Name     string `json:"name" bson:"name"`
