@@ -205,7 +205,7 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 
 		userID := "aremxyplug"
 		var recipient struct {
-			id int `json:"id"`
+			ID int `json:"id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&recipient); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -215,7 +215,7 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		if err := handler.vtuClient.DeleteRecipient(recipient.id, userID); err != nil {
+		if err := handler.vtuClient.DeleteRecipient(recipient.ID, userID); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("failed to delete recipient", zap.Error(err))
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
