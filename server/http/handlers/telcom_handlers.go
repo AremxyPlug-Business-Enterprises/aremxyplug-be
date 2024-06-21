@@ -124,7 +124,6 @@ func (handler *HttpHandler) GetAirtimeInfo(w http.ResponseWriter, r *http.Reques
 }
 
 func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Request) {
-func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Request) {
 
 	/*
 		userDetails, err := handler.GetUserDetails(r)
@@ -173,7 +172,7 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 		}
 
 		userID := "aremxyplug"
-		if err := handler.vtuClient.UpdateTelcomRecipient(userID, data); err != nil {
+		if err := handler.vtuClient.UpdateRecipient(userID, data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("failed while updating recipient", zap.Error(err))
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -191,7 +190,7 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 		recipients, err := handler.vtuClient.GetRecipients(userID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("failed to get user's recipient", zap.Error(err))
+			handler.logger.Error("failed to get recipients", zap.Error(err))
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "failed to retrieve recipients"}}
 			json.NewEncoder(w).Encode(response)
 			return
