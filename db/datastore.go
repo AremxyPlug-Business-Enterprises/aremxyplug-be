@@ -71,10 +71,10 @@ type TelcomStore interface {
 	SaveAirtimeTransaction(details *telcom.AirtimeResponse) error
 	GetAirtimeTransactionDetails(id string) (telcom.AirtimeResponse, error)
 	GetAllAirtimeTransactions(user string) ([]telcom.AirtimeResponse, error)
-	SaveTelcomRecipient(data telcom.TelcomRecipient) error
-	GetTelcomRecipients(username string) ([]telcom.TelcomRecipient, error)
-	EditTelcomRecipient(userID string, data telcom.TelcomRecipient) error
-	DeleteTelcomRecipient(name, userID string) error
+	SaveTelcomRecipient(userID string, data telcom.Recipient) error
+	GetTelcomRecipients(username string) (telcom.TelcomRecipient, error)
+	EditTelcomRecipient(userID string, data telcom.Recipient) error
+	DeleteTelcomRecipient(recipientID int, userID string) error
 }
 
 type UtilitiesStore interface {

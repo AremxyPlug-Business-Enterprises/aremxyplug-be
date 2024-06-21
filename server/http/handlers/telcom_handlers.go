@@ -137,19 +137,22 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 	*/
 
 	if r.Method == "POST" {
-		data := telcom.TelcomRecipient{}
+		data := telcom.Recipient{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
-			fmt.Fprintf(w, "%v", err)
+			handler.logger.Error("error decoding json payload", zap.Error(err))
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		data.UserID = "aremxyplug"
-		if err := handler.vtuClient.SaveTelcomRecipient(data); err != nil {
+		userID := "aremxyplug"
+		if err := handler.vtuClient.SaveRecipient(userID, data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("failed while saving recipient", zap.Error(err))
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
+			return
 		}
 
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "telcom recipient saved successfully"}}
@@ -158,48 +161,66 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 
 	}
 
-	if r.Method == "PATCH" {
-		data := telcom.TelcomRecipient{}
+	if r.Method == "PUT" {
+		data := telcom.Recipient{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
-			fmt.Fprintf(w, "%v", err)
+			handler.logger.Error("error decoding json payload", zap.Error(err))
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
 
 		userID := "aremxyplug"
-		if err := handler.vtuClient.UpdateTelcomRecipient(userID, data); err != nil {
+		if err := handler.vtuClient.UpdateRecipient(userID, data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("failed while updating recipient", zap.Error(err))
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
+			return
 		}
 
-		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "telcom recipient saved successfully"}}
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "updated recipient successfully"}}
 
 		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {
-		data := telcom.TelcomRecipient{}
 		userID := "aremxyplug"
-		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		recipients, err := handler.vtuClient.GetRecipients(userID)
+		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
-			fmt.Fprintf(w, "%v", err)
+			handler.logger.Error("failed to get recipients", zap.Error(err))
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "failed to retrieve recipients"}}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
-		handler.vtuClient.GetTelcomRecipients(userID)
+
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"recipients": recipients}}
+
+		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "DELETE" {
 
 		userID := "aremxyplug"
-		var name string
-		json.NewDecoder(r.Body).Decode(&name)
-		if err := handler.vtuClient.DeleteTelcomRecipient(name, userID); err != nil {
+		var recipient struct {
+			id int `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&recipient); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("error decoding json payload", zap.Error(err))
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		if err := handler.vtuClient.DeleteRecipient(recipient.id, userID); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("failed to delete recipient", zap.Error(err))
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
 		}
 
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "successfully deleted telcom recipient"}}

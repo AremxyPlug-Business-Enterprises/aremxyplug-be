@@ -34,10 +34,3 @@ type AirtimeResponse struct {
 	TransactionID   string `json:"transaction_id" bson:"transaction_id"`
 	ReferenceNumber string `json:"reference_number" bson:"reference_number"`
 }
-
-type TelcomRecipient struct {
-	Network  string `json:"network" bson:"network"`
-	Phone_no string `json:"phone" bson:"phone"`
-	Name     string `json:"name" bson:"name"`
-	UserID   string `json:"userID" bson:"userID"`
-}

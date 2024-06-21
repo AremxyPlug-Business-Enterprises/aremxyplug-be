@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/responseFormat"
 )
 
@@ -63,7 +64,7 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 	if r.Method == "GET" {
 
 		userID := userDetails.ID
-		virtualNuban, err := handler.getVirtualNuban(userID)
+		virtualNuban, err := handler.getVirtualAccDetails(userID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -72,11 +73,21 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 		}
 		response := responseFormat.CustomResponse{
 			Status:  200,
-			Message: "Success",
-			Data:    map[string]interface{}{"data": virtualNuban},
+			Message: "success",
+			Data:    map[string]interface{}{"acc_details": virtualNuban},
 		}
 
 		json.NewEncoder(w).Encode(response)
 	}
 
+}
+
+func (handler *HttpHandler) getVirtualAccDetails(id string) (models.AccountDetails, error) {
+	acc_details, err := handler.store.GetVirtualNuban(id)
+	if err != nil {
+		handler.logger.Error(err.Error())
+		return models.AccountDetails{}, err
+	}
+
+	return acc_details, nil
 }
