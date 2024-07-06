@@ -131,7 +131,11 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "POST" {
 
-		var newPin string
+		type newPinInput struct {
+			Pin string `json:"pin"`
+		}
+
+		newPin := newPinInput{}
 		if err := json.NewDecoder(r.Body).Decode(&newPin); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -141,7 +145,7 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 
 		pin := models.UserPin{
 			UserID: user.ID,
-			Pin:    newPin,
+			Pin:    newPin.Pin,
 		}
 
 		if err := handler.pin.SavePin(pin); err != nil {
@@ -150,6 +154,11 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(response)
 			return
 		}
+
+		w.WriteHeader(http.StatusCreated)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"msg": "user pin created successfully"}}
+		json.NewEncoder(w).Encode(response)
+
 	}
 
 	if r.Method == "PATCH" {
@@ -187,7 +196,12 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var pin string
+	type userPin struct {
+		Pin string `json:"pin"`
+	}
+
+	pin := userPin{}
+
 	if err := json.NewDecoder(r.Body).Decode(&pin); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -195,7 +209,7 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	valid := handler.pin.VerifyPin(user.ID, pin)
+	valid := handler.pin.VerifyPin(user.ID, pin.Pin)
 	if !valid {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "incorrect pin"}}

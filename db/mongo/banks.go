@@ -353,10 +353,28 @@ func (m *mongoStore) UpdateBalance(virtualNuban string, balance float64) error {
 // code to save pin to the database
 func (m *mongoStore) SavePin(data models.UserPin) error {
 	ctx := context.Background()
+	coll := m.col("pin")
+	userColl := m.col("user")
 
-	_, err := m.col("").InsertOne(ctx, data)
+	_, err := coll.InsertOne(ctx, data)
 	if err != nil {
 		return err
+	}
+
+	filter := bson.M{"id": data.UserID, "isVerified": false}
+	update := bson.M{
+		"$set": bson.M{
+			"isVerified": true,
+		},
+	}
+
+	updateResult, err := userColl.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("failed to update user document: %w", err)
+	}
+
+	if updateResult.MatchedCount == 0 {
+		return errors.New("failed to update user document")
 	}
 
 	return nil
@@ -373,7 +391,7 @@ func (m *mongoStore) GetPin(userID string) (string, error) {
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 
-			return "", err
+			return "", nil
 		}
 
 		return "", err
