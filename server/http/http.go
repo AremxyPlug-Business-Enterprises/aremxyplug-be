@@ -59,6 +59,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 		AllowCredentials: false,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Authorization"},
 		Debug:            true,
 	}).Handler)
 	router.Use(setJSONContentType)
@@ -137,7 +138,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 		// bank routes
 		bankRoutes(authRouter, httpHandler)
 
-		pinRoute(router, httpHandler)
+		pinRoute(authRouter, httpHandler)
 
 		extraRoutes(router, httpHandler)
 

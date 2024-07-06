@@ -139,6 +139,16 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	verified := user.IsVerified
+
+	if !verified {
+		handler.logger.Warn("pin not yet set", zap.Any("userID", user.ID))
+		w.WriteHeader(http.StatusAccepted)
+		response := responseFormat.CustomResponse{Status: http.StatusAccepted, Message: "success", Data: map[string]interface{}{"msg": "user's pin not set"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
 	refreshTokenClaims := dto.Claims{
 		PersonId: user.ID,
 	}
@@ -190,7 +200,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	// should check if the user already has pin set otherwise return an status that should redirect the frontend to the pin endpoint
 
 	w.Header().Set("Authorization", jwtToken)
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(http.StatusOK)
 	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"auth_token": jwtToken, "refresh_token": refreshToken, "customer": userResponse}}
 	json.NewEncoder(w).Encode(response)
 
