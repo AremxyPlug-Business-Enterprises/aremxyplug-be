@@ -3,7 +3,7 @@ package key_generator
 import (
 	"crypto/rsa"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt/v4"
 )
 
 func GeneratePublicKey(publicKey string) (*rsa.PublicKey, error) {
