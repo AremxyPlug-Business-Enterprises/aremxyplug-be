@@ -139,16 +139,6 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	verified := user.IsVerified
-
-	if !verified {
-		handler.logger.Warn("pin not yet set", zap.Any("userID", user.ID))
-		w.WriteHeader(http.StatusAccepted)
-		response := responseFormat.CustomResponse{Status: http.StatusAccepted, Message: "success", Data: map[string]interface{}{"msg": "user's pin not set"}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
 	refreshTokenClaims := dto.Claims{
 		PersonId: user.ID,
 	}
@@ -177,6 +167,17 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		handler.logger.Error("fail to generate refresh token", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	verified := user.IsVerified
+
+	if !verified {
+		handler.logger.Warn("pin not yet set", zap.Any("userID", user.ID))
+		w.Header().Set("Authorization", jwtToken)
+		w.WriteHeader(http.StatusAccepted)
+		response := responseFormat.CustomResponse{Status: http.StatusAccepted, Message: "success", Data: map[string]interface{}{"msg": "user's pin not set"}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
