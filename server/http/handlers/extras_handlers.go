@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+
 	// "fmt"
 	"net/http"
 	// "net/url"
@@ -183,6 +184,10 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"msg": "user pin updated successfully"}}
+		json.NewEncoder(w).Encode(response)
+
 	}
 
 }
@@ -209,10 +214,19 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	valid := handler.pin.VerifyPin(user.ID, pin.Pin)
+	valid, err := handler.pin.VerifyPin(user.ID, pin.Pin)
+	if err != nil {
+		if !valid {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+	}
+
 	if !valid {
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "incorrect pin"}}
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "incorrect pin"}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}

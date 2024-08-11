@@ -36,18 +36,18 @@ func (p *PinConfig) SavePin(pin models.UserPin) error {
 	return nil
 }
 
-func (p *PinConfig) VerifyPin(userID, pin string) bool {
+func (p *PinConfig) VerifyPin(userID, pin string) (bool, error) {
 
 	hashpin, err := p.dbConn.GetPin(userID)
 	if err != nil {
-		return false
+		return false, err
 	}
 
-	if valid := comparePin(pin, hashpin); !valid {
-		return false
+	if valid := comparePin(hashpin, pin); !valid {
+		return false, err
 	}
 
-	return true
+	return true, nil
 }
 
 func (p *PinConfig) UpdatePin(userID string, newPin string) error {
@@ -72,7 +72,7 @@ func (p *PinConfig) UpdatePin(userID string, newPin string) error {
 func generatePin(pin string) (string, error) {
 	pinByte, err := bcrypt.GenerateFromPassword([]byte(pin), 10)
 
-	log.Println(string(pinByte))
+	//log.Println(string(pinByte))
 	if err != nil {
 		return "", err
 	}
@@ -82,6 +82,7 @@ func generatePin(pin string) (string, error) {
 
 func comparePin(hashedPin, pin string) bool {
 
+	log.Println(hashedPin)
 	err := bcrypt.CompareHashAndPassword([]byte(hashedPin), []byte(pin))
 	return err == nil
 }

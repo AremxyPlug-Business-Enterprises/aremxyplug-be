@@ -361,10 +361,10 @@ func (m *mongoStore) SavePin(data models.UserPin) error {
 		return err
 	}
 
-	filter := bson.M{"id": data.UserID, "isVerified": false}
+	filter := bson.M{"id": data.UserID, "is_verified": false}
 	update := bson.M{
 		"$set": bson.M{
-			"isVerified": true,
+			"is_verified": true,
 		},
 	}
 
@@ -383,9 +383,9 @@ func (m *mongoStore) SavePin(data models.UserPin) error {
 // code to get the pin from the database
 func (m *mongoStore) GetPin(userID string) (string, error) {
 	ctx := context.Background()
-	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
+	filter := bson.D{primitive.E{Key: "userid", Value: userID}}
 
-	result := m.col("").FindOne(ctx, filter)
+	result := m.col("pin").FindOne(ctx, filter)
 	var resp models.UserPin
 	err := result.Decode(&resp)
 	if err != nil {
@@ -405,11 +405,11 @@ func (m *mongoStore) UpdatePin(data models.UserPin) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.D{primitive.E{Key: "user_id", Value: data.UserID}}
+	filter := bson.D{primitive.E{Key: "userid", Value: data.UserID}}
 
 	updateFilter := bson.D{{Key: "$set", Value: bson.D{primitive.E{Key: "pin", Value: data.Pin}}}}
 
-	_, err := m.col("").UpdateOne(ctx, filter, updateFilter)
+	_, err := m.col("pin").UpdateOne(ctx, filter, updateFilter)
 	if err != nil {
 		return err
 	}
