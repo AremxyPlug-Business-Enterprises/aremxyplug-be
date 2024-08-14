@@ -1,4 +1,4 @@
-package models
+package telcom
 
 type SmileInfo struct {
 	Network      string `json:"network"`

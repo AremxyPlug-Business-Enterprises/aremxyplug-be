@@ -63,14 +63,14 @@ type UserStore interface {
 type TelcomStore interface {
 	SaveDataTransaction(details interface{}) error
 	GetDataTransactionDetails(id string) (telcom.DataResult, error)
-	GetAllDataTransactions(user string) ([]telcom.DataResult, error)
-	GetSpecTransDetails(id string) (models.SpectranetResult, error)
-	GetAllSpecDataTransactions(user string) ([]models.SpectranetResult, error)
-	GetSmileTransDetails(id string) (models.SmileResult, error)
-	GetAllSmileDataTransactions(user string) ([]models.SmileResult, error)
+	GetAllDataTransactions(username string) ([]telcom.DataResult, error)
+	GetSpecTransDetails(id string) (telcom.SpectranetResult, error)
+	GetAllSpecDataTransactions(username string) ([]telcom.SpectranetResult, error)
+	GetSmileTransDetails(id string) (telcom.SmileResult, error)
+	GetAllSmileDataTransactions(username string) ([]telcom.SmileResult, error)
 	SaveAirtimeTransaction(details *telcom.AirtimeResponse) error
 	GetAirtimeTransactionDetails(id string) (telcom.AirtimeResponse, error)
-	GetAllAirtimeTransactions(user string) ([]telcom.AirtimeResponse, error)
+	GetAllAirtimeTransactions(username string) ([]telcom.AirtimeResponse, error)
 	SaveTelcomRecipient(userID string, data telcom.Recipient) error
 	GetTelcomRecipients(username string) (telcom.TelcomRecipient, error)
 	EditTelcomRecipient(userID string, data telcom.Recipient) error

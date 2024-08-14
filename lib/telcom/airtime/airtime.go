@@ -79,6 +79,7 @@ func (a *AirtimeConn) BuyAirtime(airtime telcom.AirtimeInfo) (*telcom.AirtimeRes
 		Description:     apiResponse.Message,
 		Phone_no:        apiResponse.Phone_no,
 		Product:         product,
+		Name:            airtime.Username,
 		Recipient:       airtime.Recipient,
 		ReferenceNumber: apiResponse.Reference,
 		Status:          apiResponse.Status,
@@ -121,8 +122,8 @@ func (a *AirtimeConn) QueryTransaction(id string) (*telcom.AirtimeResponse, erro
 
 }
 
-func (a *AirtimeConn) GetUserTransaction(user string) ([]telcom.AirtimeResponse, error) {
-	resp, err := a.getAllTransactions(user)
+func (a *AirtimeConn) GetUserTransaction(username string) ([]telcom.AirtimeResponse, error) {
+	resp, err := a.getAllTransactions(username)
 	if err != nil {
 		return nil, err
 	}
@@ -178,8 +179,8 @@ func (a *AirtimeConn) getTransacationDetails(id string) (telcom.AirtimeResponse,
 	return result, err
 }
 
-func (a *AirtimeConn) getAllTransactions(user string) ([]telcom.AirtimeResponse, error) {
-	results, err := a.db.GetAllAirtimeTransactions(user)
+func (a *AirtimeConn) getAllTransactions(username string) ([]telcom.AirtimeResponse, error) {
+	results, err := a.db.GetAllAirtimeTransactions(username)
 	return results, err
 }
 

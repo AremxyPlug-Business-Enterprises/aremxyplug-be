@@ -8,6 +8,7 @@ type DataInfo struct {
 	Mobile_Num    string `json:"mobile_number"`
 	Ported_number bool   `json:"Ported_number"`
 	Name          string `json:"name"`
+	Username      string
 }
 
 type DataResult struct {
