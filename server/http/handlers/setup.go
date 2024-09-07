@@ -138,5 +138,6 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		bankTrf:              opt.BankTrf,
 		bankDep:              opt.BankDep,
 		pin:                  opt.Pin,
+		point:                opt.Point,
 	}
 }
