@@ -5,7 +5,6 @@ import (
 	"log"
 	"sort"
 
-	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -45,11 +44,11 @@ func (m *mongoStore) GetDataTransactionDetails(id string) (telcom.DataResult, er
 }
 
 // getAllRecords returns all the data transactions associated to a user, if an empty string is passed it returns all data transactions.
-func (m *mongoStore) GetAllDataTransactions(user string) ([]telcom.DataResult, error) {
+func (m *mongoStore) GetAllDataTransactions(username string) ([]telcom.DataResult, error) {
 	ctx := context.Background()
 	res := []telcom.DataResult{}
 
-	cur, err := m.getAllRecords(dataColl, user)
+	cur, err := m.getAllRecords(dataColl, username)
 	if err != nil {
 		return []telcom.DataResult{}, err
 	}
@@ -67,35 +66,35 @@ func (m *mongoStore) GetAllDataTransactions(user string) ([]telcom.DataResult, e
 
 }
 
-func (m *mongoStore) GetSpecTransDetails(id string) (models.SpectranetResult, error) {
-	res := models.SpectranetResult{}
+func (m *mongoStore) GetSpecTransDetails(id string) (telcom.SpectranetResult, error) {
+	res := telcom.SpectranetResult{}
 
 	findResult := m.getRecord(id, dataColl)
 	err := findResult.Decode(&res)
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return models.SpectranetResult{}, nil
+			return telcom.SpectranetResult{}, nil
 		}
 		// write for errors
 		log.Println(err)
-		return models.SpectranetResult{}, err
+		return telcom.SpectranetResult{}, err
 	}
 
 	return res, nil
 }
 
-func (m *mongoStore) GetAllSpecDataTransactions(user string) ([]models.SpectranetResult, error) {
+func (m *mongoStore) GetAllSpecDataTransactions(username string) ([]telcom.SpectranetResult, error) {
 	ctx := context.Background()
-	res := []models.SpectranetResult{}
+	res := []telcom.SpectranetResult{}
 
-	cur, err := m.getAllRecords(dataColl, user)
+	cur, err := m.getAllRecords(dataColl, username)
 	if err != nil {
-		return []models.SpectranetResult{}, err
+		return []telcom.SpectranetResult{}, err
 	}
 
 	for cur.Next(ctx) {
-		resp := models.SpectranetResult{}
+		resp := telcom.SpectranetResult{}
 		if err := cur.Decode(&resp); err != nil {
 			return nil, err
 		}
@@ -106,35 +105,35 @@ func (m *mongoStore) GetAllSpecDataTransactions(user string) ([]models.Spectrane
 	return res, nil
 }
 
-func (m *mongoStore) GetSmileTransDetails(id string) (models.SmileResult, error) {
-	res := models.SmileResult{}
+func (m *mongoStore) GetSmileTransDetails(id string) (telcom.SmileResult, error) {
+	res := telcom.SmileResult{}
 
 	findResult := m.getRecord(id, dataColl)
 	err := findResult.Decode(&res)
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return models.SmileResult{}, nil
+			return telcom.SmileResult{}, nil
 		}
 		// write for errors
 		log.Println(err)
-		return models.SmileResult{}, err
+		return telcom.SmileResult{}, err
 	}
 
 	return res, nil
 }
 
-func (m *mongoStore) GetAllSmileDataTransactions(user string) ([]models.SmileResult, error) {
+func (m *mongoStore) GetAllSmileDataTransactions(username string) ([]telcom.SmileResult, error) {
 	ctx := context.Background()
-	res := []models.SmileResult{}
+	res := []telcom.SmileResult{}
 
-	cur, err := m.getAllRecords(dataColl, user)
+	cur, err := m.getAllRecords(dataColl, username)
 	if err != nil {
-		return []models.SmileResult{}, err
+		return []telcom.SmileResult{}, err
 	}
 
 	for cur.Next(ctx) {
-		resp := models.SmileResult{}
+		resp := telcom.SmileResult{}
 		if err := cur.Decode(&resp); err != nil {
 			return nil, err
 		}
@@ -171,11 +170,11 @@ func (m *mongoStore) GetAirtimeTransactionDetails(id string) (telcom.AirtimeResp
 	return res, nil
 }
 
-func (m *mongoStore) GetAllAirtimeTransactions(user string) ([]telcom.AirtimeResponse, error) {
+func (m *mongoStore) GetAllAirtimeTransactions(username string) ([]telcom.AirtimeResponse, error) {
 	ctx := context.Background()
 	res := []telcom.AirtimeResponse{}
 
-	cur, err := m.getAllRecords(dataColl, user)
+	cur, err := m.getAllRecords(dataColl, username)
 	if err != nil {
 		return []telcom.AirtimeResponse{}, err
 	}

@@ -7,6 +7,7 @@ type AirtimeInfo struct {
 	Product     string `json:"product"`
 	Recipient   string `json:"recipient,omitempty"`
 	AirtimeType string `json:"airtime_type"`
+	Username    string
 }
 
 type AirtimeApiResponse struct {

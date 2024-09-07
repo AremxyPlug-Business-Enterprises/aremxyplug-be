@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/go-chi/chi/v5"
@@ -14,16 +13,17 @@ import (
 
 // Airtime is use to carry out buying of airtime(POST) and returning all the transactions made by the user(GET)
 func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
-	/*
-		userDetails, err := handler.GetUserDetails(r)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-		id := userDetails.ID
-	*/
+
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	// id := userDetails.ID
+	username := userDetails.Username
+
 	if r.Method == "POST" {
 		data := telcom.AirtimeInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -63,6 +63,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		*/
+		data.Username = username
 		res, err := handler.vtuClient.BuyAirtime(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -82,7 +83,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.vtuClient.GetUserTransaction("user")
+		res, err := handler.vtuClient.GetUserTransaction(username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
@@ -125,16 +126,14 @@ func (handler *HttpHandler) GetAirtimeInfo(w http.ResponseWriter, r *http.Reques
 
 func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Request) {
 
-	/*
-		userDetails, err := handler.GetUserDetails(r)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-		id := userDetails.ID
-	*/
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	userID := userDetails.ID
 
 	if r.Method == "POST" {
 		data := telcom.Recipient{}
@@ -146,7 +145,6 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		userID := "aremxyplug"
 		if err := handler.vtuClient.SaveRecipient(userID, data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("failed while saving recipient", zap.Error(err))
@@ -171,7 +169,6 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		userID := "aremxyplug"
 		if err := handler.vtuClient.UpdateRecipient(userID, data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("failed while updating recipient", zap.Error(err))
@@ -186,7 +183,6 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 	}
 
 	if r.Method == "GET" {
-		userID := "aremxyplug"
 		recipients, err := handler.vtuClient.GetRecipients(userID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -203,7 +199,6 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 
 	if r.Method == "DELETE" {
 
-		userID := "aremxyplug"
 		var recipient struct {
 			ID int `json:"id"`
 		}
@@ -232,16 +227,17 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 
 // Data send a call to the API to buy data(POST) or return users transaction history(GET)
 func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
-	/*
-		userDetails, err := handler.GetUserDetails(r)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-		id := userDetails.ID
-	*/
+
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	// id := userDetails.ID
+	username := userDetails.Username
+
 	if r.Method == "POST" {
 		data := telcom.DataInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -276,6 +272,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		*/
+		data.Username = username
 		res, err := handler.dataClient.BuyData(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -295,7 +292,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.dataClient.GetUserTransactions("user")
+		res, err := handler.dataClient.GetUserTransactions(username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
@@ -341,19 +338,19 @@ func (handler *HttpHandler) GetDataTransactions(w http.ResponseWriter, r *http.R
 }
 
 func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Request) {
-	/*
-		userDetails, err := handler.GetUserDetails(r)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-		id := userDetails.ID
-	*/
+
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	// id := userDetails.ID
+	username := userDetails.Username
 
 	if r.Method == "POST" {
-		data := models.SpectranetInfo{}
+		data := telcom.SpectranetInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Decoding JSON response", zap.Error(err))
@@ -385,6 +382,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 				return
 			}
 		*/
+
 		res, err := handler.dataClient.BuySpecData(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -404,7 +402,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.dataClient.GetSpecUserTransactions("user")
+		res, err := handler.dataClient.GetSpecUserTransactions(username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
@@ -448,19 +446,19 @@ func (handler *HttpHandler) GetSpectranetTransactions(w http.ResponseWriter, r *
 }
 
 func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
-	/*
-		userDetails, err := handler.GetUserDetails(r)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-		id := userDetails.ID
-	*/
+
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	//id := userDetails.ID
+	username := userDetails.Username
 
 	if r.Method == "POST" {
-		data := models.SmileInfo{}
+		data := telcom.SmileInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Decoding JSON response", zap.Error(err))
@@ -512,7 +510,7 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.dataClient.GetSmileUserTransactions("user")
+		res, err := handler.dataClient.GetSmileUserTransactions(username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))

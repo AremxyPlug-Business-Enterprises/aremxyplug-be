@@ -343,7 +343,6 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 	// validate the request body
 	if err := json.NewDecoder(r.Body).Decode(&userlogin); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -351,7 +350,6 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 	user, err := handler.store.GetUserByEmail(userlogin.Email)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-
 		response := responseFormat.CustomResponse{Status: http.StatusNotFound, Message: "user not found", Data: map[string]interface{}{"data": "user not found"}}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -389,12 +387,20 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 
 	email := r.URL.Query().Get("email")
 	valid, err := handler.otp.ValidateOTP(Otp.OTP, email)
-	if !valid || err != nil {
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+
+	if !valid {
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "otp verification failed"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "otp verification successful", Data: map[string]interface{}{"data": email}}
 	json.NewEncoder(w).Encode(response)

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/aremxyplug-be/db"
-	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/aremxyplug-be/lib/randomgen"
 	"github.com/pkg/errors"
@@ -90,6 +89,7 @@ func (d *DataConn) BuyData(data telcom.DataInfo) (*telcom.DataResult, error) {
 			PlanName:        apiResponse.Plan_Name,
 			CreatedAt:       time.Now().String(),
 			OrderID:         id,
+			Username:        data.Username,
 			TransactionID:   transactionID,
 			Status:          apiResponse.Status,
 			Name:            data.Name,
@@ -113,7 +113,7 @@ func (d *DataConn) BuyData(data telcom.DataInfo) (*telcom.DataResult, error) {
 
 }
 
-func (d *DataConn) BuySpecData(data models.SpectranetInfo) (*models.SpectranetResult, error) {
+func (d *DataConn) BuySpecData(data telcom.SpectranetInfo) (*telcom.SpectranetResult, error) {
 
 	data.RequestID = randomgen.GenerateRequestID()
 	orderid, err := randomgen.GenerateOrderID()
@@ -128,7 +128,7 @@ func (d *DataConn) BuySpecData(data models.SpectranetInfo) (*models.SpectranetRe
 	}
 	defer resp.Body.Close()
 
-	apiResponse := models.SpectranetApiResponse{}
+	apiResponse := telcom.SpectranetApiResponse{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		if err == io.EOF {
 			return nil, d.logAndReturnError("Empty response body retured from server", err)
@@ -137,7 +137,7 @@ func (d *DataConn) BuySpecData(data models.SpectranetInfo) (*models.SpectranetRe
 	}
 
 	trans_content := apiResponse.Content.Transcations
-	result := &models.SpectranetResult{
+	result := &telcom.SpectranetResult{
 		Network:         data.Network,
 		Product:         data.Product,
 		Plan:            data.Plan,
@@ -162,7 +162,7 @@ func (d *DataConn) BuySpecData(data models.SpectranetInfo) (*models.SpectranetRe
 
 }
 
-func (d *DataConn) BuySmileData(data models.SmileInfo) (*models.SmileResult, error) {
+func (d *DataConn) BuySmileData(data telcom.SmileInfo) (*telcom.SmileResult, error) {
 
 	data.RequestID = randomgen.GenerateRequestID()
 	orderid, err := randomgen.GenerateOrderID()
@@ -177,7 +177,7 @@ func (d *DataConn) BuySmileData(data models.SmileInfo) (*models.SmileResult, err
 
 	defer resp.Body.Close()
 
-	apiResponse := models.SmileAPIresponse{}
+	apiResponse := telcom.SmileAPIresponse{}
 
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		if err == io.EOF {
@@ -187,7 +187,7 @@ func (d *DataConn) BuySmileData(data models.SmileInfo) (*models.SmileResult, err
 	}
 
 	trans_content := apiResponse.Content.Transcations
-	result := &models.SmileResult{
+	result := &telcom.SmileResult{
 		Network:         data.Network,
 		ProductPlan:     trans_content.Product_Desc,
 		Email:           data.Email,
@@ -221,9 +221,9 @@ func (d *DataConn) GetTransactionDetail(id string) (telcom.DataResult, error) {
 }
 
 // GetUserTransactions return all the data transactions associated to a user
-func (d *DataConn) GetUserTransactions(user string) ([]telcom.DataResult, error) {
+func (d *DataConn) GetUserTransactions(username string) ([]telcom.DataResult, error) {
 
-	res, err := d.getAllTransactions(user)
+	res, err := d.getAllTransactions(username)
 	if err != nil {
 		return res, d.logAndReturnError("error while communicating with database", err)
 	}
@@ -269,8 +269,8 @@ func (d *DataConn) GetAllTransactions() ([]telcom.DataResult, error) {
 	return result, nil
 }
 
-func (d *DataConn) GetSpecTransDetails(requestID string) (models.SpectranetResult, error) {
-	resp := models.SpectranetResult{}
+func (d *DataConn) GetSpecTransDetails(requestID string) (telcom.SpectranetResult, error) {
+	resp := telcom.SpectranetResult{}
 	res, err := d.getSpecDataDetails(requestID)
 	if err != nil {
 		return resp, d.logAndReturnError("error while communicating with database", err)
@@ -279,9 +279,9 @@ func (d *DataConn) GetSpecTransDetails(requestID string) (models.SpectranetResul
 	return res, nil
 }
 
-func (d *DataConn) GetSpecUserTransactions(user string) ([]models.SpectranetResult, error) {
+func (d *DataConn) GetSpecUserTransactions(username string) ([]telcom.SpectranetResult, error) {
 
-	res, err := d.getAllSpecTransactions(user)
+	res, err := d.getAllSpecTransactions(username)
 	if err != nil {
 		d.Logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("database request error: " + err.Error())
@@ -290,7 +290,7 @@ func (d *DataConn) GetSpecUserTransactions(user string) ([]models.SpectranetResu
 	return res, err
 }
 
-func (d *DataConn) GetAllSpecTransactions() ([]models.SpectranetResult, error) {
+func (d *DataConn) GetAllSpecTransactions() ([]telcom.SpectranetResult, error) {
 	var user string
 	result, err := d.getAllSpecTransactions(user)
 	if err != nil {
@@ -301,8 +301,8 @@ func (d *DataConn) GetAllSpecTransactions() ([]models.SpectranetResult, error) {
 	return result, nil
 }
 
-func (d *DataConn) GetSmileTransDetails(requestID string) (models.SmileResult, error) {
-	resp := models.SmileResult{}
+func (d *DataConn) GetSmileTransDetails(requestID string) (telcom.SmileResult, error) {
+	resp := telcom.SmileResult{}
 	res, err := d.getSmileDataDetails(requestID)
 	if err != nil {
 		// write error
@@ -313,9 +313,9 @@ func (d *DataConn) GetSmileTransDetails(requestID string) (models.SmileResult, e
 	return res, nil
 }
 
-func (d *DataConn) GetSmileUserTransactions(user string) ([]models.SmileResult, error) {
+func (d *DataConn) GetSmileUserTransactions(username string) ([]telcom.SmileResult, error) {
 
-	res, err := d.getAllSmileTransactions(user)
+	res, err := d.getAllSmileTransactions(username)
 	if err != nil {
 		// write error
 		d.Logger.Error("Database error try again...", zap.Error(err))
@@ -325,7 +325,7 @@ func (d *DataConn) GetSmileUserTransactions(user string) ([]models.SmileResult, 
 	return res, err
 }
 
-func (d *DataConn) GetAllSmileTransactions() ([]models.SmileResult, error) {
+func (d *DataConn) GetAllSmileTransactions() ([]telcom.SmileResult, error) {
 	var user string
 	result, err := d.getAllSmileTransactions(user)
 	if err != nil {
@@ -365,7 +365,7 @@ func (d *DataConn) QueryTransaction(id int) error {
 
 }
 
-func (d *DataConn) buySmileData(data models.SmileInfo) (*http.Response, error) {
+func (d *DataConn) buySmileData(data telcom.SmileInfo) (*http.Response, error) {
 
 	formdata := url.Values{
 		"request_id":     {data.RequestID},
@@ -395,7 +395,7 @@ func (d *DataConn) buySmileData(data models.SmileInfo) (*http.Response, error) {
 	return resp, nil
 }
 
-func (d *DataConn) buySpecData(data models.SpectranetInfo) (*http.Response, error) {
+func (d *DataConn) buySpecData(data telcom.SpectranetInfo) (*http.Response, error) {
 
 	amount := strconv.Itoa(data.Amount)
 
@@ -442,29 +442,29 @@ func (d *DataConn) getTransactionDetails(id string) (telcom.DataResult, error) {
 }
 
 // getAllTransaction returns all transactions, if an empty string is passed, it returns all transaction in the database
-func (d *DataConn) getAllTransactions(user string) ([]telcom.DataResult, error) {
-	results, err := d.Dbconn.GetAllDataTransactions(user)
+func (d *DataConn) getAllTransactions(username string) ([]telcom.DataResult, error) {
+	results, err := d.Dbconn.GetAllDataTransactions(username)
 	return results, err
 }
 
 // get transactions history
-func (d *DataConn) getSpecDataDetails(requestID string) (models.SpectranetResult, error) {
+func (d *DataConn) getSpecDataDetails(requestID string) (telcom.SpectranetResult, error) {
 	result, err := d.Dbconn.GetSpecTransDetails(requestID)
 	return result, err
 }
 
-func (d *DataConn) getAllSpecTransactions(user string) ([]models.SpectranetResult, error) {
-	result, err := d.Dbconn.GetAllSpecDataTransactions(user)
+func (d *DataConn) getAllSpecTransactions(username string) ([]telcom.SpectranetResult, error) {
+	result, err := d.Dbconn.GetAllSpecDataTransactions(username)
 	return result, err
 }
 
-func (d *DataConn) getSmileDataDetails(id string) (models.SmileResult, error) {
+func (d *DataConn) getSmileDataDetails(id string) (telcom.SmileResult, error) {
 	result, err := d.Dbconn.GetSmileTransDetails(id)
 	return result, err
 }
 
-func (d *DataConn) getAllSmileTransactions(user string) ([]models.SmileResult, error) {
-	result, err := d.Dbconn.GetAllSmileDataTransactions(user)
+func (d *DataConn) getAllSmileTransactions(username string) ([]telcom.SmileResult, error) {
+	result, err := d.Dbconn.GetAllSmileDataTransactions(username)
 	return result, err
 }
 

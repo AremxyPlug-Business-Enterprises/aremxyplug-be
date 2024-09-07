@@ -224,14 +224,14 @@ func (m *mongoStore) saveToDB(collectionName string, details interface{}) error 
 	return nil
 }
 
-func (m *mongoStore) getAllRecords(collectionName, user string) (*mongo.Cursor, error) {
+func (m *mongoStore) getAllRecords(collectionName, username string) (*mongo.Cursor, error) {
 	ctx := context.Background()
 	var filter bson.D
 
-	if user == "" {
+	if username == "" {
 		filter = bson.D{}
 	} else {
-		filter = bson.D{primitive.E{Key: "username", Value: user}}
+		filter = bson.D{primitive.E{Key: "username", Value: username}}
 	}
 
 	cur, err := m.col(collectionName).Find(ctx, filter)
