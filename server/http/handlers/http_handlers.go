@@ -202,7 +202,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Authorization", jwtToken)
 	w.WriteHeader(http.StatusOK)
-	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"auth_token": jwtToken, "refresh_token": refreshToken, "customer": userResponse}}
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"auth_token": jwtToken, "refresh_token": refreshToken, "customer": userResponse}}
 	json.NewEncoder(w).Encode(response)
 
 }
@@ -445,6 +445,7 @@ func (handler *HttpHandler) sendOTP(user *models.User, title string, templateID 
 		Ts:         handler.timeHelper.Now().Unix(),
 	}
 	message.DataMap["FullName"] = user.FullName
+	message.DataMap["Username"] = user.Username
 	message.DataMap["Email"] = user.Email
 	message.DataMap["OTP"] = otp
 
