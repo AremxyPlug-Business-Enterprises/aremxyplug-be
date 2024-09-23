@@ -3,10 +3,18 @@ package http
 import (
 	"net/http"
 
+	"github.com/aremxyplug-be/lib/auth"
+	auth_pin "github.com/aremxyplug-be/lib/auth/pin"
+	bankacc "github.com/aremxyplug-be/lib/bank/bank_acc"
+	"github.com/aremxyplug-be/lib/bank/deposit"
+	"github.com/aremxyplug-be/lib/bank/transactions"
+	"github.com/aremxyplug-be/lib/bank/transfer"
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
+	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
+	"github.com/aremxyplug-be/lib/referral"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
@@ -32,6 +40,14 @@ type ServerConfig struct {
 	TvSub       *tvsub.TvConn
 	ElectSub    *elect.ElectricConn
 	Otp         *otpgen.OTPConn
+	Auth        *auth.AuthConn
+	VirtualAcc  *bankacc.BankConfig
+	BankTranc   *transactions.Transaction
+	BankTrf     *transfer.Config
+	BankDep     *deposit.Config
+	Referral    *referral.RefConfig
+	Point       *pointredeem.PointConfig
+	Pin         *auth_pin.PinConfig
 }
 
 func MountServer(config ServerConfig) *chi.Mux {
@@ -43,6 +59,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 		AllowCredentials: false,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Authorization"},
 		Debug:            true,
 	}).Handler)
 	router.Use(setJSONContentType)
@@ -62,6 +79,13 @@ func MountServer(config ServerConfig) *chi.Mux {
 		TvSub:       config.TvSub,
 		ElectSub:    config.ElectSub,
 		Otp:         config.Otp,
+		VirtualAcc:  config.VirtualAcc,
+		BankTranc:   config.BankTranc,
+		BankTrf:     config.BankTrf,
+		BankDep:     config.BankDep,
+		Referral:    config.Referral,
+		Point:       config.Point,
+		Pin:         config.Pin,
 	})
 
 	// Routes
@@ -87,25 +111,43 @@ func MountServer(config ServerConfig) *chi.Mux {
 		// test
 		router.Post("/test", httpHandler.Testtoken)
 
+		router.Get("/banks", httpHandler.GetBanks)
+
+		router.Get("/deposit", httpHandler.DepositAccount)
+
+		authRouter := router.With(config.Auth.Authorize)
 		// Data Routes
-		dataRoutes(router, httpHandler)
+		dataRoutes(authRouter, httpHandler)
 		// smile data routes
-		smileDataRoutes(router, httpHandler)
+		smileDataRoutes(authRouter, httpHandler)
 		// spectranet data routes
-		spectranetDataRoutes(router, httpHandler)
+		spectranetDataRoutes(authRouter, httpHandler)
 
 		// Edu Routes
-		eduRoutes(router, httpHandler)
+		eduRoutes(authRouter, httpHandler)
 
 		//  Airtime Routes
-		airtimeRoutes(router, httpHandler)
+		airtimeRoutes(authRouter, httpHandler)
 
 		// TvSubscription Routes
-		tvSubscriptionRoutes(router, httpHandler)
+		tvSubscriptionRoutes(authRouter, httpHandler)
 
 		// Electricity bills routes
-		electricityBillRoutes(router, httpHandler)
+		electricityBillRoutes(authRouter, httpHandler)
 
+		// bank routes
+		bankRoutes(authRouter, httpHandler)
+
+		pinRoute(authRouter, httpHandler)
+
+		extraRoutes(authRouter, httpHandler)
+
+		virtualAccRoutes(authRouter, httpHandler)
+		/*
+			transferMoneyRoutes(authRouter, httpHandler)
+
+			depositRoutes(authRouter, httpHandler)
+		*/
 	})
 
 	return router
@@ -129,6 +171,13 @@ func dataRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 		router.Get("/", httpHandler.Data)
 		router.Get("/{id}", httpHandler.GetDataInfo)
 		router.Get("/transactions", httpHandler.GetDataTransactions)
+
+		router.Route("/recipient", func(route chi.Router) {
+			route.Post("/", httpHandler.TelcomRecipient)
+			route.Get("/", httpHandler.TelcomRecipient)
+			route.Put("/", httpHandler.TelcomRecipient)
+			route.Delete("/", httpHandler.TelcomRecipient)
+		})
 	})
 }
 
@@ -165,6 +214,13 @@ func airtimeRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 		router.Get("/", httpHandler.Airtime)
 		router.Get("/{id}", httpHandler.GetAirtimeInfo)
 		router.Get("/transactions", httpHandler.GetAirtimeTransactions)
+
+		router.Route("/recipient", func(route chi.Router) {
+			route.Post("/", httpHandler.TelcomRecipient)
+			route.Get("/", httpHandler.TelcomRecipient)
+			route.Put("/", httpHandler.TelcomRecipient)
+			route.Delete("/", httpHandler.TelcomRecipient)
+		})
 	})
 }
 
@@ -185,3 +241,55 @@ func electricityBillRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 		router.Get("/transactions", httpHandler.GetElectricBills)
 	})
 }
+
+func bankRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/bank", func(router chi.Router) {
+		router.Route("/transfer", func(router chi.Router) {
+			router.Post("/", httpHandler.Transfer)
+			router.Get("/", httpHandler.Transfer)
+			router.Get("/{id}", httpHandler.GetTransferDetails)
+		})
+		router.Route("/deposit", func(router chi.Router) {
+			router.Get("/", httpHandler.GetDepositHistory)
+			router.Get("/{id}", httpHandler.GetDepositDetail)
+		})
+		router.Get("/transactions", httpHandler.GetAllBankTransactions)
+	})
+}
+
+func pinRoute(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/pin", func(router chi.Router) {
+		router.Post("/", httpHandler.Pin)
+		router.Patch("/", httpHandler.Pin)
+		router.Post("/verify", httpHandler.VerifyPIN)
+	})
+}
+
+func extraRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/extra", func(router chi.Router) {
+		router.Route("/referral", func(router chi.Router) {
+			router.Get("/", httpHandler.Referral)
+			router.Post("/", httpHandler.Referral)
+		})
+		router.Route("/point", func(router chi.Router) {
+			router.Get("/", httpHandler.Points)
+			router.Post("/", httpHandler.Points)
+		})
+	})
+}
+
+func virtualAccRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/virtualacc", func(router chi.Router) {
+		r.Get("/", httpHandler.VirtualAccount)
+		r.Post("/", httpHandler.VirtualAccount)
+	})
+}
+
+/*
+func depositRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/deposit", func(router chi.Router) {
+		router.Get("/", httpHandler.GetDepositHistory)
+		router.Get("/{id}", httpHandler.GetDepositDetail)
+	})
+}
+*/

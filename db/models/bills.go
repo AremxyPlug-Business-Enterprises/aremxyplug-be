@@ -45,6 +45,7 @@ type BillResult struct {
 	IucNumber     string `json:"iuc_number"`
 	Phone         string `json:"phone"`
 	Email         string `json:"email"`
+	Name          string `json:"name"`
 	Amount        int    `json:"amount"`
 	Product       string `json:"product"`
 	Description   string `json:"description"`

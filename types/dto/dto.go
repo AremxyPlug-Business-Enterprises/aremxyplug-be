@@ -2,8 +2,6 @@ package dto
 
 type Claims struct {
 	PersonId string `json:"person_id"`
-	Email    string `json:"email"`
-	Username string `json:"username"`
 }
 
 type LoginInput struct {

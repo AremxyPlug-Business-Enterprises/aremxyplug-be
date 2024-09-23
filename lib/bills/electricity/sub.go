@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
@@ -24,11 +25,11 @@ var (
 )
 
 type ElectricConn struct {
-	db     db.DataStore
+	db     db.UtilitiesStore
 	logger *zap.Logger
 }
 
-func NewElectricConn(db db.DataStore, logger *zap.Logger) *ElectricConn {
+func NewElectricConn(db db.UtilitiesStore, logger *zap.Logger) *ElectricConn {
 	return &ElectricConn{
 		db:     db,
 		logger: logger,
@@ -38,13 +39,15 @@ func NewElectricConn(db db.DataStore, logger *zap.Logger) *ElectricConn {
 // pay electricity bill
 func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult, error) {
 
+	log.Printf("%+v", data)
+
 	data.RequestID = randomgen.GenerateRequestID()
 	orderID, err := randomgen.GenerateOrderID()
 	if err != nil {
 		return nil, e.logAndReturnError("error generating orderID", err)
 	}
 	transactionID := randomgen.GenerateTransactionID("ele")
-
+	log.Printf("%+v", data)
 	validNo, err := e.verifyMeterNo(data.DiscoType, data.Meter_No, data.Meter_Type)
 	if err != nil {
 		return nil, e.logAndReturnError("error verifying meter number", err)
@@ -65,14 +68,20 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 	}
 	log.Println(apiResponse)
 	transDetails := apiResponse.Contents.Transactions
-	phone := strconv.Itoa(data.Phone)
-	description := data.DiscoType + data.Meter_Type
+	description := data.DiscoType + " " + data.Meter_Type
+
+	parts := strings.Split(apiResponse.Purchased_Token, ":")
+
+	token_generated := strings.TrimSpace(parts[1])
+	billGenerated := token_generated
 
 	result := &models.ElectricResult{
+		Amount:        apiResponse.Amount,
 		DiscoType:     data.DiscoType,
 		MeterType:     data.Meter_Type,
 		MeterNumber:   transDetails.Meter_No,
-		Phone:         phone,
+		Phone:         data.Phone,
+		BillGenerated: billGenerated,
 		Email:         data.Email,
 		Product:       transDetails.Type,
 		Description:   description,
@@ -148,7 +157,7 @@ func (e *ElectricConn) GetAllTransactions() ([]models.ElectricResult, error) {
 func (e *ElectricConn) payBill(data models.ElectricInfo) (*http.Response, error) {
 
 	amount := strconv.Itoa(data.Amount)
-	phone := strconv.Itoa(data.Phone)
+	phone := data.Phone
 
 	formdata := url.Values{
 		"request_id":     {data.RequestID},
@@ -227,17 +236,22 @@ func (e *ElectricConn) queryTransaction(requestID string) (*http.Response, error
 	return resp, nil
 }
 
-func (d *ElectricConn) logAndReturnError(errorMsg string, err error) error {
-	d.logger.Error(errorMsg, zap.Error(err))
+func (e *ElectricConn) logAndReturnError(errorMsg string, err error) error {
+	e.logger.Error(errorMsg, zap.Error(err))
 	return errors.New(errorMsg)
 }
 
-func (d *ElectricConn) verifyMeterNo(discoType, meterNo, meterType string) (bool, error) {
+// return an error message for when the meter number is not correct
+func (e *ElectricConn) verifyMeterNo(discoType, meterNo, meterType string) (bool, error) {
+
+	if meterNo == "" {
+		return false, errors.New("no meter number")
+	}
 
 	formdata := url.Values{
-		"serviceID":      {discoType},
-		"billersCode":    {meterNo},
-		"variation_code": {meterType},
+		"serviceID":   {discoType},
+		"billersCode": {meterNo},
+		"type":        {meterType},
 	}
 
 	body := bytes.NewBufferString(formdata.Encode())
@@ -252,10 +266,19 @@ func (d *ElectricConn) verifyMeterNo(discoType, meterNo, meterType string) (bool
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	client := &http.Client{}
-	_, err = client.Do(req)
+	resp, err := client.Do(req)
+
 	if err != nil {
 		return false, err
 	}
 
+	apiResponse := models.VerifyMeterResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+		return false, err
+	}
+
+	if apiResponse.Content.Err != "" {
+		return false, errors.New(apiResponse.Content.Err)
+	}
 	return true, nil
 }

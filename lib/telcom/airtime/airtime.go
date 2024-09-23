@@ -13,7 +13,7 @@ import (
 	"strconv"
 
 	"github.com/aremxyplug-be/db"
-	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/aremxyplug-be/lib/randomgen"
 	"go.uber.org/zap"
 )
@@ -25,21 +25,22 @@ var (
 
 type AirtimeConn struct {
 	logger *zap.Logger
-	db     db.DataStore
+	db     db.TelcomStore
 }
 
-func NewAirtimeConn(logger *zap.Logger, store db.DataStore) *AirtimeConn {
+func NewAirtimeConn(store db.TelcomStore, logger *zap.Logger) *AirtimeConn {
 	return &AirtimeConn{
 		logger: logger,
 		db:     store,
 	}
 }
 
-func (a *AirtimeConn) BuyAirtime(airtime models.AirtimeInfo) (*models.AirtimeResponse, error) {
+func (a *AirtimeConn) BuyAirtime(airtime telcom.AirtimeInfo) (*telcom.AirtimeResponse, error) {
 
 	id, err := randomgen.GenerateOrderID()
 	if err != nil {
 		a.logger.Error("unable to generate orderID", zap.Any("error:", "failed to generate orderID"))
+		return nil, err
 	}
 	resp, err := a.buy(airtime)
 	if err != nil {
@@ -53,7 +54,7 @@ func (a *AirtimeConn) BuyAirtime(airtime models.AirtimeInfo) (*models.AirtimeRes
 	log.Println(resp.Status)
 	defer resp.Body.Close()
 
-	apiResponse := models.AirtimeApiResponse{}
+	apiResponse := telcom.AirtimeApiResponse{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		if err == io.EOF {
 			return nil, logAndReturnError(a.logger, "Empty response from server")
@@ -71,13 +72,14 @@ func (a *AirtimeConn) BuyAirtime(airtime models.AirtimeInfo) (*models.AirtimeRes
 	amount := strconv.Itoa(apiResponse.Amount)
 	product := apiResponse.Network + " " + airtime.Product
 
-	result := &models.AirtimeResponse{
+	result := &telcom.AirtimeResponse{
 		OrderID:         id,
 		Amount:          amount,
 		Network:         apiResponse.Network,
 		Description:     apiResponse.Message,
 		Phone_no:        apiResponse.Phone_no,
 		Product:         product,
+		Name:            airtime.Username,
 		Recipient:       airtime.Recipient,
 		ReferenceNumber: apiResponse.Reference,
 		Status:          apiResponse.Status,
@@ -92,24 +94,24 @@ func (a *AirtimeConn) BuyAirtime(airtime models.AirtimeInfo) (*models.AirtimeRes
 	return result, nil
 }
 
-func (a *AirtimeConn) GetTransactionDetail(id string) (models.AirtimeResponse, error) {
+func (a *AirtimeConn) GetTransactionDetail(id string) (telcom.AirtimeResponse, error) {
 	result, err := a.getTransacationDetails(id)
 	if err != nil {
-		return models.AirtimeResponse{}, err
+		return telcom.AirtimeResponse{}, err
 	}
 
 	return result, nil
 }
 
-func (a *AirtimeConn) QueryTransaction(id string) (*models.AirtimeResponse, error) {
+func (a *AirtimeConn) QueryTransaction(id string) (*telcom.AirtimeResponse, error) {
 	resp, err := a.queryTransaction(id)
 	if err != nil {
-		return &models.AirtimeResponse{}, err
+		return &telcom.AirtimeResponse{}, err
 	}
 	defer resp.Body.Close()
 
-	apiResponse := models.EduApiResponse{}
-	result := &models.AirtimeResponse{}
+	apiResponse := telcom.AirtimeApiResponse{}
+	result := &telcom.AirtimeResponse{}
 	jsonerr := json.NewDecoder(resp.Body).Decode(&apiResponse)
 	if jsonerr != nil {
 		a.logger.Error("Error querying API...", zap.Error(jsonerr))
@@ -120,8 +122,8 @@ func (a *AirtimeConn) QueryTransaction(id string) (*models.AirtimeResponse, erro
 
 }
 
-func (a *AirtimeConn) GetUserTransaction(user string) ([]models.AirtimeResponse, error) {
-	resp, err := a.getAllTransactions(user)
+func (a *AirtimeConn) GetUserTransaction(username string) ([]telcom.AirtimeResponse, error) {
+	resp, err := a.getAllTransactions(username)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +131,7 @@ func (a *AirtimeConn) GetUserTransaction(user string) ([]models.AirtimeResponse,
 	return resp, nil
 }
 
-func (a *AirtimeConn) GetAllTransactions() ([]models.AirtimeResponse, error) {
+func (a *AirtimeConn) GetAllTransactions() ([]telcom.AirtimeResponse, error) {
 	result, err := a.getAllTransactions("")
 	if err != nil {
 		a.logger.Error("Database error try again...", zap.Error(err))
@@ -139,7 +141,7 @@ func (a *AirtimeConn) GetAllTransactions() ([]models.AirtimeResponse, error) {
 	return result, nil
 }
 
-func (a *AirtimeConn) buy(data models.AirtimeInfo) (*http.Response, error) {
+func (a *AirtimeConn) buy(data telcom.AirtimeInfo) (*http.Response, error) {
 
 	formdata := url.Values{
 		"network":      {data.Network},
@@ -167,18 +169,18 @@ func (a *AirtimeConn) buy(data models.AirtimeInfo) (*http.Response, error) {
 	return resp, nil
 }
 
-func (a *AirtimeConn) saveTransaction(detail *models.AirtimeResponse) error {
+func (a *AirtimeConn) saveTransaction(detail *telcom.AirtimeResponse) error {
 	err := a.db.SaveAirtimeTransaction(detail)
 	return err
 }
 
-func (a *AirtimeConn) getTransacationDetails(id string) (models.AirtimeResponse, error) {
+func (a *AirtimeConn) getTransacationDetails(id string) (telcom.AirtimeResponse, error) {
 	result, err := a.db.GetAirtimeTransactionDetails(id)
 	return result, err
 }
 
-func (a *AirtimeConn) getAllTransactions(user string) ([]models.AirtimeResponse, error) {
-	results, err := a.db.GetAllAirtimeTransactions(user)
+func (a *AirtimeConn) getAllTransactions(username string) ([]telcom.AirtimeResponse, error) {
+	results, err := a.db.GetAllAirtimeTransactions(username)
 	return results, err
 }
 

@@ -42,7 +42,6 @@ var (
 	eduColl  = "edu"
 	airColl  = "airtime"
 	tvColl   = "tv-sub"
-	bankColl = "bank"
 )
 
 type mongoStore struct {
@@ -103,7 +102,21 @@ func (m *mongoStore) GetUserByUsername(username string) (*models.User, error) {
 	}
 	return user, nil
 }
-func (d *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*models.User, error) {
+
+func (m *mongoStore) GetUserByID(id string) (*models.User, error) {
+
+	filter := bson.M{
+		"id": id,
+	}
+	user := &models.User{}
+	err := m.col(models.UserCollectionName).FindOne(context.Background(), filter).Decode(user)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func (m *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*models.User, error) {
 	filter := bson.M{
 		"$or": []bson.M{
 			{"email": email},
@@ -111,8 +124,8 @@ func (d *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*m
 		},
 	}
 	user := &models.User{}
-	err := d.mongoClient.
-		Database(d.databaseName).
+	err := m.mongoClient.
+		Database(m.databaseName).
 		Collection(models.UserCollectionName).
 		FindOne(context.Background(), filter).
 		Decode(user)
@@ -123,11 +136,11 @@ func (d *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*m
 
 }
 
-func (d *mongoStore) CreateMessage(message *models.Message) error {
+func (m *mongoStore) CreateMessage(message *models.Message) error {
 	ctx := context.Background()
 	var modelInDB models.Message
-	err := d.mongoClient.
-		Database(d.databaseName).
+	err := m.mongoClient.
+		Database(m.databaseName).
 		Collection(models.MessagesCollectionName).
 		FindOne(ctx, bson.M{"id": message.ID}).
 		Decode(&modelInDB)
@@ -143,8 +156,8 @@ func (d *mongoStore) CreateMessage(message *models.Message) error {
 		return nil
 	}
 
-	_, err = d.mongoClient.
-		Database(d.databaseName).
+	_, err = m.mongoClient.
+		Database(m.databaseName).
 		Collection(models.MessagesCollectionName).
 		InsertOne(ctx, message)
 	if err != nil {
@@ -155,12 +168,12 @@ func (d *mongoStore) CreateMessage(message *models.Message) error {
 }
 
 // update user password
-func (d *mongoStore) UpdateUserPassword(email string, password string) error {
+func (m *mongoStore) UpdateUserPassword(email string, password string) error {
 	ctx := context.Background()
 	filter := bson.M{"email": email}
 	update := bson.M{"$set": bson.M{"password": password}}
-	_, err := d.mongoClient.
-		Database(d.databaseName).
+	_, err := m.mongoClient.
+		Database(m.databaseName).
 		Collection(models.UserCollectionName).
 		UpdateOne(ctx, filter, update)
 	if err != nil {
@@ -169,332 +182,21 @@ func (d *mongoStore) UpdateUserPassword(email string, password string) error {
 	return nil
 }
 
-// SaveTransaction saves a data transaction to the database.
-func (m *mongoStore) SaveDataTransaction(details interface{}) error {
-
-	err := m.saveTransaction(dataColl, details)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// GetTransactionDetails returns a data transaction detail.
-func (m *mongoStore) GetDataTransactionDetails(id string) (models.DataResult, error) {
-	res := models.DataResult{}
-
-	findResult := m.getTransaction(id, dataColl)
-	err := findResult.Decode(&res)
-
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return models.DataResult{}, nil
-		}
-		// write for errors
-		log.Println(err)
-		return models.DataResult{}, err
-	}
-
-	return res, nil
-
-}
-
-// GetAllTransaction returns all the data transactions associated to a user, if an empty string is passed it returns all data transactions.
-func (m *mongoStore) GetAllDataTransactions(user string) ([]models.DataResult, error) {
+func (m *mongoStore) UpdateBVNField(user models.User) error {
 	ctx := context.Background()
-	res := []models.DataResult{}
-
-	cur, err := m.getAllTransaction(dataColl, user)
-	if err != nil {
-		return []models.DataResult{}, err
-	}
-
-	if cur.Next(ctx) {
-		resp := models.DataResult{}
-		if err := cur.Decode(&resp); err != nil {
-			return nil, err
-		}
-		res = append(res, resp)
-	}
-	defer cur.Close(ctx)
-
-	return res, nil
-
-}
-
-func (m *mongoStore) GetSpecTransDetails(id string) (models.SpectranetResult, error) {
-	res := models.SpectranetResult{}
-
-	findResult := m.getTransaction(id, dataColl)
-	err := findResult.Decode(&res)
-
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return models.SpectranetResult{}, nil
-		}
-		// write for errors
-		log.Println(err)
-		return models.SpectranetResult{}, err
-	}
-
-	return res, nil
-}
-
-func (m *mongoStore) GetAllSpecDataTransactions(user string) ([]models.SpectranetResult, error) {
-	ctx := context.Background()
-	res := []models.SpectranetResult{}
-
-	cur, err := m.getAllTransaction(dataColl, user)
-	if err != nil {
-		return []models.SpectranetResult{}, err
-	}
-
-	if cur.Next(ctx) {
-		resp := models.SpectranetResult{}
-		if err := cur.Decode(&resp); err != nil {
-			return nil, err
-		}
-		res = append(res, resp)
-	}
-	defer cur.Close(ctx)
-
-	return res, nil
-}
-
-func (m *mongoStore) GetSmileTransDetails(id string) (models.SmileResult, error) {
-	res := models.SmileResult{}
-
-	findResult := m.getTransaction(id, dataColl)
-	err := findResult.Decode(&res)
-
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return models.SmileResult{}, nil
-		}
-		// write for errors
-		log.Println(err)
-		return models.SmileResult{}, err
-	}
-
-	return res, nil
-}
-
-func (m *mongoStore) GetAllSmileDataTransactions(user string) ([]models.SmileResult, error) {
-	ctx := context.Background()
-	res := []models.SmileResult{}
-
-	cur, err := m.getAllTransaction(dataColl, user)
-	if err != nil {
-		return []models.SmileResult{}, err
-	}
-
-	if cur.Next(ctx) {
-		resp := models.SmileResult{}
-		if err := cur.Decode(&resp); err != nil {
-			return nil, err
-		}
-		res = append(res, resp)
-	}
-	defer cur.Close(ctx)
-
-	return res, nil
-}
-
-// SaveEduTransactions saves the result of the edu transaction to the database.
-func (m *mongoStore) SaveEduTransaction(details *models.EduResponse) error {
-	err := m.saveTransaction(eduColl, details)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (m *mongoStore) GetEduTransactionDetails(id string) (models.EduResponse, error) {
-	res := models.EduResponse{}
-
-	result := m.getTransaction(id, eduColl)
-
-	err := result.Decode(&res)
-
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return models.EduResponse{}, nil
-		}
-		// return error
-		return models.EduResponse{}, err
-	}
-
-	return res, nil
-
-}
-
-func (m *mongoStore) GetAllEduTransactions(user string) ([]models.EduResponse, error) {
-	ctx := context.Background()
-	res := []models.EduResponse{}
-
-	cur, err := m.getAllTransaction(dataColl, user)
-	if err != nil {
-		return []models.EduResponse{}, err
-	}
-
-	if cur.Next(ctx) {
-		resp := models.EduResponse{}
-		if err := cur.Decode(&resp); err != nil {
-			return nil, err
-		}
-		res = append(res, resp)
-	}
-	defer cur.Close(ctx)
-
-	return res, nil
-}
-
-func (m *mongoStore) SaveAirtimeTransaction(details *models.AirtimeResponse) error {
-	err := m.saveTransaction(airColl, details)
+	filter := bson.M{"userID": user.ID}
+	update := bson.M{"$set": bson.M{"bvn": user.BVN}}
+	_, err := m.mongoClient.
+		Database(m.databaseName).
+		Collection(models.UserCollectionName).
+		UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (m *mongoStore) GetAirtimeTransactionDetails(id string) (models.AirtimeResponse, error) {
-	res := models.AirtimeResponse{}
-
-	result := m.getTransaction(id, eduColl)
-
-	err := result.Decode(&res)
-
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return models.AirtimeResponse{}, nil
-		}
-		// return error
-		return models.AirtimeResponse{}, err
-	}
-
-	return res, nil
-}
-
-func (m *mongoStore) GetAllAirtimeTransactions(user string) ([]models.AirtimeResponse, error) {
-	ctx := context.Background()
-	res := []models.AirtimeResponse{}
-
-	cur, err := m.getAllTransaction(dataColl, user)
-	if err != nil {
-		return []models.AirtimeResponse{}, err
-	}
-
-	if cur.Next(ctx) {
-		resp := models.AirtimeResponse{}
-		if err := cur.Decode(&resp); err != nil {
-			return nil, err
-		}
-		res = append(res, resp)
-	}
-	defer cur.Close(ctx)
-
-	return res, nil
-}
-
-func (m *mongoStore) SaveTVSubcriptionTransaction(details *models.BillResult) error {
-	err := m.saveTransaction(tvColl, details)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (m *mongoStore) GetTvSubscriptionDetails(id string) (models.BillResult, error) {
-	res := models.BillResult{}
-
-	result := m.getTransaction(id, tvColl)
-
-	err := result.Decode(&res)
-
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return models.BillResult{}, nil
-		}
-		// return error
-		return models.BillResult{}, err
-	}
-
-	return res, nil
-}
-
-func (m *mongoStore) GetAllTvSubTransactions(user string) ([]models.BillResult, error) {
-	ctx := context.Background()
-	res := []models.BillResult{}
-
-	cur, err := m.getAllTransaction(dataColl, user)
-	if err != nil {
-		return []models.BillResult{}, err
-	}
-
-	if cur.Next(ctx) {
-		resp := models.BillResult{}
-		if err := cur.Decode(&resp); err != nil {
-			return nil, err
-		}
-		res = append(res, resp)
-	}
-	defer cur.Close(ctx)
-
-	return res, nil
-}
-
-func (m *mongoStore) SaveElectricTransaction(details *models.ElectricResult) error {
-	err := m.saveTransaction(tvColl, details)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (m *mongoStore) GetElectricSubDetails(id string) (models.ElectricResult, error) {
-	res := models.ElectricResult{}
-
-	result := m.getTransaction(id, tvColl)
-
-	err := result.Decode(&res)
-
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return models.ElectricResult{}, nil
-		}
-		// return error
-		return models.ElectricResult{}, err
-	}
-
-	return res, nil
-}
-
-func (m *mongoStore) GetAllElectricSubTransactions(user string) ([]models.ElectricResult, error) {
-	ctx := context.Background()
-	res := []models.ElectricResult{}
-
-	cur, err := m.getAllTransaction(dataColl, user)
-	if err != nil {
-		return []models.ElectricResult{}, err
-	}
-
-	if cur.Next(ctx) {
-		resp := models.ElectricResult{}
-		if err := cur.Decode(&resp); err != nil {
-			return nil, err
-		}
-		res = append(res, resp)
-	}
-	defer cur.Close(ctx)
-
-	return res, nil
-}
-
-func (m *mongoStore) getTransaction(id, collectionName string) *mongo.SingleResult {
+func (m *mongoStore) getRecord(id, collectionName string) *mongo.SingleResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	oID, err := strconv.Atoi(id)
@@ -510,7 +212,7 @@ func (m *mongoStore) getTransaction(id, collectionName string) *mongo.SingleResu
 
 }
 
-func (m *mongoStore) saveTransaction(collectionName string, details interface{}) error {
+func (m *mongoStore) saveToDB(collectionName string, details interface{}) error {
 	ctx := context.Background()
 
 	_, err := m.col(collectionName).InsertOne(ctx, details)
@@ -522,14 +224,14 @@ func (m *mongoStore) saveTransaction(collectionName string, details interface{})
 	return nil
 }
 
-func (m *mongoStore) getAllTransaction(collectionName, user string) (*mongo.Cursor, error) {
+func (m *mongoStore) getAllRecords(collectionName, username string) (*mongo.Cursor, error) {
 	ctx := context.Background()
 	var filter bson.D
 
-	if user == "" {
+	if username == "" {
 		filter = bson.D{}
 	} else {
-		filter = bson.D{primitive.E{Key: "username", Value: user}}
+		filter = bson.D{primitive.E{Key: "username", Value: username}}
 	}
 
 	cur, err := m.col(collectionName).Find(ctx, filter)
@@ -569,104 +271,4 @@ func (m *mongoStore) GetOTP(email string) (models.OTP, error) {
 	}
 
 	return data, nil
-}
-
-func (m *mongoStore) SaveBanktransaction(details interface{}) error {
-	err := m.saveTransaction(bankColl, details)
-	return err
-}
-
-// edit to bank transaction
-func (m *mongoStore) GetBankTransactionDetails(id string) (interface{}, error) {
-	ctx := context.Background()
-	res := []models.BillResult{}
-
-	cur, err := m.getAllTransaction(dataColl, id)
-	if err != nil {
-		return nil, err
-	}
-
-	if cur.Next(ctx) {
-		resp := models.BillResult{}
-		if err := cur.Decode(&resp); err != nil {
-			return nil, err
-		}
-		res = append(res, resp)
-	}
-	defer cur.Close(ctx)
-
-	return res, nil
-}
-
-// edit to bank transaction
-func (m *mongoStore) GetAllBankTransactions(user string) (interface{}, error) {
-	ctx := context.Background()
-	res := []models.ElectricResult{}
-
-	cur, err := m.getAllTransaction(dataColl, user)
-	if err != nil {
-		return nil, err
-	}
-
-	if cur.Next(ctx) {
-		resp := models.ElectricResult{}
-		if err := cur.Decode(&resp); err != nil {
-			return nil, err
-		}
-		res = append(res, resp)
-	}
-	defer cur.Close(ctx)
-
-	return nil, nil
-}
-
-func (m *mongoStore) SaveBankList(banklist []models.BankDetails) error {
-	err := m.saveTransaction("", banklist)
-	return err
-}
-
-func (m *mongoStore) GetBankDetail(bankName string) (models.BankDetails, error) {
-	ctx := context.Background()
-	bankDetail := models.BankDetails{}
-
-	filter := bson.D{primitive.E{Key: "name", Value: bankName}}
-	res := m.col("").FindOne(ctx, filter)
-
-	err := res.Decode(&bankDetail)
-	if err != nil {
-		return models.BankDetails{}, err
-	}
-
-	return bankDetail, nil
-}
-
-func (m *mongoStore) SaveVirtualAccount(account models.AccountDetails) error {
-	err := m.saveTransaction("", account)
-	return err
-}
-
-func (m *mongoStore) SaveCounterParty(counterparty interface{}) error {
-	err := m.saveTransaction("", counterparty)
-	return err
-}
-
-func (m *mongoStore) SaveTransfer(transfer models.TransferResponse) error {
-	err := m.saveTransaction("", transfer)
-	return err
-}
-
-func (m *mongoStore) GetCounterParty(accountNumber, bankname string) (models.CounterParty, error) {
-	ctx := context.Background()
-	counterparty := models.CounterParty{}
-
-	// the filter should be using aggregate  search function since the fields that are to be acccessed are not on the top level.
-	filter := bson.D{primitive.E{Key: "account_number", Value: accountNumber}, primitive.E{Key: "bank_name", Value: bankname}}
-	res := m.col("").FindOne(ctx, filter)
-
-	err := res.Decode(&counterparty)
-	if err != nil {
-		return models.CounterParty{}, err
-	}
-
-	return counterparty, nil
 }

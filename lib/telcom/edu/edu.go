@@ -24,14 +24,14 @@ var (
 )
 
 type EduConn struct {
-	Dbconn db.DataStore
-	Logger *zap.Logger
+	db     db.UtilitiesStore
+	logger *zap.Logger
 }
 
-func NewEdu(DbConn db.DataStore, logger *zap.Logger) *EduConn {
+func NewEdu(DbConn db.UtilitiesStore, logger *zap.Logger) *EduConn {
 	return &EduConn{
-		Dbconn: DbConn,
-		Logger: logger,
+		db:     DbConn,
+		logger: logger,
 	}
 }
 
@@ -48,7 +48,7 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 	id, err := randomgen.GenerateOrderID()
 	if err != nil {
 		// check error
-		edu.Logger.Error("Could not generate orderID...", zap.Error(err))
+		edu.logger.Error("Could not generate orderID...", zap.Error(err))
 		return nil, errors.New("api call error")
 	}
 
@@ -57,19 +57,40 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 	}
 	defer resp.Body.Close()
 	apiResponse := models.EduApiResponse{}
-
-	log.Println("Status: ", resp.Status)
-	err = json.NewDecoder(resp.Body).Decode(&apiResponse)
-	log.Println(apiResponse)
-	if err == io.EOF {
-		log.Println("No response from body")
-		// edu.Logger.Error("Empty response body", zap.Error(err))
-		return nil, errors.New("empty response from server")
-	} else if err != nil {
-		log.Println("other error:", err)
-		// edu.Logger.Error("error returned from server: ", zap.Error(err))
-		return nil, errors.New("error returned from server")
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println(err)
+		return nil, errors.New("could not unmarshal response body")
 	}
+	log.Println(string(body))
+	log.Println("Status: ", resp.Status)
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		if err == io.EOF {
+			log.Println("No response from body")
+			// edu.logger.Error("Empty response body", zap.Error(err))
+			return nil, errors.New("empty response from server")
+		} else {
+			log.Println("other error:", err)
+			// edu.logger.Error("error returned from server: ", zap.Error(err))
+			return nil, errors.New("could not unmarshal response body")
+		}
+
+	}
+	log.Printf("%+v", apiResponse)
+
+	/*
+		err = json.NewDecoder(resp.Body).Decode(&apiResponse)
+		log.Println(apiResponse)
+		if err == io.EOF {
+			log.Println("No response from body")
+			// edu.logger.Error("Empty response body", zap.Error(err))
+			return nil, errors.New("empty response from server")
+		} else if err != nil {
+			log.Println("other error:", err)
+			// edu.logger.Error("error returned from server: ", zap.Error(err))
+			return nil, errors.New("error returned from server")
+		}
+	*/
 
 	if apiResponse.Success_Response == "false" {
 		log.Println(apiResponse.Message)
@@ -77,12 +98,23 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 	}
 
 	transactionID := randomgen.GenerateTransactionID("edu")
-	pinGenerated := []string{
-		apiResponse.Pin.Pin1,
-		apiResponse.Pin.Pin2,
-		apiResponse.Pin.Pin3,
-		apiResponse.Pin.Pin4,
-		apiResponse.Pin.Pin5,
+	pins := []string{
+		apiResponse.Pin1,
+		apiResponse.Pin2,
+		apiResponse.Pin3,
+		apiResponse.Pin4,
+		apiResponse.Pin5,
+		apiResponse.Pin6,
+		apiResponse.Pin7,
+		apiResponse.Pin8,
+		apiResponse.Pin9,
+		apiResponse.Pin10,
+	}
+	var pinGenerated []string
+	for _, pin := range pins {
+		if pin != "" {
+			pinGenerated = append(pinGenerated, pin)
+		}
 	}
 
 	// associate the responses for the api
@@ -100,9 +132,11 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 		TransactionID:   transactionID,
 	}
 
+	log.Printf("%+v", result)
+
 	// write to database
-	if saveErr := edu.saveTransaction(result); err != nil {
-		edu.Logger.Error("Database error try again...", zap.Error(saveErr))
+	if err := edu.saveTransaction(result); err != nil {
+		edu.logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("database insert error")
 	}
 
@@ -132,7 +166,7 @@ func (edu *EduConn) GetTransactionDetail(id string) (models.EduResponse, error) 
 	resp := models.EduResponse{}
 	result, err := edu.getTransactionDetails(id)
 	if err != nil {
-		edu.Logger.Error("Database error try again...", zap.Error(err))
+		edu.logger.Error("Database error try again...", zap.Error(err))
 		return resp, errors.New("Database request error: " + err.Error())
 	}
 
@@ -140,7 +174,7 @@ func (edu *EduConn) GetTransactionDetail(id string) (models.EduResponse, error) 
 }
 
 func (edu *EduConn) GetAllTransaction(user string) ([]models.EduResponse, error) {
-	resp, err := edu.Dbconn.GetAllEduTransactions(user)
+	resp, err := edu.db.GetAllEduTransactions(user)
 	if err != nil {
 		return nil, err
 	}
@@ -204,8 +238,24 @@ func (edu *EduConn) buyPin(examType string, pinNumber string) (*http.Response, e
 
 func (edu *EduConn) saveTransaction(detail *models.EduResponse) error {
 
-	err := edu.Dbconn.SaveEduTransaction(detail)
-	return err
+	if edu == nil {
+		return errors.New("edu is nil")
+	}
+	if edu.logger == nil {
+		return errors.New("logger is nil")
+	}
+	if edu.db == nil {
+		return errors.New("db is nil")
+	}
+
+	log.Println(detail)
+
+	err := edu.db.SaveEduTransaction(detail)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (edu *EduConn) queryTransaction(id string) (*http.Response, error) {
@@ -231,9 +281,9 @@ func (edu *EduConn) queryTransaction(id string) (*http.Response, error) {
 
 func (edu *EduConn) getTransactionDetails(id string) (models.EduResponse, error) {
 
-	res, err := edu.Dbconn.GetEduTransactionDetails(id)
+	res, err := edu.db.GetEduTransactionDetails(id)
 	if err != nil {
-		edu.Logger.Error("Error getting details from database...", zap.Error(err))
+		edu.logger.Error("Error getting details from database...", zap.Error(err))
 		return models.EduResponse{}, errors.New("database error")
 	}
 

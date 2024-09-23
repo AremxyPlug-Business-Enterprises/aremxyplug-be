@@ -57,3 +57,34 @@ type virtualNubanPayload struct {
 type virtualAccountResponse struct {
 	Data data `json:"data"`
 }
+
+type createDeposit struct {
+	Data createDepositData `json:"data"`
+}
+
+type createDepositData struct {
+	Attributes    depositAttributes    `json:"attributes"`
+	Relationships depositRelationships `json:"relationships"`
+	Type          string               `json:"type"`
+}
+
+type depositAttributes struct {
+	ProductName string `json:"productName"`
+}
+
+type depositRelationships struct {
+	Customer depositCustomer `json:"customer"`
+}
+
+type depositCustomer struct {
+	Data depositCustomerData `json:"data"`
+}
+
+type depositCustomerData struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
+}
+
+type depositCustomerResponse struct {
+	Data depositCustomerData `json:"data"`
+}

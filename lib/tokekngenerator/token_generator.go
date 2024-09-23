@@ -45,8 +45,7 @@ func (j *jwtTokenGenerator) GenerateToken(data dto.Claims) (string, error) {
 func (j *jwtTokenGenerator) GenerateTokenWithExpiration(data dto.Claims, duration time.Duration) (string, error) {
 	expirationTime := time.Now().Add(duration)
 	claims := &models.JWTClaims{
-		ID:    data.PersonId,
-		Email: data.Email,
+		ID: data.PersonId,
 		RegisteredClaims: &jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 		},
@@ -75,7 +74,6 @@ func (j *jwtTokenGenerator) ValidateToken(tokenString string) (*models.JWTClaims
 		return nil, ErrInvalidToken
 	}
 	return &models.JWTClaims{
-		Email: claims.Email,
-		ID:    claims.ID,
+		ID: claims.ID,
 	}, nil
 }

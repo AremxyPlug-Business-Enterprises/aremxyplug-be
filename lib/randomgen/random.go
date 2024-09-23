@@ -12,11 +12,14 @@ import (
 	"time"
 )
 
+/*
 var (
-	charset = os.Getenv("CHARSET")
-	numbset = os.Getenv(("NUMBSET"))
-)
 
+	charset = os.Getenv("CHARSET")
+	numbset = os.Getenv("NUMBSET")
+
+)
+*/
 func GenerateRandomNum(numberOfDigits int) (int, error) {
 	maxLimit := int64(int(math.Pow10(numberOfDigits)) - 1)
 	lowLimit := int(math.Pow10(numberOfDigits - 1))
@@ -41,6 +44,12 @@ func GenerateRandomNum(numberOfDigits int) (int, error) {
 
 func GenerateTransactionID(product string) string {
 
+	charset, valid := os.LookupEnv("CHARSET")
+	if !valid {
+		fmt.Printf("%s", "Could not find NUMBSET environment variable")
+		charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	}
+
 	prod_type := strings.ToUpper(product)
 	seedRand := random.New(random.NewSource(time.Now().UnixNano()))
 
@@ -58,6 +67,13 @@ func GenerateTransactionID(product string) string {
 
 // generateOrderID generates a unique OrderID
 func GenerateOrderID() (int, error) {
+
+	numbset, valid := os.LookupEnv("NUMBSET")
+	if !valid {
+		fmt.Printf("%s", "Could not find NUMBSET environment variable")
+		numbset = "1234567890"
+	}
+
 	seedRand := random.New(random.NewSource(int64(time.Now().UnixNano())))
 
 	b := make([]byte, 10)
@@ -76,6 +92,12 @@ func GenerateOrderID() (int, error) {
 }
 
 func GenerateRequestID() string {
+
+	charset, valid := os.LookupEnv("CHARSET")
+	if !valid {
+		fmt.Printf("%s", "Could not find NUMBSET environment variable")
+		charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	}
 
 	random.New(random.NewSource(int64(time.Now().UnixNano())))
 

@@ -5,7 +5,7 @@ type ElectricInfo struct {
 	Meter_No   string `json:"meter_no"`   // meter number
 	Meter_Type string `json:"meter_type"` // meter type
 	Amount     int    `json:"amount"`
-	Phone      int    `json:"phone"`
+	Phone      string `json:"phone"`
 	Email      string `json:"email"`
 	RequestID  string `json:"request_id"`
 }
@@ -15,7 +15,8 @@ type ElectricAPI struct {
 	Contents        Content         `json:"content"`
 	TransactionDate TransactionDate `json:"transaction_date"`
 	RequestID       string          `json:"requestId"`
-	Amount          float64         `json:"amount"`
+	Amount          string          `json:"amount"`
+	Purchased_Token string          `json:"purchased_code"`
 }
 
 type Content struct {
@@ -38,17 +39,29 @@ type TransactionDate struct {
 	Date string `json:"date"`
 }
 
+type VerifyMeterResponse struct {
+	Code    string        `json:"code"`
+	Content verifyContent `json:"content"`
+}
+
+type verifyContent struct {
+	Name         string `json:"name"`
+	Meter_Number string `json:"meter_number"`
+	Err          string `json:"error,omitempty"`
+}
+
 type ElectricResult struct {
-	DiscoType     string `json:"disco_type"`
-	MeterType     string `json:"meter_type"` // Prepaid
-	Name          string `json:"name"`
-	MeterNumber   string `json:"meter_number"`
-	Phone         string `json:"phone"`
-	Email         string `json:"email"`
-	Product       string `json:"product"`
-	Description   string `json:"description"` // append serviceID and variation code.
-	BillGenerated string `json:"bill_generated"`
-	OrderID       int    `json:"order_id"`
-	TransactionID string `json:"transaction_id"`
-	RequestID     string `json:"request_id"`
+	Amount        string `json:"amount"`
+	DiscoType     string `json:"disco_type" bson:"DiscoType"`
+	MeterType     string `json:"meter_type" bson:"meter_type"` // Prepaid
+	Name          string `json:"name" bson:"name"`
+	MeterNumber   string `json:"meter_number" bson:"meter_number"`
+	Phone         string `json:"phone" bson:"phone"`
+	Email         string `json:"email" bson:"email"`
+	Product       string `json:"product" bson:"product"`
+	Description   string `json:"description" bson:"description"` // append serviceID and variation code.
+	BillGenerated string `json:"bill_generated" bson:"bill_generated"`
+	OrderID       int    `json:"order_id" bson:"order_id"`
+	TransactionID string `json:"transaction_id" bson:"transaction_id"`
+	RequestID     string `json:"request_id" bson:"request_ID"`
 }

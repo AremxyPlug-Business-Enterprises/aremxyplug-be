@@ -1,15 +1,13 @@
 package transfer
 
 type intiateTransfer struct {
-	Data          transferData  `json:"data"`
-	Type          string        `json:"type"`
-	Account       account       `json:"account"`
-	Relationships relationships `json:"relationships"`
-	CounterParty  counterParty  `json:"counterParty"`
+	Data transferData `json:"data"`
 }
 
 type transferData struct {
-	Attributes transferDataAttributes `json:"attributes"`
+	Attributes    transferDataAttributes `json:"attributes"`
+	Relationships relationships          `json:"relationships"`
+	Type          string                 `json:"type"`
 }
 
 type transferDataAttributes struct {
@@ -24,7 +22,9 @@ type account struct {
 }
 
 type relationships struct {
-	DestinationAcc destination `json:"destinationAccount"`
+	DestinationAcc destination  `json:"destinationAccount"`
+	Account        account      `json:"account"`
+	CounterParty   counterParty `json:"counterParty"`
 }
 
 type destination struct {
@@ -52,9 +52,10 @@ type transferResultData struct {
 }
 
 type transferResultAttributes struct {
-	Reason  string  `json:"reason"`
-	Ammount float64 `json:"ammount"`
-	Status  string  `json:"status"`
+	Reason        string  `json:"reason"`
+	FailureReason string  `json:"failureReason"`
+	Ammount       float64 `json:"ammount"`
+	Status        string  `json:"status"`
 }
 
 type counterPartyAPIResponse struct {
@@ -62,12 +63,16 @@ type counterPartyAPIResponse struct {
 }
 
 type counterpartyResponseData struct {
-	Type         string `json:"type"`
-	ID           string `json:"id"`
-	AccountName  string `json:"accountName"`
-	AccontNumber string `json:"accontNumber"`
-	Status       string `json:"status"`
-	Bank         bank   `json:"bank"`
+	Type       string                         `json:"type"`
+	ID         string                         `json:"id"`
+	Attributes counterpartyResponseAttributes `json:"attributes"`
+}
+
+type counterpartyResponseAttributes struct {
+	AccountName   string `json:"accountName"`
+	AccountNumber string `json:"accountNumber"`
+	Status        string `json:"status"`
+	Bank          bank   `json:"bank"`
 }
 
 type bank struct {
@@ -80,13 +85,13 @@ type verifyAccountResponse struct {
 }
 
 type verifyAccountData struct {
-	AccountName   string                  `json:"accountName"`
-	AccountNumber string                  `json:"accountNumber"`
-	Attributes    verifyAccountAttributes `json:"attributes"`
+	Attributes verifyAccountAttributes `json:"attributes"`
 }
 
 type verifyAccountAttributes struct {
-	Bank bank `json:"bank"`
+	Bank          bank   `json:"bank"`
+	AccountName   string `json:"accountName"`
+	AccountNumber string `json:"accountNumber"`
 }
 
 type counterPartyPayload struct {

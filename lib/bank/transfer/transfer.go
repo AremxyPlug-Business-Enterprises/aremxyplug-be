@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 
@@ -11,26 +12,34 @@ import (
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/randomgen"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.uber.org/zap"
 )
 
 var (
-	api         = os.Getenv("ANCHOR_SANDBOX")
-	apikey      = os.Getenv("ANCHORAPI_KEY")
-	customer_id = os.Getenv("CUSTOMER_ID")
+	/*
+		api        = os.Getenv("ANCHOR_SANDBOX")
+		apikey     = os.Getenv("ANCHORAPI_KEY")
+		deposit_id = os.Getenv("DEPOSIT_ID")
+	*/
+	api        = os.Getenv("ANCHOR_API")
+	apikey     = os.Getenv("ANCHORAPI_PROD")
+	deposit_id = os.Getenv("DEPOSIT_ID_LIVE")
 )
 
 type Config struct {
-	db db.DataStore
+	db     db.DataStore
+	logger *zap.Logger
 }
 
-func NewConfig(store db.DataStore) *Config {
+func NewConfig(store db.DataStore, logger *zap.Logger) *Config {
 	return &Config{
-		db: store,
+		db:     store,
+		logger: logger,
 	}
 }
 
 // this endpoint should auto automatically initialize
-func (c *Config) listBanks() error {
+func (c *Config) ListBanks() error {
 	url := fmt.Sprintf("%s/%s", api, "banks")
 
 	req, _ := http.NewRequest("GET", url, nil)
@@ -40,15 +49,30 @@ func (c *Config) listBanks() error {
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		panic(err)
+		c.logger.Error(err.Error())
+		return ErrCreatingHTTPRequest
 	}
 	defer res.Body.Close()
 
 	apiResponse := bankLists{}
-	bankLists := []models.BankDetails{}
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		c.logger.Error(err.Error())
+		return err
+	}
+	c.logger.Log(c.logger.Level(), string(body))
+	// bankLists := []models.BankDetails{}
 
-	if err := json.NewDecoder(res.Body).Decode(&apiResponse); err != nil {
-		// do something with error
+	/*
+		if err := json.NewDecoder(res.Body).Decode(&apiResponse); err != nil {
+			// do something with error
+			c.logger.Error(err.Error())
+			return JSONError(err)
+		}
+	*/
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		c.logger.Error(err.Error())
+		return JSONError(err)
 	}
 
 	for _, bank := range apiResponse.BanksData {
@@ -57,11 +81,11 @@ func (c *Config) listBanks() error {
 			Name:    bank.Atrributes.Name,
 			NIPCode: bank.Atrributes.NIPCode,
 		}
-		bankLists = append(bankLists, bankList)
-	}
 
-	if err := c.db.SaveBankList(bankLists); err != nil {
-		return DBConnectionError(err)
+		if err := c.db.SaveBankList(bankList); err != nil {
+			return DBConnectionError(err)
+		}
+
 	}
 
 	return nil
@@ -70,51 +94,57 @@ func (c *Config) listBanks() error {
 func (c *Config) TransferToBank(info models.TransferInfo) (models.TransferResponse, error) {
 
 	// first check if the details is already in the database. if it is just procced to the point of transfer
-	details := verifyAccountResponse{}
 	counterparty, err := c.getCounterParty(info.Account_Number, info.Bank_name)
 	if err == mongo.ErrNoDocuments {
 		bankDetail, _ := c.db.GetBankDetail(info.Bank_name)
-		details, _ = c.verifyAccount(bankDetail.NIPCode, info.Account_Number)
-		counterparty, _ = c.createCounterParty(details)
+		details, err := c.verifyAccount(bankDetail.NIPCode, info.Account_Number)
+		if err != nil {
+			return models.TransferResponse{}, JSONError(err)
+		}
+		counterparty, err = c.createCounterParty(details)
+		if err != nil {
+			return models.TransferResponse{}, JSONError(err)
+		}
 	} else if err != nil {
 		return models.TransferResponse{}, DBConnectionError(err)
 	}
 
 	orderID, err := randomgen.GenerateOrderID()
 	if err != nil {
-
+		return models.TransferResponse{}, ErrGeneratingOrderID
 	}
 	transactionID := randomgen.GenerateTransactionID("TRF")
 	url := fmt.Sprintf("%s/%s", api, "transfers")
+	amount := info.Amount * 100
 
 	payload := intiateTransfer{
 		Data: transferData{
 			Attributes: transferDataAttributes{
-				Amount:   1000,
+				Amount:   amount,
 				Currency: "NGN",
 			},
-		},
-		Type: "NIPTransfer",
-		CounterParty: counterParty{
-			Data: data{
-				ID:   counterparty.ID,
-				Type: "CounterParty",
-			},
-		},
-		Relationships: relationships{
-			DestinationAcc: destination{
-				Data: struct {
-					Type string `json:"type"`
-				}{
-					Type: "SubAccount",
+			Relationships: relationships{
+				DestinationAcc: destination{
+					Data: struct {
+						Type string `json:"type"`
+					}{
+						Type: "SubAccount",
+					},
+				},
+				Account: account{
+					Data: data{
+						ID:   deposit_id, // the ID of the deposit account
+						Type: "DepositAccount",
+					},
+				},
+				CounterParty: counterParty{
+					Data: data{
+						ID:   counterparty.ID,
+						Type: "CounterParty",
+					},
 				},
 			},
-		},
-		Account: account{
-			Data: data{
-				ID:   "", // the ID of the deposit account
-				Type: "DepositAccount",
-			},
+			Type: "NIPTransfer",
 		},
 	}
 
@@ -138,15 +168,31 @@ func (c *Config) TransferToBank(info models.TransferInfo) (models.TransferRespon
 	defer resp.Body.Close()
 
 	apiResponse := transferResult{}
-
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.logger.Error(err.Error())
+		return models.TransferResponse{}, JSONError(err)
+	}
+	c.logger.Log(c.logger.Level(), string(body))
+	if resp.StatusCode != http.StatusCreated {
+		c.logger.Error(resp.Status)
+		return models.TransferResponse{}, ErrAccountValidationFailed
+	}
+	/*
+		if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+			c.logger.Error(err.Error())
+			return models.TransferResponse{}, JSONError(err)
+		}
+	*/
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		c.logger.Error(err.Error())
 		return models.TransferResponse{}, JSONError(err)
 	}
 
 	result := models.TransferResponse{
-		Bank_Name:      details.Data.Attributes.Bank.Name,
-		Account_Name:   details.Data.AccountName,
-		Account_No:     details.Data.AccountNumber,
+		Bank_Name:      counterparty.BankName,
+		Account_Name:   counterparty.AccountName,
+		Account_No:     counterparty.AccountNumber,
 		Product:        "Money Transfer",
 		Description:    "",
 		Reason:         info.Reason,
@@ -156,6 +202,7 @@ func (c *Config) TransferToBank(info models.TransferInfo) (models.TransferRespon
 	}
 
 	if err := c.saveTransaction(result); err != nil {
+		c.logger.Error(err.Error())
 		return result, DBConnectionError(err)
 	}
 
@@ -165,10 +212,11 @@ func (c *Config) TransferToBank(info models.TransferInfo) (models.TransferRespon
 
 func (c *Config) verifyAccount(sortCode, accNumber string) (verifyAccountResponse, error) {
 
-	url := fmt.Sprintf("%s/%s/%s", api, sortCode, accNumber)
+	url := fmt.Sprintf("%s/%s/%s/%s/%s", api, "payments", "verify-account", sortCode, accNumber)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		c.logger.Error(err.Error())
 		return verifyAccountResponse{}, ErrCreatingHTTPRequest
 	}
 
@@ -177,20 +225,36 @@ func (c *Config) verifyAccount(sortCode, accNumber string) (verifyAccountRespons
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
+		c.logger.Error(err.Error())
 		return verifyAccountResponse{}, ErrAPIConnectionFailed
 	}
 
 	defer res.Body.Close()
 
-	if res.StatusCode != http.StatusCreated {
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		c.logger.Error(err.Error())
+		return verifyAccountResponse{}, err
+	}
+	c.logger.Log(c.logger.Level(), string(body))
+
+	if res.StatusCode != http.StatusOK {
 		// return that account wasn't found
+		c.logger.Log(c.logger.Level(), res.Status)
 		return verifyAccountResponse{}, ErrAccountValidationFailed
 	}
 
 	response := verifyAccountResponse{}
 
-	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
-		return verifyAccountResponse{}, JSONError(err)
+	/*
+		if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+			c.logger.Error(err.Error())
+			return verifyAccountResponse{}, JSONError(err)
+		}
+	*/
+	if err := json.Unmarshal(body, &response); err != nil {
+		c.logger.Error(err.Error())
+		return verifyAccountResponse{}, err
 	}
 
 	return response, nil
@@ -203,16 +267,16 @@ func (c *Config) createCounterParty(info verifyAccountResponse) (models.CounterP
 
 	payload := counterPartyPayload{}
 	payload.Data.Type = "CounterParty"
-	payload.Data.Attributes.AccountName = info.Data.AccountName
+	payload.Data.Attributes.AccountName = info.Data.Attributes.AccountName
 	payload.Data.Attributes.BankCode = info.Data.Attributes.Bank.NipCode
 	payload.Data.Attributes.VerifyName = true
-	payload.Data.Attributes.AccountNumber = info.Data.AccountNumber
-	payload.Data.Relationships.Bank.Data.ID = customer_id
+	payload.Data.Attributes.AccountNumber = info.Data.Attributes.AccountNumber
+	payload.Data.Relationships.Bank.Data.ID = deposit_id
 	payload.Data.Relationships.Bank.Data.Type = "DepositAccount"
 
 	requestBody, err := json.Marshal(payload)
 	if err != nil {
-		return models.CounterParty{}, JSONError(err)
+		return models.CounterParty{}, err
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
@@ -230,25 +294,39 @@ func (c *Config) createCounterParty(info verifyAccountResponse) (models.CounterP
 	}
 	defer resp.Body.Close()
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.logger.Error(err.Error())
+		return models.CounterParty{}, JSONError(err)
+	}
+	c.logger.Log(c.logger.Level(), string(body))
 	apiResponse := counterPartyAPIResponse{}
 
 	if resp.StatusCode != http.StatusCreated {
+		c.logger.Log(c.logger.Level(), resp.Status)
 		return models.CounterParty{}, ErrCounterpartyCreationFailed
 	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		return models.CounterParty{}, JSONError(err)
+	/*
+		if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+			c.logger.Error(err.Error())
+			return models.CounterParty{}, err
+		}
+	*/
+	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		c.logger.Error(err.Error())
+		return models.CounterParty{}, err
 	}
 
 	result := models.CounterParty{
 		ID:            apiResponse.Data.ID,
-		AccountName:   apiResponse.Data.AccountName,
-		AccountNumber: apiResponse.Data.AccontNumber,
-		BankName:      apiResponse.Data.Bank.Name,
-		NIPCode:       apiResponse.Data.Bank.NipCode,
+		AccountName:   apiResponse.Data.Attributes.AccountName,
+		AccountNumber: apiResponse.Data.Attributes.AccountNumber,
+		BankName:      apiResponse.Data.Attributes.Bank.Name,
+		NIPCode:       apiResponse.Data.Attributes.Bank.NipCode,
 	}
 
 	if err := c.saveCounterParty(result); err != nil {
+		c.logger.Error(err.Error())
 		return result, DBConnectionError(err)
 	}
 
@@ -256,7 +334,7 @@ func (c *Config) createCounterParty(info verifyAccountResponse) (models.CounterP
 }
 
 // endpoint to verify a transfer from the API, we will save all transactions regardless.
-func verifyTransfer(id string) (transferResult, error) {
+func (c *Config) verifyTransfer(id string) (transferResult, error) {
 
 	url := fmt.Sprintf("%s/%s/%s", api, "verify", id)
 
@@ -278,8 +356,15 @@ func verifyTransfer(id string) (transferResult, error) {
 	// at this point return the transfer status
 
 	result := transferResult{}
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		c.logger.Error(err.Error())
+		return transferResult{}, JSONError(err)
+	}
+	c.logger.Log(c.logger.Level(), string(body))
 
 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+		c.logger.Error(err.Error())
 		return transferResult{}, JSONError(err)
 	}
 
@@ -295,7 +380,7 @@ func (c *Config) saveTransaction(details models.TransferResponse) error {
 }
 
 func (c *Config) saveCounterParty(conterparty models.CounterParty) error {
-	err := c.saveCounterParty(conterparty)
+	err := c.db.SaveCounterParty(conterparty)
 	if err != nil {
 		return err
 	}
