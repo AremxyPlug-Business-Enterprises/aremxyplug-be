@@ -34,11 +34,18 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 		}
 		// get the user;s other infomation at this point and then associate the BVN field to this point
 
+		if data.Bvn == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "bvn is required"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		user.BVN = data.Bvn
 		_, err := handler.virtualAcc.VirtualAccount(user)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"error": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}

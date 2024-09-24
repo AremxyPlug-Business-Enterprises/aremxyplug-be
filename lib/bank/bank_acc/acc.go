@@ -103,6 +103,12 @@ func (b *BankConfig) VirtualAccount(user models.User) (models.AccountDetails, er
 			return models.AccountDetails{}, JSONError(err)
 		}
 	*/
+	bodyValue := string(body)
+	if strings.Contains(bodyValue, "errors") {
+		b.logger.Log(b.logger.Level(), bodyValue)
+		return models.AccountDetails{}, fmt.Errorf("%s", "server error")
+	}
+
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
 		return models.AccountDetails{}, JSONError(err)
 	}

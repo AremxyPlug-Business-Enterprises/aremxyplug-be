@@ -280,8 +280,8 @@ func extraRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 
 func virtualAccRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/virtualacc", func(router chi.Router) {
-		r.Get("/", httpHandler.VirtualAccount)
-		r.Post("/", httpHandler.VirtualAccount)
+		router.Get("/", httpHandler.VirtualAccount)
+		router.Post("/", httpHandler.VirtualAccount)
 	})
 }
 
