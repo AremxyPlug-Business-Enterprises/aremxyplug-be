@@ -361,10 +361,10 @@ func (m *mongoStore) SavePin(data models.UserPin) error {
 		return err
 	}
 
-	filter := bson.M{"id": data.UserID, "is_verified": false}
+	filter := bson.M{"id": data.UserID, "has_Pin": false}
 	update := bson.M{
 		"$set": bson.M{
-			"is_verified": true,
+			"has_Pin": true,
 		},
 	}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	//"strconv"
 	"time"
@@ -86,15 +87,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:      timestamp,
 		UpdatedAt:      timestamp,
 		IsVerified:     false,
-	}
-
-	err = handler.sendOTP(&newUser, "verify-email", verifyEmailAlias)
-	if err != nil {
-		handler.logger.Error("error sending email verification otp", zap.String("target", user.Email), zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
+		HasPin:         false,
 	}
 
 	err = handler.store.SaveUser(newUser)
@@ -171,9 +164,9 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	verified := user.IsVerified
+	hasPin := user.HasPin
 
-	if !verified {
+	if !hasPin {
 		handler.logger.Warn("pin not yet set", zap.Any("userID", user.ID))
 		w.Header().Set("Authorization", jwtToken)
 		w.WriteHeader(http.StatusAccepted)
@@ -213,9 +206,7 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 
 	// validate the request body
 	if err := json.NewDecoder(r.Body).Decode(&userlogin); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
+		respondWithError(w, http.StatusBadRequest, "error", err)
 		return
 	}
 
@@ -234,9 +225,7 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 	token, err := handler.jwt.GenerateToken(claims)
 	if err != nil {
 		handler.logger.Error("fail to generate token", zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
+		respondWithError(w, http.StatusInternalServerError, "error", err)
 		return
 	}
 	//var uri string
@@ -267,14 +256,12 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 	fmt.Println("email sent")
 	if err != nil {
 		handler.logger.Error("error sending password reset email", zap.String("target", user.Email), zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
+		respondWithError(w, http.StatusInternalServerError, "error", err)
 		return
 	}
 	handler.logger.Info("password reset email sent", zap.String("target", user.Email))
-	w.WriteHeader(http.StatusCreated)
-	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"msg": "email sent successfully"}}
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"msg": "email sent successfully"}}
 	json.NewEncoder(w).Encode(response)
 
 }
@@ -285,16 +272,18 @@ func (handler *HttpHandler) ValidateToken(w http.ResponseWriter, r *http.Request
 
 	//validate the token
 
-	id, err := handler.jwt.ValidateToken(token)
+	_, err := handler.jwt.ValidateToken(token)
 	if err != nil {
-		handler.logger.Error("fail to validate token", zap.Error(err))
+		handler.logger.Error("failed to validate token", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "link either invalid or expired, request for a new link"}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+
+	w.Header().Set("Authorization", token)
 	w.WriteHeader(http.StatusOK)
-	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "email", Data: map[string]interface{}{"data": id}}
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "proceed to reset page"}}
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -326,7 +315,7 @@ func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request
 
 	err = handler.store.UpdateUserPassword(email, newPassword.Password)
 	if err != nil {
-		handler.logger.Error("fail to update password", zap.Error(err))
+		handler.logger.Error("failed to update password", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
@@ -338,37 +327,48 @@ func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request
 }
 
 func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
-	var userlogin dto.LoginInput
+	var userLogin dto.LoginInput
 
-	// validate the request body
-	if err := json.NewDecoder(r.Body).Decode(&userlogin); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
+	// Decode and validate the request body
+	if err := json.NewDecoder(r.Body).Decode(&userLogin); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
-	user, err := handler.store.GetUserByEmail(userlogin.Email)
+
+	// Retrieve user by email
+	user, err := handler.store.GetUserByEmail(userLogin.Email)
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		response := responseFormat.CustomResponse{Status: http.StatusNotFound, Message: "user not found", Data: map[string]interface{}{"data": "user not found"}}
-		json.NewEncoder(w).Encode(response)
+		respondWithError(w, http.StatusNotFound, "User not found", nil)
 		return
 	}
 
-	if err := handler.sendOTP(user, "Password OTP", PasswordOTPAlias); err != nil {
-		handler.logger.Error("error sending password reset email", zap.String("target", user.Email), zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
+	// Determine the action based on the URL path
+	action := getLastPathSegment(r.URL.Path)
+	switch action {
+	case "signup":
+		if err := handler.sendOTP(user, "Sign-Up Verification", verifyEmailAlias); err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Error sending verification OTP", err)
+			return
+		}
+		respondWithSuccess(w, http.StatusOK, "success", "Verification email sent successfully")
 
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
+	case "signin":
+		if err := handler.sendOTP(user, "Sign-in Verification", signInVerification); err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Error sending sign-in OTP", err)
+			return
+		}
+		respondWithSuccess(w, http.StatusOK, "success", "Sign-in email sent successfully")
+
+	case "resetpassword":
+		if err := handler.sendOTP(user, "Password OTP", PasswordOTPAlias); err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Error sending password reset OTP", err)
+			return
+		}
+		respondWithSuccess(w, http.StatusCreated, "success", "Password reset email sent successfully")
+
+	default:
+		http.NotFound(w, r)
 	}
-
-	handler.logger.Info("password reset email sent", zap.String("target", user.Email))
-	w.WriteHeader(http.StatusCreated)
-	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"msg": "email sent successfully"}}
-	json.NewEncoder(w).Encode(response)
-
 }
 
 func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
@@ -401,15 +401,53 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "otp verification successful", Data: map[string]interface{}{"data": email}}
-	json.NewEncoder(w).Encode(response)
-	// Creating Message
+	action := getLastPathSegment(r.URL.Path)
+	switch action {
+	case "verify-signin":
+		data := map[string]interface{}{"data": email}
+		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
+	case "verify-signup":
+		user, err := handler.store.VerifyUser(email)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+
+		err = handler.sendOTP(user, "verify-email", verifyEmailAlias)
+		if err != nil {
+			handler.logger.Error("error sending email verification otp", zap.String("target", user.Email), zap.Error(err))
+			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+
+		data := map[string]interface{}{"data": email}
+		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
+	case "verify-reset":
+		user, err := handler.store.GetUserByEmail(email)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+
+		claims := dto.Claims{
+			PersonId: user.ID,
+		}
+
+		jwtToken, err := handler.jwt.GenerateTokenWithExpiration(claims, handler.authTokenDuration)
+		if err != nil {
+			handler.logger.Error("fail to generate token", zap.Error(err))
+			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+
+		w.Header().Set("Authorization", jwtToken)
+		data := map[string]interface{}{"data": "otp verification successful"}
+		respondWithSuccess(w, http.StatusOK, "success", data)
+	default:
+		http.NotFound(w, r)
+	}
+
 }
-
-// Write the handler to save pin
-
-// Write the handler to verify the pin
 
 func (handler *HttpHandler) validateToken(token string) (isValid bool, response *dto.Claims) {
 	claims, err := handler.jwt.ValidateToken(token)
@@ -509,4 +547,42 @@ func (handler *HttpHandler) PingUser(w http.ResponseWriter, r *http.Request) {
 
 	json.NewDecoder(res.Body).Decode(&results)
 	json.NewEncoder(w).Encode(results)
+}
+
+// Helper function to extract the last part of the URL path
+func getLastPathSegment(path string) string {
+	parts := strings.Split(path, "/")
+	return parts[len(parts)-1]
+}
+
+// Helper function to respond with error
+func respondWithError(w http.ResponseWriter, statusCode int, message string, err error) {
+	w.WriteHeader(statusCode)
+	data := map[string]interface{}{"message": message}
+	if err != nil {
+		data["error"] = err.Error()
+	}
+	response := responseFormat.CustomResponse{
+		Status:  statusCode,
+		Message: "error",
+		Data:    data,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+// Helper function to respond with success
+func respondWithSuccess(w http.ResponseWriter, statusCode int, message string, datamsg interface{}) {
+	w.WriteHeader(statusCode)
+
+	data := map[string]interface{}{"data": datamsg}
+
+	// Create a response structure
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: message,
+		Data:    data,
+	}
+
+	// Encode the response as JSON and send it to the client
+	json.NewEncoder(w).Encode(response)
 }
