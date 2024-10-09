@@ -34,7 +34,9 @@ const (
 	// email templates
 	PasswordResetAlias = "password-reset"
 	PasswordOTPAlias   = "password-otp"
-	verifyEmailAlias   = "verify-email"
+	verifyEmailAlias   = "verify-email1"
+	signInVerification = "signin-verification"
+	welcomeMessage     = "verify-email"
 )
 
 var validate = validator.New()

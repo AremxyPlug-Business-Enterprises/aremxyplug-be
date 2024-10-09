@@ -58,6 +58,7 @@ type UserStore interface {
 	CreateMessage(message *models.Message) error
 	UpdateUserPassword(email string, password string) error
 	UpdateBVNField(user models.User) error
+	VerifyUser(email string) (*models.User, error)
 }
 
 type TelcomStore interface {

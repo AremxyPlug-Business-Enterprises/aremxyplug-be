@@ -99,14 +99,12 @@ func MountServer(config ServerConfig) *chi.Mux {
 		router.Post("/login", httpHandler.Login)
 		// forgot password
 		router.Post("/forgot-password", httpHandler.ForgotPassword)
-		// reset password
-		router.Patch("/reset-password", httpHandler.ResetPassword)
 
 		router.Get("/verify-token", httpHandler.ValidateToken)
 
-		router.Post("/send-otp", httpHandler.SendOTP)
+		SendOTPRoutes(router, httpHandler)
 
-		router.Post("/verify-otp", httpHandler.VerifyOTP)
+		VerifyOTPRoutes(router, httpHandler)
 
 		// test
 		router.Post("/test", httpHandler.Testtoken)
@@ -116,6 +114,8 @@ func MountServer(config ServerConfig) *chi.Mux {
 		router.Get("/deposit", httpHandler.DepositAccount)
 
 		authRouter := router.With(config.Auth.Authorize)
+		// reset password
+		authRouter.Patch("/reset-password", httpHandler.ResetPassword)
 		// Data Routes
 		dataRoutes(authRouter, httpHandler)
 		// smile data routes
@@ -282,6 +282,22 @@ func virtualAccRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/virtualacc", func(router chi.Router) {
 		router.Get("/", httpHandler.VirtualAccount)
 		router.Post("/", httpHandler.VirtualAccount)
+	})
+}
+
+func VerifyOTPRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/verify-otp", func(router chi.Router) {
+		router.Post("/signin", httpHandler.VerifyOTP)
+		router.Post("/signup", httpHandler.VerifyOTP)
+		router.Post("/resetpassword", httpHandler.VerifyOTP)
+	})
+}
+
+func SendOTPRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/send-otp", func(router chi.Router) {
+		router.Post("/signin", httpHandler.SendOTP)
+		router.Post("/signup", httpHandler.SendOTP)
+		router.Post("/resetpassword", httpHandler.SendOTP)
 	})
 }
 

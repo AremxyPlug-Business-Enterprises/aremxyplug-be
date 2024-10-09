@@ -2,6 +2,8 @@ package mongo
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"strconv"
 	"time"
@@ -70,8 +72,33 @@ func (m *mongoStore) otpColl() (*mongo.Collection, error) {
 	return col, nil
 }
 
+func (m *mongoStore) userColl() (*mongo.Collection, error) {
+	col := m.mongoClient.Database(m.databaseName).Collection(models.UserCollectionName)
+	ctx := context.Background()
+	indexModel := mongo.IndexModel{
+		Keys:    bson.D{primitive.E{Key: "expireAt", Value: 1}},
+		Options: options.Index().SetExpireAfterSeconds(0),
+	}
+
+	_, err := col.Indexes().CreateOne(ctx, indexModel)
+	if err != nil {
+		return nil, err
+	}
+
+	return col, nil
+}
+
 func (m *mongoStore) SaveUser(user models.User) error {
-	_, err := m.col(models.UserCollectionName).InsertOne(context.Background(), user)
+
+	ctx := context.Background()
+	user.ExpireAt = time.Now().Add(time.Duration(5) * time.Minute)
+
+	col, err := m.userColl()
+	if err != nil {
+		return err
+	}
+
+	_, err = col.InsertOne(ctx, user)
 	if err != nil {
 		return errorvalues.Format(errorvalues.DatabaseError, err)
 	}
@@ -194,6 +221,40 @@ func (m *mongoStore) UpdateBVNField(user models.User) error {
 		return err
 	}
 	return nil
+}
+
+func (m *mongoStore) VerifyUser(email string) (*models.User, error) {
+
+	userColl := m.col(models.UserCollectionName)
+	ctx := context.Background()
+
+	filter := bson.M{"email": email, "is_verified": false}
+	update := bson.M{
+		"$set": bson.M{
+			"is_verified": true,
+		},
+	}
+
+	updateResult, err := userColl.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update user document: %w", err)
+	}
+
+	if updateResult.MatchedCount == 0 {
+		return nil, errors.New("failed to update user document")
+	}
+
+	filter2 := bson.M{
+		"email": email,
+	}
+	user := &models.User{}
+	err = userColl.FindOne(context.Background(), filter2).Decode(user)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
+
 }
 
 func (m *mongoStore) getRecord(id, collectionName string) *mongo.SingleResult {
