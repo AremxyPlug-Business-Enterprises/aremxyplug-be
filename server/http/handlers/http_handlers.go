@@ -403,10 +403,10 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 
 	action := getLastPathSegment(r.URL.Path)
 	switch action {
-	case "verify-signin":
+	case "signin":
 		data := map[string]interface{}{"data": email}
 		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
-	case "verify-signup":
+	case "signup":
 		user, err := handler.store.VerifyUser(email)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "error", err)
@@ -422,7 +422,7 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 
 		data := map[string]interface{}{"data": email}
 		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
-	case "verify-reset":
+	case "resetpassword":
 		user, err := handler.store.GetUserByEmail(email)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "error", err)
