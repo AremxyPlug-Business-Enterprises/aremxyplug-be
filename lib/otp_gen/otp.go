@@ -62,6 +62,7 @@ func (o *OTPConn) ValidateOTP(otp, email string) (bool, error) {
 	// how do i get the email to search for the otp key associated with it?
 	data, err := o.Dbconn.GetOTP(email)
 	if err != nil {
+		log.Print(err)
 		return false, err
 	}
 
@@ -72,6 +73,7 @@ func (o *OTPConn) ValidateOTP(otp, email string) (bool, error) {
 		Digits: 6,
 	})
 	if err != nil {
+		log.Println(err)
 		return false, err
 	}
 	if !valid {

@@ -91,7 +91,7 @@ func (m *mongoStore) userColl() (*mongo.Collection, error) {
 func (m *mongoStore) SaveUser(user models.User) error {
 
 	ctx := context.Background()
-	user.ExpireAt = time.Now().Add(time.Duration(5) * time.Minute)
+	user.ExpireAt = time.Now().Add(time.Duration(15) * time.Minute)
 
 	col, err := m.userColl()
 	if err != nil {
@@ -224,14 +224,30 @@ func (m *mongoStore) UpdateBVNField(user models.User) error {
 }
 
 func (m *mongoStore) VerifyUser(email string) (*models.User, error) {
-
 	userColl := m.col(models.UserCollectionName)
 	ctx := context.Background()
 
-	filter := bson.M{"email": email, "is_verified": false}
+	filter := bson.M{"email": email}
+	user := &models.User{}
+
+	err := userColl.FindOne(ctx, filter).Decode(user)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("no user found with the email: %s", email)
+		}
+		return nil, fmt.Errorf("error querying the database: %w", err)
+	}
+
+	if user.IsVerified {
+		return nil, errors.New("user is already verified")
+	}
+
 	update := bson.M{
 		"$set": bson.M{
 			"is_verified": true,
+		},
+		"$unset": bson.M{
+			"expireAt": "",
 		},
 	}
 
@@ -244,17 +260,12 @@ func (m *mongoStore) VerifyUser(email string) (*models.User, error) {
 		return nil, errors.New("failed to update user document")
 	}
 
-	filter2 := bson.M{
-		"email": email,
-	}
-	user := &models.User{}
-	err = userColl.FindOne(context.Background(), filter2).Decode(user)
+	err = userColl.FindOne(ctx, filter).Decode(user)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error retrieving updated user: %w", err)
 	}
 
 	return user, nil
-
 }
 
 func (m *mongoStore) getRecord(id, collectionName string) *mongo.SingleResult {
@@ -321,12 +332,12 @@ func (m *mongoStore) GetOTP(email string) (models.OTP, error) {
 	defer cancel()
 	data := models.OTP{}
 	filter := bson.D{primitive.E{Key: "email", Value: email}}
-	opts := options.FindOne().SetSort(bson.D{{Key: "expiresAt", Value: -1}})
+	opts := options.FindOne().SetSort(bson.D{{Key: "expireAt", Value: -1}})
 
 	result := m.col("OTP").FindOne(ctx, filter, opts)
 	err := result.Decode(&data)
 	if err == mongo.ErrNoDocuments {
-		return models.OTP{}, nil
+		return models.OTP{}, errors.New("no record found")
 	} else if err != nil {
 		return models.OTP{}, err
 	}

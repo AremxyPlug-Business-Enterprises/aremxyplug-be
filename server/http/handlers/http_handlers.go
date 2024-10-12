@@ -396,6 +396,7 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 
 	if !valid {
 		w.WriteHeader(http.StatusBadRequest)
+		log.Println("otp verification failed at validation")
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "otp verification failed"}}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -413,7 +414,7 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		err = handler.sendOTP(user, "verify-email", verifyEmailAlias)
+		err = handler.sendOTP(user, "verify-email", welcomeMessage)
 		if err != nil {
 			handler.logger.Error("error sending email verification otp", zap.String("target", user.Email), zap.Error(err))
 			respondWithError(w, http.StatusInternalServerError, "error", err)
@@ -468,7 +469,6 @@ func (handler *HttpHandler) sendOTP(user *models.User, title string, templateID 
 	if err != nil {
 		return err
 	}
-	log.Println(otp)
 
 	// Creating Message
 	message := models.Message{
