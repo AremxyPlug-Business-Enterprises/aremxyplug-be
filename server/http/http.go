@@ -57,7 +57,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 	router.Use(cors.New(cors.Options{
 		AllowedOrigins:   []string{"https://*", "http://*"},
 		AllowCredentials: false,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Authorization"},
 		Debug:            true,
