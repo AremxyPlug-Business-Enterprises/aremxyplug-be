@@ -230,8 +230,9 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 	}
 	//var uri string
 	uri := "/api/v1/verify-token?token="
-	Scheme := "http"
-	link := fmt.Sprintf("%s://%s%s%s", Scheme, r.Host, uri, token)
+	Scheme := "https"
+	host := "test.aremxyplug.com"
+	link := fmt.Sprintf("%s://%s%s%s", Scheme, host, uri, token)
 	fmt.Println(link)
 
 	// Creating Message
@@ -253,7 +254,6 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 	// send message
 	fmt.Println("about send email")
 	err = handler.emailClient.Send(&message)
-	fmt.Println("email sent")
 	if err != nil {
 		handler.logger.Error("error sending password reset email", zap.String("target", user.Email), zap.Error(err))
 		respondWithError(w, http.StatusInternalServerError, "error", err)
