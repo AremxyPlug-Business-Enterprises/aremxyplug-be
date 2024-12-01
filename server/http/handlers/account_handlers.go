@@ -26,6 +26,21 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 		data := requestPayload{}
 		user := *userDetails
 
+		hasAcc, err := handler.hasVirtualAccount(user.ID)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		if hasAcc {
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "existing account", Data: map[string]interface{}{"data": "virtual account already created"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "invalid JSON request"}}
@@ -42,7 +57,7 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 		}
 
 		user.BVN = data.Bvn
-		_, err := handler.virtualAcc.VirtualAccount(user)
+		_, err = handler.virtualAcc.VirtualAccount(user)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"error": err.Error()}}
@@ -97,4 +112,17 @@ func (handler *HttpHandler) getVirtualAccDetails(id string) (models.AccountDetai
 	}
 
 	return acc_details, nil
+}
+
+func (handler *HttpHandler) hasVirtualAccount(id string) (bool, error) {
+	detail, err := handler.store.GetVirtualNuban(id)
+	if err != nil {
+		return false, err
+	}
+
+	if detail == (models.AccountDetails{}) {
+		return true, nil
+	}
+
+	return false, nil
 }
