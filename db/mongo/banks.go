@@ -69,11 +69,9 @@ func (m *mongoStore) SaveVirtualAccount(account models.AccountDetails) error {
 	return err
 }
 
-func (m *mongoStore) GetVirtualNuban(name string) (models.AccountDetails, error) {
+func (m *mongoStore) GetVirtualNuban(id string) (models.AccountDetails, error) {
 	ctx := context.Background()
-	account_name := fmt.Sprintf("ANC(AREMXYPLUG/%s)", name)
-	fmt.Println(account_name)
-	filter := bson.D{primitive.E{Key: "account_name", Value: account_name}}
+	filter := bson.D{primitive.E{Key: "user_id", Value: id}}
 
 	/*
 		filter = bson.D{primitive.E{Key: "user_id", Value: id}}

@@ -62,7 +62,7 @@ func (b *BankConfig) VirtualAccount(user models.User) (models.AccountDetails, er
 
 	payload := virtualNubanPayload{}
 	payload.Data.Type = "VirtualNuban"
-	payload.Data.Attributes.Provider = "providus"
+	payload.Data.Attributes.Provider = "ninepsb"
 	payload.Data.Attributes.VirtualAccount.BVN = user.BVN
 	payload.Data.Attributes.VirtualAccount.Name = name
 	payload.Data.Attributes.VirtualAccount.Email = user.Email
@@ -91,6 +91,11 @@ func (b *BankConfig) VirtualAccount(user models.User) (models.AccountDetails, er
 	}
 
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		b.logger.Log(b.logger.Level(), resp.Status)
+		return models.AccountDetails{}, fmt.Errorf("failed to create account")
+	}
 
 	apiResponse := virtualAccountResponse{}
 	body, err := io.ReadAll(resp.Body)

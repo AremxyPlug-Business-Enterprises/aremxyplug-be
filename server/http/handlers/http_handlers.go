@@ -46,12 +46,6 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !handler.isValidNewUser(user) {
-		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "email exist", Data: map[string]interface{}{"data": "user already exist"}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
 	// use the validator library to validate required fields
 	if validationErr := validate.Struct(&user); validationErr != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -74,6 +68,21 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 
 	to := cases.Title(language.English)
 	full_name := to.String(user.FullName)
+
+	validUser, field, err := handler.isValidNewUser(user)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if !validUser {
+		w.WriteHeader(http.StatusConflict)
+		response := responseFormat.CustomResponse{Status: http.StatusConflict, Message: "sign-up failed", Data: map[string]interface{}{"data": fmt.Sprintf("%s", field)}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
 	newUser := models.User{
 		ID:             userId,
@@ -513,25 +522,26 @@ func (handler *HttpHandler) Testtoken(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(claims)
 }
 
-func (handler *HttpHandler) isValidNewUser(user models.User) bool {
-
-	userDetails, err := handler.store.GetUserByEmail(user.Email)
+func (handler *HttpHandler) isValidNewUser(user models.User) (bool, string, error) {
+	userDetails, err := handler.store.GetUserByUsernameOrEmailOrPhone(user.Username, user.Email, user.PhoneNumber)
 	if err != nil {
-		switch err {
-		case mongodb.ErrNoDocuments:
-			return true
+		if err == mongodb.ErrNoDocuments {
+			return true, "", nil
 		}
+		return false, "", err
 	}
 
-	email := userDetails.Email
-	phone := userDetails.PhoneNumber
-	username := userDetails.Username
-
-	if user.Email == email || user.PhoneNumber == phone || user.Username == username {
-		return false
+	if user.Email == userDetails.Email {
+		return false, "email already exists", nil
+	}
+	if user.PhoneNumber == userDetails.PhoneNumber {
+		return false, "phone number already exists", nil
+	}
+	if user.Username == userDetails.Username {
+		return false, "username already exists", nil
 	}
 
-	return false
+	return true, "", nil
 }
 
 // PingUser pings the api with client credentials. It not used.

@@ -1,17 +1,30 @@
 package webhook
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
-	"log"
 	"net/http"
 )
 
-func handlewebhook(r *http.Request) ([]byte, error) {
+const secret = "your_secret_token"
+
+func VerifySignature(r *http.Request) bool {
+	signature := r.Header.Get("X-Signature")
+	if signature == "" {
+		return false
+	}
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-
+		return false
 	}
-	log.Printf("%s", string(body))
+	defer r.Body.Close()
 
-	return body, nil
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write(body)
+	expectedSignature := hex.EncodeToString(h.Sum(nil))
+
+	return hmac.Equal([]byte(signature), []byte(expectedSignature))
 }

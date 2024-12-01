@@ -32,7 +32,7 @@ type BankStore interface {
 	SaveBankList(banklist models.BankDetails) error
 	GetBankDetail(bankName string) (models.BankDetails, error)
 	SaveVirtualAccount(account models.AccountDetails) error
-	GetVirtualNuban(name string) (models.AccountDetails, error)
+	GetVirtualNuban(id string) (models.AccountDetails, error)
 	SaveCounterParty(counterparty interface{}) error
 	SaveTransfer(transfer models.TransferResponse) error
 	GetCounterParty(accountNumber, bankname string) (models.CounterParty, error)
@@ -59,6 +59,7 @@ type UserStore interface {
 	UpdateUserPassword(email string, password string) error
 	UpdateBVNField(user models.User) error
 	VerifyUser(email string) (*models.User, error)
+	GetUserByUsernameOrEmailOrPhone(username, email, phone string) (*models.User, error)
 }
 
 type TelcomStore interface {
