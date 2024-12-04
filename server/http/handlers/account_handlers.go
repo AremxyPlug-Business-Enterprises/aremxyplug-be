@@ -34,7 +34,7 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		if hasAcc {
+		if !hasAcc {
 			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "existing account", Data: map[string]interface{}{"data": "virtual account already created"}}
 			json.NewEncoder(w).Encode(response)
