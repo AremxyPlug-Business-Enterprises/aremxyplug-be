@@ -24,7 +24,7 @@ type emailClient struct {
 	secret     *config.Secrets
 }
 
-// Send generate and send a new email message using postmark API
+// Send generates and sends a new email message using postmark API
 func (e *emailClient) Send(message *models.Message) error {
 	// Build request
 	logService := logger.New()

@@ -20,9 +20,13 @@ import (
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
 	"github.com/aremxyplug-be/lib/referral"
+	"github.com/aremxyplug-be/lib/smsclient/termii"
 	vtu "github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
+	"github.com/aremxyplug-be/lib/verification"
+	"github.com/aremxyplug-be/lib/verification/bvn"
+	"github.com/aremxyplug-be/lib/verification/nin"
 	httpSrv "github.com/aremxyplug-be/server/http"
 	"go.uber.org/zap"
 )
@@ -30,6 +34,8 @@ import (
 func main() {
 	logger := zapLogger.New()
 	secrets := config.GetSecrets()
+	bvnConfig := bvn.NewBvnConfig(logger)
+	ninConfig := nin.NewNINConfig(logger)
 
 	// Get data store
 	store, client, err := mongo.New(secrets.MongdbUrl, secrets.DbName, logger)
@@ -39,7 +45,8 @@ func main() {
 
 	// setup email client
 	emailClient := postmark.New(secrets)
-	otp := otpgen.NewOTP(store)
+	verifyClient := verification.NewVerificationClient(bvnConfig, ninConfig)
+	otp := otpgen.NewOTP(store, logger)
 	data := data.NewData(store, logger)
 	edu := edu.NewEdu(store, logger)
 	vtu := vtu.NewAirtimeConn(store, logger)
@@ -53,26 +60,29 @@ func main() {
 	ref := referral.NewRefConfig(store)
 	point := pointredeem.NewPointConfig(store)
 	pin := auth_pin.NewPinConfig(logger, store)
+	sms := termii.NewSMSConn(store, logger)
 
 	config := httpSrv.ServerConfig{
-		Store:       store,
-		EmailClient: emailClient,
-		Logger:      logger,
-		Secrets:     secrets,
-		DataClient:  data,
-		EduClient:   edu,
-		Vtu:         vtu,
-		TvSub:       tvSub,
-		ElectSub:    electSub,
-		Otp:         otp,
-		Auth:        auth,
-		VirtualAcc:  virtualAcc,
-		BankTranc:   bankTransc,
-		BankTrf:     bankTrf,
-		BankDep:     bankDep,
-		Referral:    ref,
-		Point:       point,
-		Pin:         pin,
+		Store:        store,
+		EmailClient:  emailClient,
+		Logger:       logger,
+		Secrets:      secrets,
+		DataClient:   data,
+		EduClient:    edu,
+		Vtu:          vtu,
+		TvSub:        tvSub,
+		ElectSub:     electSub,
+		Otp:          otp,
+		Auth:         auth,
+		VirtualAcc:   virtualAcc,
+		BankTranc:    bankTransc,
+		BankTrf:      bankTrf,
+		BankDep:      bankDep,
+		Referral:     ref,
+		Point:        point,
+		Pin:          pin,
+		SmsClient:    sms,
+		VerifyClient: verifyClient,
 	}
 
 	httpRouter := httpSrv.MountServer(config)

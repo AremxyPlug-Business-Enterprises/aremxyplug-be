@@ -33,6 +33,7 @@ var (
 	//deposit_id  = os.Getenv("DEPOSIT_ID_LIVE")
 	customer_id = os.Getenv("CUSTOMER_ID_LIVE")
 	deposit_id  = os.Getenv("DEPOSIT_ID_LIVE_2")
+	bvn         = os.Getenv("BVN_LIVE")
 )
 
 type BankConfig struct {
@@ -63,7 +64,7 @@ func (b *BankConfig) VirtualAccount(user models.User) (models.AccountDetails, er
 	payload := virtualNubanPayload{}
 	payload.Data.Type = "VirtualNuban"
 	payload.Data.Attributes.Provider = "ninepsb"
-	payload.Data.Attributes.VirtualAccount.BVN = user.BVN
+	payload.Data.Attributes.VirtualAccount.BVN = bvn
 	payload.Data.Attributes.VirtualAccount.Name = name
 	payload.Data.Attributes.VirtualAccount.Email = user.Email
 	payload.Data.Attributes.VirtualAccount.Permanent = true

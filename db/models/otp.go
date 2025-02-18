@@ -7,3 +7,9 @@ type OTP struct {
 	Email    string    `bson:"email"`
 	ExpireAt time.Time `bson:"expireAt"`
 }
+
+type SMSOTP struct {
+	PinID    string    `bson:"pinID"`
+	Phone    string    `bson:"phone"`
+	ExpireAt time.Time `bson:"expireAt"`
+}

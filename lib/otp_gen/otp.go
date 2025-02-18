@@ -1,25 +1,30 @@
 package otpgen
 
 import (
-	"log"
+	"math/rand"
 	"time"
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
 	"github.com/pquerna/otp/totp"
+	"go.uber.org/zap"
 )
 
 type OTPConn struct {
-	Dbconn db.DataStore
+	dbconn db.Extras
+	logger *zap.Logger
 }
 
-func NewOTP(DbConn db.DataStore) *OTPConn {
+func NewOTP(store db.DataStore, logger *zap.Logger) *OTPConn {
 	return &OTPConn{
-		Dbconn: DbConn,
+		dbconn: store,
+		logger: logger,
 	}
 }
 
 func (o *OTPConn) GenerateOTP(email string) (string, error) {
+	o.logger.Info("Generating OTP", zap.String("email", email))
+
 	key, err := totp.Generate(
 		totp.GenerateOpts{
 			Issuer:      "AremxyPlug",
@@ -29,10 +34,9 @@ func (o *OTPConn) GenerateOTP(email string) (string, error) {
 		},
 	)
 	if err != nil {
+		o.logger.Error("Failed to generate OTP key", zap.Error(err))
 		return "", err
 	}
-
-	log.Println(key.Secret(), key.URL())
 
 	now := time.Now()
 
@@ -41,7 +45,8 @@ func (o *OTPConn) GenerateOTP(email string) (string, error) {
 		Email:  email,
 	}
 
-	if err := o.Dbconn.SaveOTP(data); err != nil {
+	if err := o.dbconn.SaveOTP(data); err != nil {
+		o.logger.Error("Failed to save OTP", zap.Error(err))
 		return "", err
 	}
 
@@ -50,19 +55,20 @@ func (o *OTPConn) GenerateOTP(email string) (string, error) {
 		Digits: 6,
 	})
 	if err != nil {
+		o.logger.Error("Failed to generate OTP code", zap.Error(err))
 		return "", err
 	}
 
+	o.logger.Info("OTP generated successfully", zap.String("otp", otp))
 	return otp, nil
-
 }
 
 func (o *OTPConn) ValidateOTP(otp, email string) (bool, error) {
+	o.logger.Info("Validating OTP", zap.String("email", email), zap.String("otp", otp))
 
-	// how do i get the email to search for the otp key associated with it?
-	data, err := o.Dbconn.GetOTP(email)
+	data, err := o.dbconn.GetOTP(email)
 	if err != nil {
-		log.Print(err)
+		o.logger.Error("Failed to get OTP from database", zap.Error(err))
 		return false, err
 	}
 
@@ -73,13 +79,52 @@ func (o *OTPConn) ValidateOTP(otp, email string) (bool, error) {
 		Digits: 6,
 	})
 	if err != nil {
-		log.Println(err)
+		o.logger.Error("Failed to validate OTP", zap.Error(err))
 		return false, err
 	}
 	if !valid {
+		o.logger.Warn("Invalid OTP", zap.String("otp", otp))
+		return false, nil
+	}
+
+	o.logger.Info("OTP validated successfully")
+	return true, nil
+}
+
+// GenerateID generates a unique 8-digit ID
+func (o *OTPConn) GenerateID() (int, error) {
+	o.logger.Info("Generating unique ID")
+
+	var id int
+	var unique bool
+	var err error
+
+	for {
+		id = rand.Intn(90000000) + 10000000 // Generates a number between 10000000 and 99999999
+		unique, err = o.isIDUnique(id)
+		if err != nil {
+			o.logger.Error("Failed to check ID uniqueness", zap.Error(err))
+			return 0, err
+		}
+		if unique {
+			break
+		}
+	}
+
+	o.logger.Info("Unique ID generated successfully", zap.Int("id", id))
+	return id, nil
+}
+
+func (o *OTPConn) isIDUnique(id int) (bool, error) {
+	o.logger.Info("Checking ID uniqueness", zap.Int("id", id))
+
+	count, err := o.dbconn.CheckID(id)
+	if err != nil {
+		o.logger.Error("Failed to check ID in database", zap.Error(err))
 		return false, err
 	}
 
-	return true, nil
-
+	isUnique := count == 0
+	o.logger.Info("ID uniqueness check completed", zap.Bool("isUnique", isUnique))
+	return isUnique, nil
 }

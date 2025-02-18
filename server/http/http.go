@@ -15,9 +15,11 @@ import (
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
 	"github.com/aremxyplug-be/lib/referral"
+	"github.com/aremxyplug-be/lib/smsclient/termii"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
+	"github.com/aremxyplug-be/lib/verification"
 	"github.com/aremxyplug-be/server/http/handlers"
 
 	"github.com/aremxyplug-be/config"
@@ -30,24 +32,26 @@ import (
 )
 
 type ServerConfig struct {
-	Logger      *zap.Logger
-	Store       db.DataStore
-	Secrets     *config.Secrets
-	EmailClient emailclient.EmailClient
-	DataClient  *data.DataConn
-	EduClient   *edu.EduConn
-	Vtu         *airtime.AirtimeConn
-	TvSub       *tvsub.TvConn
-	ElectSub    *elect.ElectricConn
-	Otp         *otpgen.OTPConn
-	Auth        *auth.AuthConn
-	VirtualAcc  *bankacc.BankConfig
-	BankTranc   *transactions.Transaction
-	BankTrf     *transfer.Config
-	BankDep     *deposit.Config
-	Referral    *referral.RefConfig
-	Point       *pointredeem.PointConfig
-	Pin         *auth_pin.PinConfig
+	Logger       *zap.Logger
+	Store        db.DataStore
+	Secrets      *config.Secrets
+	EmailClient  emailclient.EmailClient
+	DataClient   *data.DataConn
+	EduClient    *edu.EduConn
+	Vtu          *airtime.AirtimeConn
+	TvSub        *tvsub.TvConn
+	ElectSub     *elect.ElectricConn
+	Otp          *otpgen.OTPConn
+	Auth         *auth.AuthConn
+	VirtualAcc   *bankacc.BankConfig
+	BankTranc    *transactions.Transaction
+	BankTrf      *transfer.Config
+	BankDep      *deposit.Config
+	Referral     *referral.RefConfig
+	Point        *pointredeem.PointConfig
+	Pin          *auth_pin.PinConfig
+	SmsClient    *termii.SMSConn
+	VerifyClient verification.VerificationClient
 }
 
 func MountServer(config ServerConfig) *chi.Mux {
@@ -69,23 +73,25 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 	// Get handlers
 	httpHandler := handlers.NewHttpHandler(&handlers.HandlerOptions{
-		Logger:      config.Logger,
-		Store:       config.Store,
-		Secrets:     config.Secrets,
-		EmailClient: config.EmailClient,
-		Data:        config.DataClient,
-		Edu:         config.EduClient,
-		VTU:         config.Vtu,
-		TvSub:       config.TvSub,
-		ElectSub:    config.ElectSub,
-		Otp:         config.Otp,
-		VirtualAcc:  config.VirtualAcc,
-		BankTranc:   config.BankTranc,
-		BankTrf:     config.BankTrf,
-		BankDep:     config.BankDep,
-		Referral:    config.Referral,
-		Point:       config.Point,
-		Pin:         config.Pin,
+		Logger:       config.Logger,
+		Store:        config.Store,
+		Secrets:      config.Secrets,
+		EmailClient:  config.EmailClient,
+		Data:         config.DataClient,
+		Edu:          config.EduClient,
+		VTU:          config.Vtu,
+		TvSub:        config.TvSub,
+		ElectSub:     config.ElectSub,
+		Otp:          config.Otp,
+		VirtualAcc:   config.VirtualAcc,
+		BankTranc:    config.BankTranc,
+		BankTrf:      config.BankTrf,
+		BankDep:      config.BankDep,
+		Referral:     config.Referral,
+		Point:        config.Point,
+		Pin:          config.Pin,
+		SMSClient:    config.SmsClient,
+		VerifyClient: config.VerifyClient,
 	})
 
 	// Routes
@@ -105,14 +111,16 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		SendOTPRoutes(router, httpHandler)
 
+		SMSRoutes(router, httpHandler)
+
 		VerifyOTPRoutes(router, httpHandler)
 
-		// test
-		router.Post("/test", httpHandler.Testtoken)
+		// // test
+		// router.Post("/test", httpHandler.Testtoken)
 
-		router.Get("/banks", httpHandler.GetBanks)
+		// router.Get("/banks", httpHandler.GetBanks)
 
-		router.Get("/deposit", httpHandler.DepositAccount)
+		// router.Get("/deposit", httpHandler.DepositAccount)
 
 		authRouter := router.With(config.Auth.Authorize)
 		// reset password
@@ -123,6 +131,8 @@ func MountServer(config ServerConfig) *chi.Mux {
 		smileDataRoutes(authRouter, httpHandler)
 		// spectranet data routes
 		spectranetDataRoutes(authRouter, httpHandler)
+
+		authRouter.Post("/verify", httpHandler.VerifyIdentity)
 
 		// Edu Routes
 		eduRoutes(authRouter, httpHandler)
@@ -299,6 +309,19 @@ func SendOTPRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 		router.Post("/signin", httpHandler.SendOTP)
 		router.Post("/signup", httpHandler.SendOTP)
 		router.Post("/resetpassword", httpHandler.SendOTP)
+	})
+}
+
+func SMSRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/sms", func(router chi.Router) {
+		router.Route("/send", func(router chi.Router) {
+			router.Post("/", httpHandler.SendSMSOTP)
+		})
+		router.Route("/verify", func(router chi.Router) {
+			router.Post("/signup", httpHandler.VerifySMSOTP)
+			router.Post("/signin", httpHandler.VerifySMSOTP)
+			router.Post("/resetpassword", httpHandler.VerifySMSOTP)
+		})
 	})
 }
 

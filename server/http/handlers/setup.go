@@ -16,9 +16,11 @@ import (
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
 	"github.com/aremxyplug-be/lib/referral"
+	"github.com/aremxyplug-be/lib/smsclient/termii"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
+	"github.com/aremxyplug-be/lib/verification"
 
 	"github.com/aremxyplug-be/config"
 	"github.com/aremxyplug-be/lib/encryptor"
@@ -66,26 +68,30 @@ type HttpHandler struct {
 	referral             *referral.RefConfig
 	point                *pointredeem.PointConfig
 	pin                  *auth_pin.PinConfig
+	smsClient            *termii.SMSConn
+	verifyClient         verification.VerificationClient
 }
 
 type HandlerOptions struct {
-	Logger      *zap.Logger
-	Store       db.DataStore
-	Data        *data.DataConn
-	Edu         *edu.EduConn
-	VTU         *airtime.AirtimeConn
-	TvSub       *tvsub.TvConn
-	ElectSub    *elect.ElectricConn
-	Secrets     *config.Secrets
-	EmailClient emailclient.EmailClient
-	Otp         *otpgen.OTPConn
-	VirtualAcc  *bankacc.BankConfig
-	BankTranc   *transactions.Transaction
-	BankTrf     *transfer.Config
-	BankDep     *deposit.Config
-	Referral    *referral.RefConfig
-	Point       *pointredeem.PointConfig
-	Pin         *auth_pin.PinConfig
+	Logger       *zap.Logger
+	Store        db.DataStore
+	Data         *data.DataConn
+	Edu          *edu.EduConn
+	VTU          *airtime.AirtimeConn
+	TvSub        *tvsub.TvConn
+	ElectSub     *elect.ElectricConn
+	Secrets      *config.Secrets
+	EmailClient  emailclient.EmailClient
+	Otp          *otpgen.OTPConn
+	VirtualAcc   *bankacc.BankConfig
+	BankTranc    *transactions.Transaction
+	BankTrf      *transfer.Config
+	BankDep      *deposit.Config
+	Referral     *referral.RefConfig
+	Point        *pointredeem.PointConfig
+	Pin          *auth_pin.PinConfig
+	SMSClient    *termii.SMSConn
+	VerifyClient verification.VerificationClient
 }
 
 func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
@@ -141,5 +147,7 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		bankDep:              opt.BankDep,
 		pin:                  opt.Pin,
 		point:                opt.Point,
+		smsClient:            opt.SMSClient,
+		verifyClient:         opt.VerifyClient,
 	}
 }

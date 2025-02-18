@@ -14,8 +14,11 @@ type DataStore interface {
 }
 
 type Extras interface {
+	CheckID(id int) (int64, error)
 	SaveOTP(data models.OTP) error
 	GetOTP(email string) (models.OTP, error)
+	SaveSMS(data models.SMSOTP) error
+	GetSMS(phone string) (models.SMSOTP, error)
 	GetPin(userID string) (string, error)
 	UpdatePin(data models.UserPin) error
 	SavePin(data models.UserPin) error
@@ -52,13 +55,15 @@ type BankStore interface {
 type UserStore interface {
 	SaveUser(user models.User) error
 	GetUserByEmail(email string) (*models.User, error)
+	GetUserByPhone(phone string) (*models.User, error)
 	GetUserByUsername(username string) (*models.User, error)
 	GetUserByUsernameOrEmail(email string, username string) (*models.User, error)
 	GetUserByID(id string) (*models.User, error)
 	CreateMessage(message *models.Message) error
 	UpdateUserPassword(email string, password string) error
 	UpdateBVNField(user models.User) error
-	VerifyUser(email string) (*models.User, error)
+	UpdateNINField(user models.User) error
+	VerifyUser(identifier string) (*models.User, error)
 	GetUserByUsernameOrEmailOrPhone(username, email, phone string) (*models.User, error)
 }
 
