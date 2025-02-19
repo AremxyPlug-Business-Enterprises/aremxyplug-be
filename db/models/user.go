@@ -15,6 +15,7 @@ type User struct {
 	CreatedAt      int64     `json:"created_at" bson:"created_at"`
 	UpdatedAt      int64     `json:"updated_at" bson:"updated_at"`
 	BVN            string    `json:"bvn" bson:"bvn"`
+	NIN            string    `json:"nin" bson:"nin"`
 	IsVerified     bool      `json:"is_verified" bson:"is_verified"`
 	HasPin         bool      `json:"has_Pin" bson:"has_Pin"`
 	ExpireAt       time.Time `bson:"expireAt"`

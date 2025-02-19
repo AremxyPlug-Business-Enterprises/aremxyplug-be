@@ -1,6 +1,14 @@
 package balance
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/shopspring/decimal"
+)
+
+type numbers struct {
+	balance decimal.Decimal
+}
 
 func isEnough(balance, payment_value float64) bool {
 	return payment_value <= balance

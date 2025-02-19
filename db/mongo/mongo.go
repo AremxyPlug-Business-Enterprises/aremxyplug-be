@@ -59,8 +59,9 @@ func (m *mongoStore) col(collectionName string) *mongo.Collection {
 func (m *mongoStore) otpColl() (*mongo.Collection, error) {
 	col := m.mongoClient.Database(m.databaseName).Collection("OTP")
 	ctx := context.Background()
+	expireAtIndexKey := primitive.E{Key: "expireAt", Value: 1}
 	indexModel := mongo.IndexModel{
-		Keys:    bson.D{primitive.E{Key: "expireAt", Value: 1}},
+		Keys:    bson.D{expireAtIndexKey},
 		Options: options.Index().SetExpireAfterSeconds(0),
 	}
 
@@ -72,6 +73,22 @@ func (m *mongoStore) otpColl() (*mongo.Collection, error) {
 	return col, nil
 }
 
+func (m *mongoStore) smsColl() (*mongo.Collection, error) {
+	ctx := context.Background()
+	col := m.mongoClient.Database(m.databaseName).Collection("SMS")
+	expireAtIndexKey := primitive.E{Key: "expireAt", Value: 1}
+	indexModel := mongo.IndexModel{
+		Keys:    bson.D{expireAtIndexKey},
+		Options: options.Index().SetExpireAfterSeconds(0),
+	}
+
+	_, err := col.Indexes().CreateOne(ctx, indexModel)
+	if err != nil {
+		return nil, err
+	}
+
+	return col, nil
+}
 func (m *mongoStore) userColl() (*mongo.Collection, error) {
 	col := m.mongoClient.Database(m.databaseName).Collection(models.UserCollectionName)
 	ctx := context.Background()
@@ -113,6 +130,24 @@ func (m *mongoStore) GetUserByEmail(email string) (*models.User, error) {
 	user := &models.User{}
 	err := m.col(models.UserCollectionName).FindOne(context.Background(), filter).Decode(user)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, err
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
+func (m *mongoStore) GetUserByPhone(phone string) (*models.User, error) {
+	filter := bson.M{
+		"email": phone,
+	}
+	user := &models.User{}
+	err := m.col(models.UserCollectionName).FindOne(context.Background(), filter).Decode(user)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, err
+		}
 		return nil, err
 	}
 	return user, nil
@@ -125,6 +160,9 @@ func (m *mongoStore) GetUserByUsername(username string) (*models.User, error) {
 	user := &models.User{}
 	err := m.col(models.UserCollectionName).FindOne(context.Background(), filter).Decode(user)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, err
+		}
 		return nil, err
 	}
 	return user, nil
@@ -243,17 +281,37 @@ func (m *mongoStore) UpdateBVNField(user models.User) error {
 	return nil
 }
 
-func (m *mongoStore) VerifyUser(email string) (*models.User, error) {
+func (m *mongoStore) UpdateNINField(user models.User) error {
+	ctx := context.Background()
+	filter := bson.M{"userID": user.ID}
+	update := bson.M{"$set": bson.M{"nin": user.NIN}}
+	_, err := m.mongoClient.
+		Database(m.databaseName).
+		Collection(models.UserCollectionName).
+		UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *mongoStore) VerifyUser(identifier string) (*models.User, error) {
 	userColl := m.col(models.UserCollectionName)
 	ctx := context.Background()
 
-	filter := bson.M{"email": email}
+	filter := bson.M{
+		"$or": []bson.M{
+			{"email": identifier},
+			{"phone": identifier},
+		},
+	}
+
 	user := &models.User{}
 
 	err := userColl.FindOne(ctx, filter).Decode(user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("no user found with the email: %s", email)
+			return nil, fmt.Errorf("no user found with the identifier: %s", identifier)
 		}
 		return nil, fmt.Errorf("error querying the database: %w", err)
 	}
@@ -263,12 +321,8 @@ func (m *mongoStore) VerifyUser(email string) (*models.User, error) {
 	}
 
 	update := bson.M{
-		"$set": bson.M{
-			"is_verified": true,
-		},
-		"$unset": bson.M{
-			"expireAt": "",
-		},
+		"$set":   bson.M{"is_verified": true},
+		"$unset": bson.M{"expireAt": ""},
 	}
 
 	updateResult, err := userColl.UpdateOne(ctx, filter, update)
@@ -280,10 +334,7 @@ func (m *mongoStore) VerifyUser(email string) (*models.User, error) {
 		return nil, errors.New("failed to update user document")
 	}
 
-	err = userColl.FindOne(ctx, filter).Decode(user)
-	if err != nil {
-		return nil, fmt.Errorf("error retrieving updated user: %w", err)
-	}
+	user.IsVerified = true
 
 	return user, nil
 }
@@ -348,8 +399,7 @@ func (m *mongoStore) SaveOTP(data models.OTP) error {
 }
 
 func (m *mongoStore) GetOTP(email string) (models.OTP, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+	ctx := context.Background()
 	data := models.OTP{}
 	filter := bson.D{primitive.E{Key: "email", Value: email}}
 	opts := options.FindOne().SetSort(bson.D{{Key: "expireAt", Value: -1}})
@@ -363,4 +413,52 @@ func (m *mongoStore) GetOTP(email string) (models.OTP, error) {
 	}
 
 	return data, nil
+}
+
+func (m *mongoStore) SaveSMS(data models.SMSOTP) error {
+	ctx := context.Background()
+	data.ExpireAt = time.Now().Add(time.Duration(5) * time.Minute)
+
+	col, err := m.smsColl()
+	if err != nil {
+		return err
+	}
+
+	_, err = col.InsertOne(ctx, data)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *mongoStore) GetSMS(phone string) (models.SMSOTP, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	data := models.SMSOTP{}
+	filter := bson.D{primitive.E{Key: "phone", Value: phone}}
+	opts := options.FindOne().SetSort(bson.D{{Key: "expireAt", Value: -1}})
+
+	result := m.col("SMS").FindOne(ctx, filter, opts)
+	err := result.Decode(&data)
+	if err == mongo.ErrNoDocuments {
+		return models.SMSOTP{}, errors.New("no record found")
+	} else if err != nil {
+		return models.SMSOTP{}, err
+	}
+
+	return data, nil
+}
+
+func (m *mongoStore) CheckID(id int) (int64, error) {
+
+	filter := bson.M{"id": id}
+	ctx := context.Background()
+
+	count, err := m.col(models.UserCollectionName).CountDocuments(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, err
 }

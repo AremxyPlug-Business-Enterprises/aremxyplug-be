@@ -19,11 +19,7 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 	}
 
 	if r.Method == "POST" {
-		type requestPayload struct {
-			Bvn string `json:"bvn"`
-		}
 
-		data := requestPayload{}
 		user := *userDetails
 
 		hasAcc, err := handler.hasVirtualAccount(user.ID)
@@ -41,23 +37,7 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "invalid JSON request"}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-		// get the user;s other infomation at this point and then associate the BVN field to this point
-
-		if data.Bvn == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "bvn is required"}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-
-		user.BVN = data.Bvn
-		_, err = handler.virtualAcc.VirtualAccount(user)
+		account, err := handler.virtualAcc.VirtualAccount(user)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"error": err.Error()}}
@@ -65,17 +45,10 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		if err := handler.store.UpdateBVNField(user); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-
 		response := responseFormat.CustomResponse{
 			Status:  http.StatusCreated,
 			Message: "success",
-			Data:    map[string]interface{}{"data": "successfully created virtual account"},
+			Data:    map[string]interface{}{"message": "successfully created virtual account", "data": account},
 		}
 
 		// update with the appropriate method for creating a virtual number

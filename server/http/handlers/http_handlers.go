@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	//"strconv"
@@ -18,6 +19,7 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
+	"go.mongodb.org/mongo-driver/mongo"
 	mongodb "go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
@@ -59,7 +61,15 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	timestamp := handler.timeHelper.Now().Unix()
-	userId := handler.idGenerator.Generate()
+	Id, err := handler.otp.GenerateID()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	userId := strconv.Itoa(Id)
+
 	hashedPassword, err := handler.encrypt.GenerateFromPassword(user.Password)
 	if err != nil {
 		handler.logger.Error("fail to generate password", zap.Error(err))
@@ -79,7 +89,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 
 	if !validUser {
 		w.WriteHeader(http.StatusConflict)
-		response := responseFormat.CustomResponse{Status: http.StatusConflict, Message: "sign-up failed", Data: map[string]interface{}{"data": fmt.Sprintf("%s", field)}}
+		response := responseFormat.CustomResponse{Status: http.StatusConflict, Message: "sign-up failed", Data: map[string]interface{}{"data": field}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -107,8 +117,16 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userResponse := dto.UserResponse{
+		ID:       newUser.ID,
+		FullName: newUser.FullName,
+		Email:    newUser.Email,
+		Username: newUser.Username,
+		Phone:    newUser.PhoneNumber,
+	}
+
 	w.WriteHeader(http.StatusCreated)
-	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"data": "user created"}}
+	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"data": userResponse}}
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -158,6 +176,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userResponse := dto.UserResponse{
+		ID:       user.ID,
 		FullName: user.FullName,
 		Email:    user.Email,
 		Username: user.Username,
@@ -204,7 +223,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Authorization", jwtToken)
 	w.WriteHeader(http.StatusOK)
-	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"auth_token": jwtToken, "refresh_token": refreshToken, "customer": userResponse}}
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"refresh_token": refreshToken, "customer": userResponse}}
 	json.NewEncoder(w).Encode(response)
 
 }
@@ -380,6 +399,46 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+/*
+func (handler *HttpHandler) SendOTPWIthTermii(w http.ResponseWriter, r *http.Request) {
+
+	var userLogin dto.LoginInput
+
+	// Decode and validate the request body
+	if err := json.NewDecoder(r.Body).Decode(&userLogin); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	// Retrieve user by email
+	user, err := handler.store.GetUserByEmail(userLogin.Email)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "User not found", nil)
+		return
+	}
+
+	otp, err := handler.otp.GenerateOTP(user.Email)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error generating otp", err)
+		return
+	}
+
+	message := &models.Message{
+		Body:   otp,
+		Target: user.Email,
+	}
+
+	if err := handler.emailClient.SendWithTermii(message); err != nil {
+		handler.logger.Error("error sending OTP with Termii", zap.String("target", user.Email), zap.Error(err))
+		respondWithError(w, http.StatusInternalServerError, "error sending OTP with Termii", err)
+		return
+	}
+
+	respondWithSuccess(w, http.StatusOK, "success", "OTP sent successfully")
+
+}
+*/
+
 func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	type otp struct {
 		OTP string `json:"otp"`
@@ -430,7 +489,7 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		data := map[string]interface{}{"data": email}
+		data := map[string]interface{}{"email": email}
 		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
 	case "resetpassword":
 		user, err := handler.store.GetUserByEmail(email)
@@ -452,6 +511,103 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Authorization", jwtToken)
 		data := map[string]interface{}{"data": "otp verification successful"}
+		respondWithSuccess(w, http.StatusOK, "success", data)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func (handler *HttpHandler) SendSMSOTP(w http.ResponseWriter, r *http.Request) {
+
+	type input struct {
+		Phone string `json:"phone_number"`
+	}
+
+	data := input{}
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		handler.logger.Error("Invalid request body", zap.Error(err))
+		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	_, err := handler.store.GetUserByPhone(data.Phone)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			handler.logger.Warn("No user found with phone number", zap.String("phone", data.Phone))
+			respondWithError(w, http.StatusNotFound, "no user found with phone number", err)
+			return
+		}
+		handler.logger.Error("Database error", zap.Error(err))
+		respondWithError(w, http.StatusInternalServerError, "database error", err)
+		return
+	}
+
+	err = handler.smsClient.SendSMS(data.Phone)
+	if err != nil {
+		handler.logger.Error("Failed to send OTP", zap.String("phone", data.Phone), zap.Error(err))
+		respondWithError(w, http.StatusInternalServerError, "failed to send otp", err)
+		return
+	}
+
+	handler.logger.Info("OTP sent successfully", zap.String("phone", data.Phone))
+	respondWithSuccess(w, http.StatusOK, "success", "OTP sent successfully")
+}
+
+func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request) {
+
+	type input struct {
+		OTP string `json:"otp"`
+	}
+	data := input{}
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	phone := r.URL.Query().Get("phone")
+
+	err := handler.smsClient.VerifyToken(data.OTP, phone)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error", err)
+		return
+	}
+
+	action := getLastPathSegment(r.URL.Path)
+	switch action {
+	case "signin":
+		data := map[string]interface{}{"phone": phone}
+		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
+	case "signup":
+		_, err := handler.store.VerifyUser(phone)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+
+		data := map[string]interface{}{"phone": phone}
+		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
+	case "resetpassword":
+		user, err := handler.store.GetUserByPhone(phone)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+
+		claims := dto.Claims{
+			PersonId: user.ID,
+		}
+
+		jwtToken, err := handler.jwt.GenerateTokenWithExpiration(claims, handler.authTokenDuration)
+		if err != nil {
+			handler.logger.Error("fail to generate token", zap.Error(err))
+			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+
+		w.Header().Set("Authorization", jwtToken)
+		data := map[string]interface{}{"message": "otp verification successful"}
 		respondWithSuccess(w, http.StatusOK, "success", data)
 	default:
 		http.NotFound(w, r)
