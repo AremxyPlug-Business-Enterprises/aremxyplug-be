@@ -15,7 +15,7 @@ import (
 
 var (
 	baseUrl = os.Getenv("PREMBLY_BASE_URL")
-	apiKey  = os.Getenv("PREMBLY_SANDBOX_APIKEY")
+	apiKey  = os.Getenv("PREMBLY_LIVE_APIKEY")
 	appID   = os.Getenv("PREMBLY_APP_ID")
 )
 
