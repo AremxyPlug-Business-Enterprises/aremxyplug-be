@@ -140,7 +140,7 @@ func (m *mongoStore) GetUserByEmail(email string) (*models.User, error) {
 
 func (m *mongoStore) GetUserByPhone(phone string) (*models.User, error) {
 	filter := bson.M{
-		"email": phone,
+		"phonenumber": phone,
 	}
 	user := &models.User{}
 	err := m.col(models.UserCollectionName).FindOne(context.Background(), filter).Decode(user)
