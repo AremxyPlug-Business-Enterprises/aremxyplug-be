@@ -166,10 +166,8 @@ func (s *SMSConn) VerifyToken(otp, phone string) error {
 		s.logger.Error("Failed to read response body", zap.Error(err))
 		return err
 	}
-	s.logger.Info("Response Body", zap.ByteString("body", bodyBytes))
 
-	// Decode the response body
-	if err := json.NewDecoder(bytes.NewBuffer(bodyBytes)).Decode(&apiResponse); err != nil {
+	if err := apiResponse.UnmarshalJSON(bodyBytes); err != nil {
 		s.logger.Error("Failed to decode response", zap.Error(err))
 		return err
 	}
@@ -178,11 +176,6 @@ func (s *SMSConn) VerifyToken(otp, phone string) error {
 		s.logger.Error("API call returned non-OK status", zap.Int("statusCode", resp.StatusCode))
 		return errors.New("error during API call")
 	}
-
-	// if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-	// 	s.logger.Error("Failed to decode response", zap.Error(err))
-	// 	return err
-	// }
 
 	if !apiResponse.Verified {
 		s.logger.Warn("Verification failed", zap.String("phone", phone), zap.String("otp", otp))
