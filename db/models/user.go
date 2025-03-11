@@ -16,7 +16,17 @@ type User struct {
 	UpdatedAt      int64     `json:"updated_at" bson:"updated_at"`
 	BVN            string    `json:"bvn" bson:"bvn"`
 	NIN            string    `json:"nin" bson:"nin"`
+	DOB            time.Time `json:"birth_date" bson:"birth_date"`
 	IsVerified     bool      `json:"is_verified" bson:"is_verified"`
 	HasPin         bool      `json:"has_Pin" bson:"has_Pin"`
 	ExpireAt       time.Time `bson:"expireAt"`
+	HasBVN         bool      `json:"has_bvn" bson:"has_bvn"`
+	HasNIN         bool      `json:"has_nin" bson:"has_nin"`
+	Address        Address   `json:"address" bson:"address"`
+}
+
+type Address struct {
+	House_Address string `json:"house_address" bson:"house_address"`
+	City          string `json:"city" bson:"city"`
+	State         string `json:"state" bson:"state"`
 }

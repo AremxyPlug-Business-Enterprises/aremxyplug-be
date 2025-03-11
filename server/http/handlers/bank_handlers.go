@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/balance"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/go-chi/chi/v5"
+	"github.com/shopspring/decimal"
 )
 
 func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
@@ -33,13 +35,15 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		bal, err := handler.getBalance(userDetails.ID)
+		userBalance, err := handler.getUserBalance(userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
+
+		bal, _ := strconv.ParseFloat(userBalance.Balance.String(), 64)
 
 		newBal, valid, err := handler.checkTransfer(bal, info.Amount)
 		if !valid || err != nil {
@@ -223,16 +227,52 @@ func (handler *HttpHandler) DepositAccount(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(response)
 }
 
+func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
+
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	bal, err := handler.getUserBalance(userDetails.ID)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	userBalance := struct {
+		Balance string `json:"balance"`
+		UserID  string `json:"user_id"`
+	}{
+		Balance: bal.Balance.String(),
+		UserID:  bal.UserID,
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": userBalance}}
+	json.NewEncoder(w).Encode(response)
+}
+
 // Call this fucction before payments.
 func (handler *HttpHandler) checkPayment(bal, payValue float64) (newBal float64, canPay bool, err error) {
 	paymentERROR := errors.New("insufficient funds to complete payment")
 
-	valid, err := balance.CanPay(bal, payValue)
+	balanceValue, paymentValue := decimal.NewFromFloat(bal), decimal.NewFromFloat(payValue)
+
+	valid, err := balance.CanPay(balanceValue, paymentValue)
 	if !valid || err != nil {
 		return 0, false, paymentERROR
 	}
 
-	newBalance := balance.NewBalancePayment(bal, payValue)
+	balanceAfter := balance.NewBalancePayment(balanceValue, paymentValue)
+
+	bal_String := balanceAfter.String()
+	newBalance, _ := strconv.ParseFloat(bal_String, 64)
 
 	return newBalance, true, nil
 }
@@ -241,13 +281,18 @@ func (handler *HttpHandler) checkTransfer(bal, amount float64) (newBal float64, 
 
 	transferERROR := errors.New("insufficient funds to complete transfer")
 
-	valid, err := balance.CanTransfer(bal, amount)
+	balanceValue, transferAmount := decimal.NewFromFloat(bal), decimal.NewFromFloat(amount)
+
+	valid, err := balance.CanTransfer(balanceValue, transferAmount)
 	if !valid || err != nil {
 
 		return 0, false, transferERROR
 	}
 
-	newBalance := balance.NewBalanceTransfer(bal, amount)
+	balanceAfter := balance.NewBalanceTransfer(balanceValue, transferAmount)
+
+	bal_String := balanceAfter.String()
+	newBalance, _ := strconv.ParseFloat(bal_String, 64)
 
 	return newBalance, true, nil
 
@@ -297,6 +342,15 @@ func (handler *HttpHandler) getBalance(virtualNuban string) (balance float64, er
 	bal, err := handler.bankTranc.GetBalance(virtualNuban)
 	if err != nil {
 		return 0, err
+	}
+
+	return bal, nil
+}
+
+func (handler *HttpHandler) getUserBalance(userID string) (models.Balance, error) {
+	bal, err := handler.store.GetBalanceDetails(userID)
+	if err != nil {
+		return models.Balance{}, err
 	}
 
 	return bal, nil

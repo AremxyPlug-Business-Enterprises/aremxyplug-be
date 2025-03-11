@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/aremxyplug-be/db/models"
+	"github.com/shopspring/decimal"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -295,7 +297,26 @@ func (m *mongoStore) GetBalance(virtualNuban string) (balance float64, err error
 		return 0, e
 	}
 
-	return bal.Balance, nil
+	retrievedBalance, _ := decimal.NewFromString(bal.Balance.String())
+
+	priceStr := retrievedBalance.String()
+	returnedBalance, _ := strconv.ParseFloat(priceStr, 64)
+
+	return returnedBalance, nil
+}
+
+func (m *mongoStore) GetBalanceDetails(id string) (models.Balance, error) {
+	ctx := context.Background()
+	filter := bson.D{primitive.E{Key: "user_id", Value: id}}
+
+	result := m.col(balColl).FindOne(ctx, filter)
+	var resp models.Balance
+	err := result.Decode(&resp)
+	if err != nil {
+		return models.Balance{}, err
+	}
+
+	return resp, nil
 }
 
 func (m *mongoStore) SaveBalance(virtualNuban string, balance models.Balance) error {

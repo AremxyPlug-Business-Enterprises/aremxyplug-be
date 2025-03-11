@@ -50,6 +50,7 @@ type BankStore interface {
 	GetBalance(virtualNuban string) (balance float64, err error)
 	SaveBalance(virtualNuban string, balance models.Balance) error
 	UpdateBalance(virtualNuban string, balance float64) error
+	GetBalanceDetails(id string) (models.Balance, error)
 }
 
 type UserStore interface {
