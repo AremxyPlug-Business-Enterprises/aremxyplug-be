@@ -13,6 +13,7 @@ import (
 	"github.com/aremxyplug-be/db/mongo"
 	"github.com/aremxyplug-be/lib/balance"
 	"github.com/aremxyplug-be/lib/randomgen"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/zap"
 )
 
@@ -139,10 +140,11 @@ func (c *Config) Deposit(virtualNuban string) error {
 		log.Println(deposit_amount)
 
 		newBalance, depositAmount := balance.NewBalanceDeposit(bal, deposit_amount)
+		parsedBalance, _ := primitive.ParseDecimal128(newBalance.String())
 		log.Println(newBalance)
 		userBalance := models.Balance{
 			VirtualNuban: virtualNuban,
-			Balance:      newBalance,
+			Balance:      parsedBalance,
 		}
 		if err = c.db.SaveBalance(virtualNuban, userBalance); err != nil {
 			// log the error and return

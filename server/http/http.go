@@ -109,11 +109,11 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		router.Get("/verify-token", httpHandler.ValidateToken)
 
-		SendOTPRoutes(router, httpHandler)
+		sendOTPRoutes(router, httpHandler)
 
-		SMSRoutes(router, httpHandler)
+		smsRoutes(router, httpHandler)
 
-		VerifyOTPRoutes(router, httpHandler)
+		verifyOTPRoutes(router, httpHandler)
 
 		// // test
 		// router.Post("/test", httpHandler.Testtoken)
@@ -154,6 +154,9 @@ func MountServer(config ServerConfig) *chi.Mux {
 		extraRoutes(authRouter, httpHandler)
 
 		virtualAccRoutes(authRouter, httpHandler)
+
+		getBalance(authRouter, httpHandler)
+
 		/*
 			transferMoneyRoutes(authRouter, httpHandler)
 
@@ -296,7 +299,7 @@ func virtualAccRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	})
 }
 
-func VerifyOTPRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+func verifyOTPRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/verify-otp", func(router chi.Router) {
 		router.Post("/signin", httpHandler.VerifyOTP)
 		router.Post("/signup", httpHandler.VerifyOTP)
@@ -304,7 +307,7 @@ func VerifyOTPRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	})
 }
 
-func SendOTPRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+func sendOTPRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/send-otp", func(router chi.Router) {
 		router.Post("/signin", httpHandler.SendOTP)
 		router.Post("/signup", httpHandler.SendOTP)
@@ -312,7 +315,7 @@ func SendOTPRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	})
 }
 
-func SMSRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+func smsRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/sms", func(router chi.Router) {
 		router.Route("/send", func(router chi.Router) {
 			router.Post("/", httpHandler.SendSMSOTP)
@@ -322,6 +325,12 @@ func SMSRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 			router.Post("/signin", httpHandler.VerifySMSOTP)
 			router.Post("/resetpassword", httpHandler.VerifySMSOTP)
 		})
+	})
+}
+
+func getBalance(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/balance", func(router chi.Router) {
+		router.Get("/", httpHandler.GetBalance)
 	})
 }
 

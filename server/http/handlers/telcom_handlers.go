@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/aremxyplug-be/lib/responseFormat"
@@ -21,7 +22,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	// id := userDetails.ID
+	id := userDetails.ID
 	username := userDetails.Username
 
 	if r.Method == "POST" {
@@ -38,31 +39,34 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "Phone number must be %d digits, got %d. Check the phone number and try again.", 11, len(data.Phone_no))
 			return
 		}
-		/*
-			bal, err := handler.getBalance(id)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
 
-			amount, err := strconv.Atoi(data.Amount)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
+		userBalance, err := handler.getUserBalance(id)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
-			}
+		}
 
-			newBal, valid, err := handler.checkTransfer(bal, float64(amount))
-			if !valid || err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-		*/
+		amount, err := strconv.Atoi(data.Amount)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		balance_string := userBalance.Balance.String()
+		bal, _ := strconv.ParseFloat(balance_string, 64)
+
+		newBal, valid, err := handler.checkPayment(bal, float64(amount))
+		if !valid || err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		data.Username = username
 		res, err := handler.vtuClient.BuyAirtime(data)
 		if err != nil {
@@ -71,14 +75,14 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...\n %s\n", err)
 			return
 		}
-		/*
-			if err := handler.updateBalance(id, newBal); err != nil {
-				w.WriteHeader(http.StatusNotModified)
-				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-		*/
+
+		if err := handler.updateBalance(id, newBal); err != nil {
+			w.WriteHeader(http.StatusNotModified)
+			response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		json.NewEncoder(w).Encode(res)
 	}
 
@@ -346,7 +350,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	// id := userDetails.ID
+	id := userDetails.ID
 	username := userDetails.Username
 
 	if r.Method == "POST" {
@@ -358,30 +362,25 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			return
 
 		}
-		/*
-			bal, err := handler.getBalance(id)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
 
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
+		userBalance, err := handler.getUserBalance(id)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
-			}
+		}
 
-			newBal, valid, err := handler.checkTransfer(bal, float64(data.Amount))
-			if !valid || err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-		*/
+		balance_string := userBalance.Balance.String()
+		bal, _ := strconv.ParseFloat(balance_string, 64)
+
+		newBal, valid, err := handler.checkPayment(bal, float64(data.Amount))
+		if !valid || err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
 
 		res, err := handler.dataClient.BuySpecData(data)
 		if err != nil {
@@ -390,14 +389,14 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
 			return
 		}
-		/*
-			if err := handler.updateBalance(id, newBal); err != nil {
-				w.WriteHeader(http.StatusNotModified)
-				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-		*/
+
+		if err := handler.updateBalance(id, newBal); err != nil {
+			w.WriteHeader(http.StatusNotModified)
+			response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		json.NewEncoder(w).Encode(res)
 	}
 

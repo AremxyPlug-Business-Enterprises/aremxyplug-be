@@ -1,5 +1,7 @@
 package models
 
+import "go.mongodb.org/mongo-driver/bson/primitive"
+
 type TransferInfo struct {
 	Bank_name      string  `json:"bank_name"`
 	Account_Number string  `json:"account_number"`
@@ -56,7 +58,7 @@ type DepositResponse struct {
 }
 
 type Balance struct {
-	VirtualNuban string  `json:"virtualNuban"`
-	UserID       string  `json:"user_id"`
-	Balance      float64 `json:"balance"`
+	VirtualNuban string               `json:"virtualNuban"`
+	UserID       string               `json:"user_id"`
+	Balance      primitive.Decimal128 `json:"balance"`
 }

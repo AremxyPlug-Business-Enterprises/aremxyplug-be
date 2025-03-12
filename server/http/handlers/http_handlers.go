@@ -20,7 +20,6 @@ import (
 	"golang.org/x/text/language"
 
 	"go.mongodb.org/mongo-driver/mongo"
-	mongodb "go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
 
@@ -107,6 +106,8 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:      timestamp,
 		IsVerified:     false,
 		HasPin:         false,
+		HasBVN:         false,
+		HasNIN:         false,
 	}
 
 	err = handler.store.SaveUser(newUser)
@@ -681,7 +682,7 @@ func (handler *HttpHandler) Testtoken(w http.ResponseWriter, r *http.Request) {
 func (handler *HttpHandler) isValidNewUser(user models.User) (bool, string, error) {
 	userDetails, err := handler.store.GetUserByUsernameOrEmailOrPhone(user.Username, user.Email, user.PhoneNumber)
 	if err != nil {
-		if err == mongodb.ErrNoDocuments {
+		if err == mongo.ErrNoDocuments {
 			return true, "", nil
 		}
 		return false, "", err
