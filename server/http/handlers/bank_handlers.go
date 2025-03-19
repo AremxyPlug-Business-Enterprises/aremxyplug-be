@@ -19,7 +19,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user's details: %s", err.Error())}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -30,7 +30,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		info := models.TransferInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -38,7 +38,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		userBalance, err := handler.getUserBalance(userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance: %s", err.Error())}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -48,7 +48,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		newBal, valid, err := handler.checkTransfer(bal, info.Amount)
 		if !valid || err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not complete transfer: %s", err.Error())}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -56,7 +56,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		resp, err := handler.bankTrf.TransferToBank(info)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
 
@@ -64,7 +64,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 
 		if err := handler.updateBalance(userDetails.ID, newBal); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -164,7 +164,7 @@ func (handler *HttpHandler) GetDepositHistory(w http.ResponseWriter, r *http.Req
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user's details: %s", err.Error())}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -172,7 +172,7 @@ func (handler *HttpHandler) GetDepositHistory(w http.ResponseWriter, r *http.Req
 	dept, err := handler.bankTranc.GetDepositHistory(userDetails.Username)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -187,7 +187,7 @@ func (handler *HttpHandler) GetAllDepositHistory(w http.ResponseWriter, r *http.
 	dept, err := handler.bankTranc.GetDepositHistory("")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -203,7 +203,7 @@ func (handler *HttpHandler) GetBanks(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -217,7 +217,7 @@ func (handler *HttpHandler) DepositAccount(w http.ResponseWriter, r *http.Reques
 	err := handler.virtualAcc.CreateDepositAccount()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -232,15 +232,24 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user's details: %s", err.Error())}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	bal, err := handler.getUserBalance(userDetails.ID)
+	id := userDetails.ID
+
+	bal, err := handler.getUserBalance(id)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if err := handler.refreshBalance(id); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not refresh balance: %s", err.Error())}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -322,8 +331,8 @@ func (handler *HttpHandler) getVirtualNuban(id string) (string, error) {
 	return acc_details.VirtualAccountID, nil
 }
 
-func (handler *HttpHandler) refreshBalance(name string) error {
-	virtualNuban, err := handler.getVirtualNuban(name)
+func (handler *HttpHandler) refreshBalance(id string) error {
+	virtualNuban, err := handler.getVirtualNuban(id)
 	if err != nil {
 		handler.logger.Error(err.Error())
 		return err

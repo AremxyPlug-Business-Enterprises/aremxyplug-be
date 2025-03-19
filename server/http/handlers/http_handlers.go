@@ -106,8 +106,6 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:      timestamp,
 		IsVerified:     false,
 		HasPin:         false,
-		HasBVN:         false,
-		HasNIN:         false,
 	}
 
 	err = handler.store.SaveUser(newUser)
@@ -204,21 +202,16 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	/*
-		if err := handler.refreshBalance(user.FullName); err != nil {
-			if err == deposit.ErrEmptyVirtualNuban {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "virtualNuban is empty"}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-			handler.logger.Error("failed to load user's balance", zap.Error(err))
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-	*/
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		Expires:  time.Now().Add(30 * time.Minute),
+		HttpOnly: true,
+		Secure:   true,
+		Path:     "/",
+		SameSite: http.SameSiteNoneMode,
+		Domain:   ".aremxyplug.com",
+	})
 
 	// should check if the user already has pin set otherwise return an status that should redirect the frontend to the pin endpoint
 

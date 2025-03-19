@@ -157,6 +157,8 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		getBalance(authRouter, httpHandler)
 
+		telcomRoutes(authRouter, httpHandler)
+
 		/*
 			transferMoneyRoutes(authRouter, httpHandler)
 
@@ -331,6 +333,19 @@ func smsRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 func getBalance(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/balance", func(router chi.Router) {
 		router.Get("/", httpHandler.GetBalance)
+	})
+}
+
+func telcomRoutes(router chi.Router, httpHandler *handlers.HttpHandler) {
+	router.Route("/products", func(r chi.Router) {
+		r.Post("/", httpHandler.TelcomProducts)
+	})
+
+	router.Route("/plans", func(r chi.Router) {
+		r.Post("/", httpHandler.TelecomPlans)
+		r.Get("/{productID}", httpHandler.TelecomPlans)
+		r.Put("/{planID}", httpHandler.TelecomPlans)
+		r.Delete("/{planID}", httpHandler.TelecomPlans)
 	})
 }
 
