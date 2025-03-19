@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/responseFormat"
@@ -13,16 +14,16 @@ import (
 
 // EduPins is use to carry out buying of education pins(POST) and returning all the transactions made by the user(GET)
 func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
-	/*
-		userDetails, err := handler.GetUserDetails(r)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-		id := userDetails.ID
-	*/
+
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	id := userDetails.ID
+
 	if r.Method == "POST" {
 		data := models.EduInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -37,31 +38,31 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "Invalid number of pins!! Pins between %d and %d are not allowed. Try again...", 5, 10)
 			return
 		}
-		/*
-			bal, err := handler.getBalance(id)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
 
-			amount, err := strconv.Atoi(data.Amount)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
+		bal, err := handler.getBalance(id)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
-			}
+		}
 
-			newBal, valid, err := handler.checkTransfer(bal, float64(amount))
-			if !valid || err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-		*/
+		amount, err := strconv.Atoi(data.Amount)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		newBal, valid, err := handler.checkTransfer(bal, float64(amount))
+		if !valid || err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		res, err := handler.eduClient.BuyEduPin(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -69,14 +70,14 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "An internal error occurred while purchasing %s pin, please try again...", data.Exam_Type)
 			return
 		}
-		/*
-			if err := handler.updateBalance(id, newBal); err != nil {
-				w.WriteHeader(http.StatusNotModified)
-				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-		*/
+
+		if err := handler.updateBalance(id, newBal); err != nil {
+			w.WriteHeader(http.StatusNotModified)
+			response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		json.NewEncoder(w).Encode(res)
 	}
 
@@ -126,16 +127,16 @@ func (handler *HttpHandler) GetEduTransactions(w http.ResponseWriter, r *http.Re
 }
 
 func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Request) {
-	/*
-		userDetails, err := handler.GetUserDetails(r)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-		id := userDetails.ID
-	*/
+
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	id := userDetails.ID
+
 	if r.Method == "POST" {
 		data := models.TvInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -145,30 +146,23 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 
 		}
-		/*
-			bal, err := handler.getBalance(id)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
 
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
+		bal, err := handler.getBalance(id)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to load user's balance, %s", err.Error())}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		newBal, valid, err := handler.checkPayment(bal, float64(data.Amount))
+		if !valid || err != nil {
+			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
-			}
+		}
 
-			newBal, valid, err := handler.checkTransfer(bal, float64(data.Amount))
-			if !valid || err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-		*/
 		res, err := handler.tvClient.BuySub(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -177,14 +171,14 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			fmt.Fprintf(w, "An internal error occurred while purchasing tv subscription, please try again...")
 			return
 		}
-		/*
-			if err := handler.updateBalance(id, newBal); err != nil {
-				w.WriteHeader(http.StatusNotModified)
-				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-		*/
+
+		if err := handler.updateBalance(id, newBal); err != nil {
+			w.WriteHeader(http.StatusNotModified)
+			response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		json.NewEncoder(w).Encode(res)
 	}
 
@@ -228,16 +222,16 @@ func (handler *HttpHandler) GetTvSubDetails(w http.ResponseWriter, r *http.Reque
 }
 
 func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request) {
-	/*
-		userDetails, err := handler.GetUserDetails(r)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-		id := userDetails.ID
-	*/
+
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	id := userDetails.ID
+
 	if r.Method == "POST" {
 		data := models.ElectricInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -246,30 +240,23 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			fmt.Fprintf(w, "%v", err)
 			return
 		}
-		/*
-			bal, err := handler.getBalance(id)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
 
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
+		bal, err := handler.getBalance(id)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to load user's balance: %s", err.Error())}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		newBal, valid, err := handler.checkPayment(bal, float64(data.Amount))
+		if !valid || err != nil {
+			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
-			}
+		}
 
-			newBal, valid, err := handler.checkTransfer(bal, float64(data.Amount))
-			if !valid || err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-		*/
 		if data.Amount < 1000 {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": "amount is less than 1000"}}
@@ -284,14 +271,14 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			fmt.Fprintf(w, "An internal error occurred while paying electricity bill, please try again...")
 			return
 		}
-		/*
-			if err := handler.updateBalance(id, newBal); err != nil {
-				w.WriteHeader(http.StatusNotModified)
-				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-		*/
+
+		if err := handler.updateBalance(id, newBal); err != nil {
+			w.WriteHeader(http.StatusNotModified)
+			response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		json.NewEncoder(w).Encode(res)
 	}
 

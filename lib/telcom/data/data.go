@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/aremxyplug-be/db"
+	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
+	"github.com/aremxyplug-be/db/sqlstore"
 	"github.com/aremxyplug-be/lib/randomgen"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -28,14 +30,16 @@ var (
 )
 
 type DataConn struct {
-	Dbconn db.TelcomStore
-	Logger *zap.Logger
+	Dbconn  db.TelcomStore
+	Logger  *zap.Logger
+	Sqlconn *sqlstore.SqlStore
 }
 
-func NewData(DbConn db.TelcomStore, logger *zap.Logger) *DataConn {
+func NewData(DbConn db.TelcomStore, sqlconn *sqlstore.SqlStore, logger *zap.Logger) *DataConn {
 	return &DataConn{
-		Dbconn: DbConn,
-		Logger: logger,
+		Dbconn:  DbConn,
+		Sqlconn: sqlconn,
+		Logger:  logger,
 	}
 }
 
@@ -364,9 +368,52 @@ func (d *DataConn) QueryTransaction(id int) error {
 	return nil
 
 }
+func (d *DataConn) GetProductsByID(productID int) ([]models.Product, error) {
+	products, err := d.Sqlconn.GetProducts(productID)
+	if err != nil {
+		d.Logger.Error("Error fetching products by ID", zap.Int("productID", productID), zap.Error(err))
+		return nil, errors.New("failed to fetch products by ID")
+	}
+	return products, nil
+}
+
+func (d *DataConn) AddPlan(plan models.Plan) (int, error) {
+	id, err := d.Sqlconn.CreatePlan(plan)
+	if err != nil {
+		d.Logger.Error("Error adding plan", zap.Any("plan", plan), zap.Error(err))
+		return 0, errors.New("failed to add plan")
+	}
+	return id, nil
+}
+
+func (d *DataConn) DeletePlan(planID int) error {
+	err := d.Sqlconn.DeletePlan(planID)
+	if err != nil {
+		d.Logger.Error("Error deleting plan", zap.Int("planID", planID), zap.Error(err))
+		return errors.New("failed to delete plan")
+	}
+	return nil
+}
+
+func (d *DataConn) UpdatePlan(planID int, plan models.Plan) error {
+	err := d.Sqlconn.UpdatePlan(planID, plan)
+	if err != nil {
+		d.Logger.Error("Error updating plan", zap.Int("planID", planID), zap.Any("plan", plan), zap.Error(err))
+		return errors.New("failed to update plan")
+	}
+	return nil
+}
+
+func (d *DataConn) GetPlans(productID int) ([]models.Plan, error) {
+	plans, err := d.Sqlconn.GetPlansByProductID(productID)
+	if err != nil {
+		d.Logger.Error("Error fetching plans by product ID", zap.Int("productID", productID), zap.Error(err))
+		return nil, errors.New("failed to fetch plans by product ID")
+	}
+	return plans, nil
+}
 
 func (d *DataConn) buySmileData(data telcom.SmileInfo) (*http.Response, error) {
-
 	formdata := url.Values{
 		"request_id":     {data.RequestID},
 		"serviceID":      {data.Product},
@@ -380,6 +427,7 @@ func (d *DataConn) buySmileData(data telcom.SmileInfo) (*http.Response, error) {
 
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
+		d.Logger.Error("Error creating HTTP request for Smile data", zap.Error(err))
 		return nil, err
 	}
 	req.Header.Set("api-key", pk)
@@ -389,6 +437,7 @@ func (d *DataConn) buySmileData(data telcom.SmileInfo) (*http.Response, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		d.Logger.Error("Error sending HTTP request for Smile data", zap.Error(err))
 		return nil, err
 	}
 
@@ -396,7 +445,6 @@ func (d *DataConn) buySmileData(data telcom.SmileInfo) (*http.Response, error) {
 }
 
 func (d *DataConn) buySpecData(data telcom.SpectranetInfo) (*http.Response, error) {
-
 	amount := strconv.Itoa(data.Amount)
 
 	formdata := url.Values{
@@ -414,6 +462,7 @@ func (d *DataConn) buySpecData(data telcom.SpectranetInfo) (*http.Response, erro
 
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
+		d.Logger.Error("Error creating HTTP request for Spectranet data", zap.Error(err))
 		return nil, err
 	}
 	req.Header.Set("api-key", pk)
@@ -423,27 +472,37 @@ func (d *DataConn) buySpecData(data telcom.SpectranetInfo) (*http.Response, erro
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		d.Logger.Error("Error sending HTTP request for Spectranet data", zap.Error(err))
 		return nil, err
 	}
 
 	return resp, nil
 }
 
-// saveTranscation saves the details of a transaction to database
+// saveTransaction saves the details of a transaction to the database
 func (d *DataConn) saveTransacation(details interface{}) error {
 	err := d.Dbconn.SaveDataTransaction(details)
+	if err != nil {
+		d.Logger.Error("Error saving transaction to database", zap.Any("details", details), zap.Error(err))
+	}
 	return err
 }
 
-// getTransacationDetails returns the details of a transaction
+// getTransactionDetails returns the details of a transaction
 func (d *DataConn) getTransactionDetails(id string) (telcom.DataResult, error) {
 	result, err := d.Dbconn.GetDataTransactionDetails(id)
+	if err != nil {
+		d.Logger.Error("Error fetching transaction details", zap.String("transactionID", id), zap.Error(err))
+	}
 	return result, err
 }
 
-// getAllTransaction returns all transactions, if an empty string is passed, it returns all transaction in the database
+// getAllTransactions returns all transactions. If an empty string is passed, it returns all transactions in the database
 func (d *DataConn) getAllTransactions(username string) ([]telcom.DataResult, error) {
 	results, err := d.Dbconn.GetAllDataTransactions(username)
+	if err != nil {
+		d.Logger.Error("Error fetching all transactions", zap.String("username", username), zap.Error(err))
+	}
 	return results, err
 }
 

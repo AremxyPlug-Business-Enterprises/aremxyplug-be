@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/go-chi/chi/v5"
@@ -18,7 +19,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user details: %s", err.Error())}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -133,7 +134,7 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user details: %s", err.Error())}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -235,7 +236,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user details: %s", err.Error())}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -346,7 +347,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user details: %s", err.Error())}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -449,7 +450,7 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user details: %s", err.Error())}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -550,4 +551,190 @@ func (handler *HttpHandler) GetSmileTransactions(w http.ResponseWriter, r *http.
 	}
 
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (handler *HttpHandler) TelcomProducts(w http.ResponseWriter, r *http.Request) {
+
+	// Decode the JSON payload
+	var payload struct {
+		ProductID int `json:"product_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Invalid JSON payload"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	products, err := handler.dataClient.GetProductsByID(payload.ProductID)
+	if err != nil {
+		handler.logger.Error("Failed to retrieve products", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Failed to retrieve products"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"products": products},
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method == "POST" {
+
+		newPlan := models.Plan{}
+
+		if err := json.NewDecoder(r.Body).Decode(&newPlan); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Invalid JSON payload", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Invalid JSON payload"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		createdPlan, err := handler.dataClient.AddPlan(newPlan)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Failed to create plan", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Failed to create plan"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "Plan created successfully",
+			Data: map[string]interface{}{
+				"new_plan": newPlan,
+				"plan_ID":  createdPlan,
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+	}
+
+	if r.Method == "GET" {
+		id := r.URL.Query().Get("productID")
+
+		productID, _ := strconv.Atoi(id)
+
+		plans, err := handler.dataClient.GetPlans(productID)
+		if err != nil {
+			handler.logger.Error("Failed to retrieve plans", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Failed to retrieve plans"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Return the plans as a response
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"plans": plans},
+		}
+		json.NewEncoder(w).Encode(response)
+	}
+
+	if r.Method == "PUT" {
+
+		id := r.URL.Query().Get("planID")
+		planID, _ := strconv.Atoi(id)
+
+		updatedPlan := models.Plan{}
+
+		if err := json.NewDecoder(r.Body).Decode(&updatedPlan); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Invalid JSON payload", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Invalid JSON payload"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		if err := handler.dataClient.UpdatePlan(planID, updatedPlan); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Failed to update plan", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Failed to update plan"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"updated_plan": updatedPlan},
+		}
+		json.NewEncoder(w).Encode(response)
+
+	}
+
+	if r.Method == "DELETE" {
+
+		id := r.URL.Query().Get("planID")
+
+		planID, err := strconv.Atoi(id)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Invalid plan ID", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Invalid plan ID"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		if err := handler.dataClient.DeletePlan(planID); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Failed to delete plan", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Failed to delete plan"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("Plan with ID %d deleted successfully", planID)},
+		}
+		json.NewEncoder(w).Encode(response)
+	}
 }

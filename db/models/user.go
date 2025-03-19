@@ -20,8 +20,6 @@ type User struct {
 	IsVerified     bool      `json:"is_verified" bson:"is_verified"`
 	HasPin         bool      `json:"has_Pin" bson:"has_Pin"`
 	ExpireAt       time.Time `bson:"expireAt"`
-	HasBVN         bool      `json:"has_bvn" bson:"has_bvn"`
-	HasNIN         bool      `json:"has_nin" bson:"has_nin"`
 	Address        Address   `json:"address" bson:"address"`
 }
 
