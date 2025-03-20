@@ -3,6 +3,7 @@ package sqlstore
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aremxyplug-be/db/models"
 	"go.uber.org/zap"
@@ -81,7 +82,7 @@ func (s *SqlStore) CreatePlan(plan models.Plan) (int, error) {
 	return nextID, nil
 }
 
-func (s *SqlStore) UpdatePlan(planID int, updatedPlan models.Plan) error {
+func (s *SqlStore) UpdatePlan(planID int, updatedPlan models.PlanUpdate) error {
 	ctx := context.Background()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -89,6 +90,36 @@ func (s *SqlStore) UpdatePlan(planID int, updatedPlan models.Plan) error {
 		return fmt.Errorf("failed to begin transaction: %v", err)
 	}
 	defer tx.Rollback()
+
+	// Track clauses and values for the SET part
+	setClauses := []string{}
+	args := []interface{}{}
+
+	if updatedPlan.Amount != nil {
+		setClauses = append(setClauses, "amount = ?")
+		args = append(args, *updatedPlan.Amount)
+	}
+	if updatedPlan.Validity != nil {
+		setClauses = append(setClauses, "validity = ?")
+		args = append(args, *updatedPlan.Validity)
+	}
+	if updatedPlan.Size != nil {
+		setClauses = append(setClauses, "size = ?")
+		args = append(args, *updatedPlan.Size)
+	}
+
+	if len(setClauses) == 0 {
+		return fmt.Errorf("no fields provided for update")
+	}
+
+	// Add the planID to the args for WHERE clause
+	args = append(args, planID)
+
+	// Build the final query
+	query := fmt.Sprintf(
+		"UPDATE plans SET %s WHERE plan_id = ?",
+		strings.Join(setClauses, ", "),
+	)
 
 	var exists bool
 	err = tx.QueryRowContext(ctx,
@@ -103,16 +134,7 @@ func (s *SqlStore) UpdatePlan(planID int, updatedPlan models.Plan) error {
 		return fmt.Errorf("plan ID %d does not exist", planID)
 	}
 
-	_, err = tx.ExecContext(ctx,
-		`UPDATE plans SET
-            amount = ?,
-            validity = ?,
-            size = ?
-        WHERE plan_id = ?`,
-		updatedPlan.Amount,
-		updatedPlan.Validity,
-		updatedPlan.Size,
-		planID)
+	_, err = tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		s.logger.Error("Failed to update plan", zap.Error(err))
 		return fmt.Errorf("update failed: %v", err)
@@ -168,9 +190,16 @@ func (s *SqlStore) DeletePlan(planID int) error {
 
 func (s *SqlStore) GetPlansByProductID(productID int) ([]models.Plan, error) {
 	rows, err := s.db.Query(`
-        SELECT plan_id, product_id, amount, validity, size
-        FROM plans
-        WHERE product_id = ?`, productID)
+	SELECT 
+		p.plan_id, 
+		p.product_id, 
+		p.amount, 
+		p.validity, 
+		p.size, 
+		pr.plan_type 
+	FROM plans p
+	INNER JOIN products pr ON p.product_id = pr.product_id
+	WHERE p.product_id = ?`, productID)
 	if err != nil {
 		s.logger.Error("Failed to retrieve plans", zap.Int("productID", productID), zap.Error(err))
 		return nil, fmt.Errorf("failed to retrieve plans for product ID %d: %v", productID, err)
@@ -186,6 +215,7 @@ func (s *SqlStore) GetPlansByProductID(productID int) ([]models.Plan, error) {
 			&plan.Amount,
 			&plan.Validity,
 			&plan.Size,
+			&plan.PlanType,
 		)
 		if err != nil {
 			s.logger.Error("Failed to scan plan row", zap.Error(err))

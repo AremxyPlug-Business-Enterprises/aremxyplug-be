@@ -555,22 +555,11 @@ func (handler *HttpHandler) GetSmileTransactions(w http.ResponseWriter, r *http.
 
 func (handler *HttpHandler) TelcomProducts(w http.ResponseWriter, r *http.Request) {
 
-	// Decode the JSON payload
-	var payload struct {
-		ProductID int `json:"product_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		response := responseFormat.CustomResponse{
-			Status:  http.StatusBadRequest,
-			Message: "error",
-			Data:    map[string]interface{}{"data": "Invalid JSON payload"},
-		}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
+	id := chi.URLParam(r, "productID")
 
-	products, err := handler.dataClient.GetProductsByID(payload.ProductID)
+	productID, _ := strconv.Atoi(id)
+
+	products, err := handler.dataClient.GetProductsByID(productID)
 	if err != nil {
 		handler.logger.Error("Failed to retrieve products", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -635,7 +624,7 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 	}
 
 	if r.Method == "GET" {
-		id := r.URL.Query().Get("productID")
+		id := chi.URLParam(r, "productID")
 
 		productID, _ := strconv.Atoi(id)
 
@@ -663,10 +652,10 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 
 	if r.Method == "PUT" {
 
-		id := r.URL.Query().Get("planID")
+		id := chi.URLParam(r, "planID")
 		planID, _ := strconv.Atoi(id)
 
-		updatedPlan := models.Plan{}
+		updatedPlan := models.PlanUpdate{}
 
 		if err := json.NewDecoder(r.Body).Decode(&updatedPlan); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -703,7 +692,7 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 
 	if r.Method == "DELETE" {
 
-		id := r.URL.Query().Get("planID")
+		id := chi.URLParam(r, "plaID")
 
 		planID, err := strconv.Atoi(id)
 		if err != nil {
