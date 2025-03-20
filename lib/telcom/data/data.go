@@ -395,7 +395,7 @@ func (d *DataConn) DeletePlan(planID int) error {
 	return nil
 }
 
-func (d *DataConn) UpdatePlan(planID int, plan models.Plan) error {
+func (d *DataConn) UpdatePlan(planID int, plan models.PlanUpdate) error {
 	err := d.Sqlconn.UpdatePlan(planID, plan)
 	if err != nil {
 		d.Logger.Error("Error updating plan", zap.Int("planID", planID), zap.Any("plan", plan), zap.Error(err))

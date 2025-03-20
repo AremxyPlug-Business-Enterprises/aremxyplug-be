@@ -12,4 +12,11 @@ type Plan struct {
 	Amount    float64
 	Validity  string
 	Size      string
+	PlanType  string
+}
+
+type PlanUpdate struct {
+	Amount   *float64 `json:"amount,omitempty"`
+	Validity *string  `json:"validity,omitempty"`
+	Size     *string  `json:"size,omitempty"`
 }
