@@ -21,10 +21,10 @@ var networkIDs = map[string]int{
 }
 
 var (
-	dbUser     = os.Getenv("DB_USER")
-	dbPassword = os.Getenv("DB_PASSWORD")
-	dbHost     = os.Getenv("DB_HOST")
-	dbName     = os.Getenv("DB_NAME")
+	dbUser     = os.Getenv("SQL_DB_USER")
+	dbPassword = os.Getenv("SQL_DB_PASSWORD")
+	dbHost     = os.Getenv("SQL_DB_HOST")
+	dbName     = os.Getenv("SQL_DB_NAME")
 )
 
 type SqlStore struct {
