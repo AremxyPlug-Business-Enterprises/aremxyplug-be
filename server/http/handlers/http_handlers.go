@@ -94,18 +94,21 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newUser := models.User{
-		ID:             userId,
-		FullName:       full_name,
-		Email:          user.Email,
-		Username:       user.Username,
-		Password:       string(hashedPassword),
-		PhoneNumber:    user.PhoneNumber,
-		Country:        user.Country,
-		InvitationCode: user.InvitationCode,
-		CreatedAt:      timestamp,
-		UpdatedAt:      timestamp,
-		IsVerified:     false,
-		HasPin:         false,
+		ID:              userId,
+		FullName:        full_name,
+		Email:           user.Email,
+		Username:        user.Username,
+		Password:        string(hashedPassword),
+		PhoneNumber:     user.PhoneNumber,
+		Country:         user.Country,
+		InvitationCode:  user.InvitationCode,
+		CreatedAt:       timestamp,
+		UpdatedAt:       timestamp,
+		HasBVN:          false,
+		HasNIN:          false,
+		HasVirtualNuban: false,
+		IsVerified:      false,
+		HasPin:          false,
 	}
 
 	err = handler.store.SaveUser(newUser)
