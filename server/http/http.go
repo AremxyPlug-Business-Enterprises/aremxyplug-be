@@ -159,6 +159,8 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		telcomRoutes(authRouter, httpHandler)
 
+		checkVerification(authRouter, httpHandler)
+
 		/*
 			transferMoneyRoutes(authRouter, httpHandler)
 
@@ -346,6 +348,12 @@ func telcomRoutes(router chi.Router, httpHandler *handlers.HttpHandler) {
 		r.Get("/{productID}", httpHandler.TelecomPlans)
 		r.Put("/{planID}", httpHandler.TelecomPlans)
 		r.Delete("/{planID}", httpHandler.TelecomPlans)
+	})
+}
+
+func checkVerification(router chi.Router, httpHandler *handlers.HttpHandler) {
+	router.Route("/check-verification", func(r chi.Router) {
+		r.Post("/", httpHandler.CheckVerification)
 	})
 }
 

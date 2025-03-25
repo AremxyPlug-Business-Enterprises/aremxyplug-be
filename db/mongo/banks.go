@@ -67,7 +67,41 @@ func (m *mongoStore) GetBankDetail(name string) (models.BankDetails, error) {
 }
 
 func (m *mongoStore) SaveVirtualAccount(account models.AccountDetails) error {
-	err := m.saveToDB(virtualColl, account)
+	// Start session
+	session, err := m.mongoClient.StartSession()
+	if err != nil {
+		return fmt.Errorf("failed to start session: %w", err)
+	}
+	defer session.EndSession(context.Background())
+
+	// Transaction operation
+	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (interface{}, error) {
+		// 1. Save virtual account
+		if err := m.saveToDB(virtualColl, account); err != nil {
+			return nil, fmt.Errorf("failed to save account: %w", err)
+		}
+
+		// 2. Update user document
+		userColl := m.col("user")
+		filter := bson.M{
+			"id":              account.User_ID,
+			"hasVirtualNuban": false,
+		}
+
+		update := bson.M{"$set": bson.M{"hasVirtualNuban": true}}
+
+		result, err := userColl.UpdateOne(ctx, filter, update)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update user: %w", err)
+		}
+
+		if result.MatchedCount == 0 {
+			return nil, errors.New("user not found or already has virtual account")
+		}
+
+		return nil, nil
+	})
+
 	return err
 }
 

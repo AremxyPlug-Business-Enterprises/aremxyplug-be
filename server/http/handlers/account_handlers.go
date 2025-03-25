@@ -77,6 +77,53 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 
 }
 
+func (handler *HttpHandler) CheckVerification(w http.ResponseWriter, r *http.Request) {
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"error": err.Error()},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	user := *userDetails
+
+	if !user.HasBVN && !user.HasNIN {
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"message": "User not yet verified - need BVN or NIN"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if !user.HasVirtualNuban {
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "action_required",
+			Data:    map[string]interface{}{"message": "Please generate virtual Nuban account"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// All verifications passed
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"message": "User fully verified, with virtual Nuban account"},
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
 func (handler *HttpHandler) getVirtualAccDetails(id string) (models.AccountDetails, error) {
 	acc_details, err := handler.store.GetVirtualNuban(id)
 	if err != nil {
