@@ -95,6 +95,11 @@ func (b *BankConfig) VirtualAccount(user models.User) (models.AccountDetails, er
 
 	if resp.StatusCode != http.StatusCreated {
 		b.logger.Log(b.logger.Level(), resp.Status)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return models.AccountDetails{}, JSONError(err)
+		}
+		b.logger.Log(b.logger.Level(), string(body))
 		return models.AccountDetails{}, fmt.Errorf("failed to create account")
 	}
 
