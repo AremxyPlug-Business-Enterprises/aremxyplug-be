@@ -39,6 +39,7 @@ var (
 	sshUser     = os.Getenv("SSH_USER")
 	sshHost     = os.Getenv("SSH_HOST")
 	sshPassword = os.Getenv("SSH_PASSWORD")
+	publicKey   = os.Getenv("SSH_PUBLIC_KEY")
 )
 
 func main() {
@@ -124,7 +125,8 @@ func createSSHClient() (*ssh.Client, error) {
 		Auth: []ssh.AuthMethod{
 			ssh.Password(sshPassword),
 		},
-		Timeout: 30 * time.Second,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         30 * time.Second,
 	}
 
 	// Connect to SSH server
