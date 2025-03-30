@@ -353,7 +353,7 @@ func telcomRoutes(router chi.Router, httpHandler *handlers.HttpHandler) {
 
 func checkVerification(router chi.Router, httpHandler *handlers.HttpHandler) {
 	router.Route("/check-verification", func(r chi.Router) {
-		r.Post("/", httpHandler.CheckVerification)
+		r.Get("/", httpHandler.CheckVerification)
 	})
 }
 

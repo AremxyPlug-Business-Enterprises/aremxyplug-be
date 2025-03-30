@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"time"
@@ -125,21 +124,8 @@ func createSSHClient() (*ssh.Client, error) {
 		Auth: []ssh.AuthMethod{
 			ssh.Password(sshPassword),
 		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // For testing only!
-		Timeout:         30 * time.Second,
+		Timeout: 30 * time.Second,
 	}
-
-	log.Printf("SSH_USER: %s", sshUser)
-	log.Printf("SSH_HOST: %s", sshHost)
-	log.Printf("SSH_PASSWORD: %s", sshPassword)
-
-	val, exists := os.LookupEnv("SSH_HOST")
-	if !exists {
-		log.Println("SSH_HOST is not set")
-	} else {
-		log.Println(val)
-	}
-	log.Println(sshUser)
 
 	// Connect to SSH server
 	sshClient, err := ssh.Dial("tcp", sshHost, config)
