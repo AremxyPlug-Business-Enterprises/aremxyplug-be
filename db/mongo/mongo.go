@@ -269,11 +269,9 @@ func (m *mongoStore) UpdateUserPassword(email string, password string) error {
 
 func (m *mongoStore) UpdateBVNField(user models.User) error {
 	ctx := context.Background()
-	filter := bson.M{"userID": user.ID}
+	filter := bson.M{"id": user.ID}
 	update := bson.M{"$set": bson.M{"bvn": user.BVN, "has_bvn": true}}
-	_, err := m.mongoClient.
-		Database(m.databaseName).
-		Collection(models.UserCollectionName).
+	_, err := m.col(models.UserCollectionName).
 		UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
@@ -283,11 +281,9 @@ func (m *mongoStore) UpdateBVNField(user models.User) error {
 
 func (m *mongoStore) UpdateNINField(user models.User) error {
 	ctx := context.Background()
-	filter := bson.M{"userID": user.ID}
+	filter := bson.M{"id": user.ID}
 	update := bson.M{"$set": bson.M{"nin": user.NIN, "has_nin": true}}
-	_, err := m.mongoClient.
-		Database(m.databaseName).
-		Collection(models.UserCollectionName).
+	_, err := m.col(models.UserCollectionName).
 		UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err

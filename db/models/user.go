@@ -19,8 +19,8 @@ type User struct {
 	DOB             time.Time `json:"birth_date" bson:"birth_date"`
 	IsVerified      bool      `json:"is_verified" bson:"is_verified"`
 	HasPin          bool      `json:"has_Pin" bson:"has_Pin"`
-	HasBVN          bool      `json:"has_BVN" bson:"has_BVN"`
-	HasNIN          bool      `json:"has_NIN" bson:"has_NIN"`
+	HasBVN          bool      `json:"has_bvn" bson:"has_bvn"`
+	HasNIN          bool      `json:"has_nin" bson:"has_nin"`
 	HasVirtualNuban bool      `json:"has_virtual_nuban" bson:"has_virtual_nuban"`
 	ExpireAt        time.Time `bson:"expireAt"`
 	Address         Address   `json:"address" bson:"address"`
