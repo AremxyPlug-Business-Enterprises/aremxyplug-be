@@ -300,6 +300,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
+		user.BVN = req.BVN
 		if err := handler.store.UpdateBVNField(*user); err != nil {
 			handler.logger.Error("Failed to update BVN field", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -340,6 +341,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
+		user.NIN = req.NIN
 		if err := handler.store.UpdateNINField(*user); err != nil {
 			handler.logger.Error("Failed to update NIN field", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
