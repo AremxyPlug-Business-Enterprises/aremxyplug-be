@@ -39,7 +39,6 @@ var (
 	sshUser     = os.Getenv("SSH_USER")
 	sshHost     = os.Getenv("SSH_HOST")
 	sshPassword = os.Getenv("SSH_PASSWORD")
-	publicKey   = os.Getenv("SSH_PUBLIC_KEY")
 )
 
 func main() {
