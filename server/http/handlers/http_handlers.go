@@ -208,12 +208,11 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
-		Expires:  time.Now().Add(30 * time.Minute),
+		MaxAge:   1800,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   false,
 		Path:     "/",
-		SameSite: http.SameSiteNoneMode,
-		Domain:   ".aremxyplug.com",
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	// should check if the user already has pin set otherwise return an status that should redirect the frontend to the pin endpoint
@@ -349,6 +348,58 @@ func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusCreated)
 	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"data": "Password updated successfully"}}
 	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
+
+	user, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	payload := struct {
+		Old_password string `json:"old_password"`
+		New_password string `json:"new_password"`
+	}{}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		respondWithError(w, http.StatusBadRequest, "error", err)
+		return
+	}
+	hashedPassword := user.Password
+
+	ok := handler.encrypt.ComparePasscode(payload.Old_password, hashedPassword)
+	if !ok {
+		handler.logger.Error("store validating password")
+		w.WriteHeader(http.StatusUnauthorized)
+		response := responseFormat.CustomResponse{Status: http.StatusUnauthorized, Message: "error", Data: map[string]interface{}{"data": "password incorrect"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	newHashedPassword, err := handler.encrypt.GenerateFromPassword(payload.New_password)
+	if err != nil {
+		handler.logger.Error("fail to generate password", zap.Error(err))
+		respondWithError(w, http.StatusInternalServerError, "error generating hash", err)
+		return
+	}
+
+	if err := handler.store.UpdateUserPassword(user.Email, string(newHashedPassword)); err != nil {
+		handler.logger.Error("error updating the user's balance")
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "password change successful"}}
+	json.NewEncoder(w).Encode(response)
+
 }
 
 func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
