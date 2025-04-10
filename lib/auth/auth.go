@@ -3,7 +3,6 @@ package auth
 import (
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/aremxyplug-be/config"
 	"github.com/aremxyplug-be/lib/key_generator"
@@ -79,12 +78,11 @@ func (a *AuthConn) Authorize(next http.Handler) http.Handler {
 			http.SetCookie(w, &http.Cookie{
 				Name:     "refresh_token",
 				Value:    newRefreshToken,
-				Expires:  time.Now().Add(30 * time.Minute),
+				MaxAge:   1800,
 				HttpOnly: true,
-				Secure:   true,
+				Secure:   false,
 				Path:     "/",
-				SameSite: http.SameSiteNoneMode,
-				Domain:   ".aremxyplug.com",
+				SameSite: http.SameSiteLaxMode,
 			})
 
 			// Set the new auth token in the response header

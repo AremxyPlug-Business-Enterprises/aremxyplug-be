@@ -171,7 +171,8 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "PATCH" {
 		type userPin struct {
-			Pin string `json:"pin"`
+			NewPin string `json:"new_pin"`
+			OldPin string `json:"old_pin"`
 		}
 
 		updatePin := userPin{}
@@ -184,7 +185,26 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := handler.pin.UpdatePin(user.ID, updatePin.Pin); err != nil {
+		valid, err := handler.pin.VerifyPin(user.ID, updatePin.OldPin)
+		if err != nil {
+			handler.logger.Error("Failed to verify pin", zap.Error(err))
+			if !valid {
+				w.WriteHeader(http.StatusInternalServerError)
+				response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+		}
+
+		if !valid {
+			handler.logger.Warn("Incorrect pin", zap.String("user_id", user.ID))
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "incorrect pin"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		if err := handler.pin.UpdatePin(user.ID, updatePin.NewPin); err != nil {
 			handler.logger.Error("Failed to update pin", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
