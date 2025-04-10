@@ -294,7 +294,45 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if req.BVN != "" {
+	hasBVN := req.BVN != ""
+	hasNIN := req.NIN != ""
+
+	switch {
+	case !hasBVN && !hasNIN:
+		handler.logger.Warn("No identity provided")
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "No BVN or NIN provided"},
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+
+	case hasBVN && len(req.BVN) != 11:
+		handler.logger.Warn("Invalid BVN length")
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "BVN must be 11 digits"},
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+
+	case hasNIN && len(req.NIN) != 11:
+		handler.logger.Warn("Invalid NIN length")
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "NIN must be 11 digits"},
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if hasBVN {
 		result, err := handler.verifyClient.VerifyBVN(req.BVN, *user)
 		if err != nil {
 			handler.logger.Error("Failed to verify BVN", zap.Error(err))
@@ -335,7 +373,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if req.NIN != "" {
+	if hasNIN {
 		result, err := handler.verifyClient.VerifyNIN(req.NIN, *user)
 		if err != nil {
 			handler.logger.Error("Failed to verify NIN", zap.Error(err))
@@ -346,7 +384,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		}
 
 		if !result.NameMatched {
-			handler.logger.Warn("NIN name mismatch", zap.String("bvn", req.NIN))
+			handler.logger.Warn("NIN name mismatch", zap.String("nin", req.NIN))
 			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "NIN name mismatch"}}
 			json.NewEncoder(w).Encode(response)
@@ -354,7 +392,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		}
 
 		if !result.Success {
-			handler.logger.Warn("NIN verification failed", zap.String("bvn", req.NIN))
+			handler.logger.Warn("NIN verification failed", zap.String("nin", req.NIN))
 			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "NIN verification failed"}}
 			json.NewEncoder(w).Encode(response)
@@ -377,8 +415,4 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	w.WriteHeader(http.StatusBadRequest)
-	response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "no valid identity provided"}}
-	json.NewEncoder(w).Encode(response)
-	handler.logger.Warn("No valid identity provided")
 }
