@@ -55,7 +55,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		newBal, valid, err := handler.checkTransfer(bal, float64(amount))
+		newBal, valid, err := handler.checkPayment(bal, float64(amount))
 		if !valid || err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}

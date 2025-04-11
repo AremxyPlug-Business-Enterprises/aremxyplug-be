@@ -84,11 +84,11 @@ func (m *mongoStore) SaveVirtualAccount(account models.AccountDetails) error {
 		// 2. Update user document
 		userColl := m.col("user")
 		filter := bson.M{
-			"id":              account.User_ID,
-			"hasVirtualNuban": false,
+			"id":                account.User_ID,
+			"has_virtual_nuban": false,
 		}
 
-		update := bson.M{"$set": bson.M{"hasVirtualNuban": true}}
+		update := bson.M{"$set": bson.M{"has_virtual_nuban": true}}
 
 		result, err := userColl.UpdateOne(ctx, filter, update)
 		if err != nil {

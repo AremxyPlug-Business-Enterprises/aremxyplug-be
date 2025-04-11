@@ -51,8 +51,6 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 			Data:    map[string]interface{}{"message": "successfully created virtual account", "data": account},
 		}
 
-		// update with the appropriate method for creating a virtual number
-
 		json.NewEncoder(w).Encode(response)
 	}
 

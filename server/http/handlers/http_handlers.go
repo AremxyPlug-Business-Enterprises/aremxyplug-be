@@ -205,18 +205,6 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
-		Value:    refreshToken,
-		MaxAge:   1800,
-		HttpOnly: true,
-		Secure:   false,
-		Path:     "/",
-		SameSite: http.SameSiteLaxMode,
-	})
-
-	// should check if the user already has pin set otherwise return an status that should redirect the frontend to the pin endpoint
-
 	w.Header().Set("Authorization", jwtToken)
 	w.WriteHeader(http.StatusOK)
 	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"refresh_token": refreshToken, "customer": userResponse}}
