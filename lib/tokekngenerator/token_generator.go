@@ -52,6 +52,9 @@ func (j *jwtTokenGenerator) GenerateTokenWithExpiration(data dto.Claims, duratio
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	tokenString, err := token.SignedString(j.privateKey)
+	if err != nil {
+		return "", err
+	}
 	return tokenString, err
 }
 
