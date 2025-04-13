@@ -309,6 +309,28 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		json.NewEncoder(w).Encode(response)
 		return
 
+	case user.HasBVN && hasBVN:
+		handler.logger.Warn("BVN already verified")
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "BVN is already verified"},
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+
+	case user.HasNIN && hasNIN:
+		handler.logger.Warn("NIN already verified")
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "NIN is already verified"},
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+
 	case hasBVN && len(req.BVN) != 11:
 		handler.logger.Warn("Invalid BVN length")
 		response := responseFormat.CustomResponse{

@@ -76,12 +76,11 @@ func (m *mongoStore) SaveVirtualAccount(account models.AccountDetails) error {
 
 	// Transaction operation
 	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (interface{}, error) {
-		// 1. Save virtual account
+
 		if err := m.saveToDB(virtualColl, account); err != nil {
 			return nil, fmt.Errorf("failed to save account: %w", err)
 		}
 
-		// 2. Update user document
 		userColl := m.col("user")
 		filter := bson.M{
 			"id":                account.User_ID,
@@ -108,10 +107,6 @@ func (m *mongoStore) SaveVirtualAccount(account models.AccountDetails) error {
 func (m *mongoStore) GetVirtualNuban(id string) (models.AccountDetails, error) {
 	ctx := context.Background()
 	filter := bson.D{primitive.E{Key: "user_id", Value: id}}
-
-	/*
-		filter = bson.D{primitive.E{Key: "user_id", Value: id}}
-	*/
 
 	acc_details := models.AccountDetails{}
 

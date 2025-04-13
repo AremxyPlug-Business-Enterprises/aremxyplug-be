@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"time"
 
@@ -356,7 +355,6 @@ func (m *mongoStore) saveToDB(collectionName string, details interface{}) error 
 
 	_, err := m.col(collectionName).InsertOne(ctx, details)
 	if err != nil {
-		log.Fatal(err)
 		return err
 	}
 

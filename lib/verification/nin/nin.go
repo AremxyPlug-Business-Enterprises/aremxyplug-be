@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -79,6 +80,8 @@ func (n *NINConfig) VerifyNIN(nin string, user models.User) (result *NINVerifica
 		return &NINVerificationResult{}, err
 	}
 
+	log.Printf("API Response: %s", string(bodyBytes))
+
 	if !apiResponse.Status {
 		n.logger.Error("NIN verification failed", zap.Any("response", apiResponse.Detail))
 		return &NINVerificationResult{
@@ -115,8 +118,18 @@ func (n *NINConfig) VerifyNIN(nin string, user models.User) (result *NINVerifica
 }
 
 func compareNames(apiFullName, userFullName string) bool {
+
+	if apiFullName == "" || userFullName == "" {
+		return false // Disallow empty names
+	}
+
 	apiParts := toLowerSlice(strings.Fields(apiFullName))
 	userParts := toLowerSlice(strings.Fields(userFullName))
+
+	if len(apiParts) == 0 || len(userParts) == 0 {
+		return false
+	}
+
 	return isSubset(userParts, apiParts) || isSubset(apiParts, userParts)
 }
 
@@ -129,6 +142,11 @@ func toLowerSlice(slice []string) []string {
 }
 
 func isSubset(sliceA, sliceB []string) bool {
+
+	if len(sliceA) == 0 || len(sliceB) == 0 {
+		return false
+	}
+
 	set := make(map[string]struct{})
 	for _, s := range sliceB {
 		set[s] = struct{}{}
