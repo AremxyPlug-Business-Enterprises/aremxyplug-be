@@ -342,6 +342,9 @@ func (m *mongoStore) GetBalanceDetails(id string) (models.Balance, error) {
 	var resp models.Balance
 	err := result.Decode(&resp)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return models.Balance{}, nil
+		}
 		return models.Balance{}, err
 	}
 

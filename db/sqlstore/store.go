@@ -95,17 +95,17 @@ func (s *SqlStore) UpdatePlan(planID int, updatedPlan models.PlanUpdate) error {
 	setClauses := []string{}
 	args := []interface{}{}
 
-	if updatedPlan.Amount != nil {
+	if updatedPlan.Amount != 0 {
 		setClauses = append(setClauses, "amount = ?")
-		args = append(args, *updatedPlan.Amount)
+		args = append(args, updatedPlan.Amount)
 	}
-	if updatedPlan.Validity != nil {
+	if updatedPlan.Validity != "" {
 		setClauses = append(setClauses, "validity = ?")
-		args = append(args, *updatedPlan.Validity)
+		args = append(args, updatedPlan.Validity)
 	}
-	if updatedPlan.Size != nil {
+	if updatedPlan.Size != "" {
 		setClauses = append(setClauses, "size = ?")
-		args = append(args, *updatedPlan.Size)
+		args = append(args, updatedPlan.Size)
 	}
 
 	if len(setClauses) == 0 {

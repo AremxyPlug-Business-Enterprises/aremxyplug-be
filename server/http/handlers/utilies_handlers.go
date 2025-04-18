@@ -320,3 +320,242 @@ func (handler *HttpHandler) GetElectricBillDetails(w http.ResponseWriter, r *htt
 
 	json.NewEncoder(w).Encode(res)
 }
+
+func (handler *HttpHandler) TvSubHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract the product type from the URL path
+	product := chi.URLParam(r, "product")
+
+	// Validate the product type
+	validProducts := map[string]bool{
+		"dstv":      true,
+		"gotv":      true,
+		"showmax":   true,
+		"startimes": true,
+	}
+
+	if !validProducts[product] {
+		w.WriteHeader(http.StatusBadRequest)
+		handler.logger.Error("Invalid product type")
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("Invalid product type: %s", product)},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Handle different HTTP methods
+	switch r.Method {
+	case "POST":
+		handler.handleCreateTVSub(w, r, product)
+	case "GET":
+		handler.handleGetTVSubs(w, product)
+	case "PATCH":
+		handler.handleUpdateTVSub(w, r, product)
+	case "DELETE":
+		handler.handleDeleteTVSub(w, r, product)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusMethodNotAllowed,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Method not allowed"},
+		}
+		json.NewEncoder(w).Encode(response)
+	}
+}
+
+func (handler *HttpHandler) handleCreateTVSub(w http.ResponseWriter, r *http.Request, product string) {
+	data := models.TVSub{}
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		handler.logger.Error("Decoding JSON response", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("Failed to decode request body: %s", err.Error())},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if data.Package == "" || data.PackageName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		handler.logger.Error("Missing required fields")
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Package and package name are required"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if data.Amount <= 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		handler.logger.Error("Invalid amount")
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Amount must be greater than zero"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	ID, err := handler.productClient.CreateTVSub(product, data)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		handler.logger.Error("Error creating TV subscription", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("Failed to create TV subscription: %s", err.Error())},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	handler.logger.Info("TV subscription created successfully", zap.Int("ID", ID))
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusCreated,
+		Message: "success",
+		Data:    map[string]interface{}{"data": fmt.Sprintf("TV subscription created successfully with ID %d", ID)},
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) handleGetTVSubs(w http.ResponseWriter, product string) {
+	res, err := handler.productClient.GetTVSubs(product)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		handler.logger.Error("Error fetching TV subscriptions", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("Failed to fetch TV subscriptions: %s", err.Error())},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": res},
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) handleUpdateTVSub(w http.ResponseWriter, r *http.Request, product string) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		handler.logger.Error("Missing ID parameter")
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "ID parameter is required"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	subID, _ := strconv.Atoi(id)
+	if subID <= 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		handler.logger.Error("Invalid ID parameter")
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "ID must be a positive integer"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	data := models.TVSubUpdate{}
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		handler.logger.Error("Decoding JSON response", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("Failed to decode request body: %s", err.Error())},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	err := handler.productClient.UpdateTVSub(product, subID, data)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		handler.logger.Error("Error updating TV subscription", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("Failed to update TV subscription: %s", err.Error())},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": fmt.Sprintf("TV subscription with ID %d updated successfully", subID)},
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) handleDeleteTVSub(w http.ResponseWriter, r *http.Request, product string) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		handler.logger.Error("Missing ID parameter")
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "ID parameter is required"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	subID, _ := strconv.Atoi(id)
+	if subID <= 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		handler.logger.Error("Invalid ID parameter")
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "ID must be a positive integer"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	err := handler.productClient.DeleteTVSub(product, subID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		handler.logger.Error("Error deleting TV subscription", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("Failed to delete TV subscription: %s", err.Error())},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": fmt.Sprintf("TV subscription with ID %d deleted successfully", subID)},
+	}
+	json.NewEncoder(w).Encode(response)
+}
