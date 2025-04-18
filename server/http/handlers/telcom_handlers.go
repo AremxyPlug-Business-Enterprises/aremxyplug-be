@@ -555,11 +555,11 @@ func (handler *HttpHandler) GetSmileTransactions(w http.ResponseWriter, r *http.
 
 func (handler *HttpHandler) TelcomProducts(w http.ResponseWriter, r *http.Request) {
 
-	id := chi.URLParam(r, "productID")
+	id := chi.URLParam(r, "networkID")
 
-	productID, _ := strconv.Atoi(id)
+	networkID, _ := strconv.Atoi(id)
 
-	products, err := handler.dataClient.GetProductsByID(productID)
+	products, err := handler.productClient.GetProducts(networkID)
 	if err != nil {
 		handler.logger.Error("Failed to retrieve products", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -599,7 +599,7 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		createdPlan, err := handler.dataClient.AddPlan(newPlan)
+		createdPlan, err := handler.productClient.CreatePlan(newPlan)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to create plan", zap.Error(err))
@@ -628,7 +628,7 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 
 		productID, _ := strconv.Atoi(id)
 
-		plans, err := handler.dataClient.GetPlans(productID)
+		plans, err := handler.productClient.GetPlans(productID)
 		if err != nil {
 			handler.logger.Error("Failed to retrieve plans", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -650,7 +650,7 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 		json.NewEncoder(w).Encode(response)
 	}
 
-	if r.Method == "PUT" {
+	if r.Method == "PATCH" {
 
 		id := chi.URLParam(r, "planID")
 		planID, _ := strconv.Atoi(id)
@@ -669,7 +669,7 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		if err := handler.dataClient.UpdatePlan(planID, updatedPlan); err != nil {
+		if err := handler.productClient.UpdatePlan(planID, updatedPlan); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to update plan", zap.Error(err))
 			response := responseFormat.CustomResponse{
@@ -684,7 +684,10 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 		response := responseFormat.CustomResponse{
 			Status:  http.StatusOK,
 			Message: "success",
-			Data:    map[string]interface{}{"updated_plan": updatedPlan},
+			Data: map[string]interface{}{
+				"updated_plan": updatedPlan,
+				"message":      fmt.Sprintf("Plan with ID %d updated successfully", planID),
+			},
 		}
 		json.NewEncoder(w).Encode(response)
 
@@ -692,7 +695,7 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 
 	if r.Method == "DELETE" {
 
-		id := chi.URLParam(r, "plaID")
+		id := chi.URLParam(r, "planID")
 
 		planID, err := strconv.Atoi(id)
 		if err != nil {
@@ -707,7 +710,7 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		if err := handler.dataClient.DeletePlan(planID); err != nil {
+		if err := handler.productClient.DeletePlan(planID); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to delete plan", zap.Error(err))
 			response := responseFormat.CustomResponse{

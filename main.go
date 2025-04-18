@@ -67,7 +67,7 @@ func main() {
 	emailClient := postmark.New(secrets)
 	verifyClient := verification.NewVerificationClient(bvnConfig, ninConfig)
 	otp := otpgen.NewOTP(store, logger)
-	data := data.NewData(store, sqlStore, logger)
+	data := data.NewData(store, logger)
 	edu := edu.NewEdu(store, logger)
 	vtu := vtu.NewAirtimeConn(store, logger)
 	tvSub := tvsub.NewTvConn(store, logger)
@@ -84,6 +84,7 @@ func main() {
 
 	config := httpSrv.ServerConfig{
 		Store:        store,
+		SqlStore:     sqlStore,
 		EmailClient:  emailClient,
 		Logger:       logger,
 		Secrets:      secrets,

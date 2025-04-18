@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 
+	"github.com/aremxyplug-be/db/sqlstore"
 	"github.com/aremxyplug-be/lib/auth"
 	auth_pin "github.com/aremxyplug-be/lib/auth/pin"
 	bankacc "github.com/aremxyplug-be/lib/bank/bank_acc"
@@ -34,6 +35,7 @@ import (
 type ServerConfig struct {
 	Logger       *zap.Logger
 	Store        db.DataStore
+	SqlStore     *sqlstore.SqlStore
 	Secrets      *config.Secrets
 	EmailClient  emailclient.EmailClient
 	DataClient   *data.DataConn
@@ -75,6 +77,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 	httpHandler := handlers.NewHttpHandler(&handlers.HandlerOptions{
 		Logger:       config.Logger,
 		Store:        config.Store,
+		SqlStore:     config.SqlStore,
 		Secrets:      config.Secrets,
 		EmailClient:  config.EmailClient,
 		Data:         config.DataClient,
@@ -115,13 +118,6 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		verifyOTPRoutes(router, httpHandler)
 
-		// // test
-		// router.Post("/test", httpHandler.Testtoken)
-
-		// router.Get("/banks", httpHandler.GetBanks)
-
-		// router.Get("/deposit", httpHandler.DepositAccount)
-
 		authRouter := router.With(config.Auth.Authorize)
 		// reset password
 		authRouter.Patch("/reset-password", httpHandler.ResetPassword)
@@ -159,15 +155,10 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		getBalance(authRouter, httpHandler)
 
-		telcomRoutes(authRouter, httpHandler)
-
 		checkVerification(authRouter, httpHandler)
 
-		/*
-			transferMoneyRoutes(authRouter, httpHandler)
+		productRoutes(authRouter, httpHandler)
 
-			depositRoutes(authRouter, httpHandler)
-		*/
 	})
 
 	return router
@@ -340,30 +331,29 @@ func getBalance(r chi.Router, httpHandler *handlers.HttpHandler) {
 	})
 }
 
-func telcomRoutes(router chi.Router, httpHandler *handlers.HttpHandler) {
-	router.Route("/products", func(r chi.Router) {
-		r.Post("/", httpHandler.TelcomProducts)
-	})
-
-	router.Route("/plans", func(r chi.Router) {
-		r.Post("/", httpHandler.TelecomPlans)
-		r.Get("/{productID}", httpHandler.TelecomPlans)
-		r.Put("/{planID}", httpHandler.TelecomPlans)
-		r.Delete("/{planID}", httpHandler.TelecomPlans)
-	})
-}
-
 func checkVerification(router chi.Router, httpHandler *handlers.HttpHandler) {
 	router.Route("/check-verification", func(r chi.Router) {
 		r.Get("/", httpHandler.CheckVerification)
 	})
 }
 
-/*
-func depositRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
-	r.Route("/deposit", func(router chi.Router) {
-		router.Get("/", httpHandler.GetDepositHistory)
-		router.Get("/{id}", httpHandler.GetDepositDetail)
+func productRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/products", func(router chi.Router) {
+		// TV Subscription Routes
+		router.Route("/tvsub/{product}", func(router chi.Router) {
+			router.Post("/", httpHandler.TvSubHandler)       // POST /tvsub/dstv
+			router.Get("/", httpHandler.TvSubHandler)        // GET /tvsub/dstv (all subscriptions)
+			router.Patch("/{id}", httpHandler.TvSubHandler)  // PATCH /tvsub/dstv/2
+			router.Delete("/{id}", httpHandler.TvSubHandler) // DELETE /tvsub/dstv/2
+		})
+
+		// Telecom Plans Routes
+		router.Route("/telecom", func(router chi.Router) {
+			router.Get("/list/{networkID}", httpHandler.TelcomProducts)
+			router.Post("/", httpHandler.TelecomPlans)
+			router.Get("/{productID}", httpHandler.TelecomPlans)
+			router.Patch("/{planID}", httpHandler.TelecomPlans)
+			router.Delete("/{planID}", httpHandler.TelecomPlans)
+		})
 	})
 }
-*/

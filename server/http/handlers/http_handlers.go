@@ -205,6 +205,18 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cookie := &http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		MaxAge:   1800,
+		HttpOnly: true,
+		Secure:   false,
+		Path:     "/",
+		SameSite: http.SameSiteNoneMode,
+	}
+
+	http.SetCookie(w, cookie)
+
 	w.Header().Set("Authorization", jwtToken)
 	w.WriteHeader(http.StatusOK)
 	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"refresh_token": refreshToken, "customer": userResponse}}

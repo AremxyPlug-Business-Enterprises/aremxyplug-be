@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/aremxyplug-be/db"
+	"github.com/aremxyplug-be/db/sqlstore"
 	auth_pin "github.com/aremxyplug-be/lib/auth/pin"
 	bankacc "github.com/aremxyplug-be/lib/bank/bank_acc"
 	"github.com/aremxyplug-be/lib/bank/deposit"
@@ -16,6 +17,9 @@ import (
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
 	"github.com/aremxyplug-be/lib/referral"
+	"github.com/aremxyplug-be/lib/services"
+	telecomservice "github.com/aremxyplug-be/lib/services/telcom"
+	tvservice "github.com/aremxyplug-be/lib/services/tvsub"
 	"github.com/aremxyplug-be/lib/smsclient/termii"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
@@ -70,11 +74,13 @@ type HttpHandler struct {
 	pin                  *auth_pin.PinConfig
 	smsClient            *termii.SMSConn
 	verifyClient         verification.VerificationClient
+	productClient        services.ProductService
 }
 
 type HandlerOptions struct {
 	Logger       *zap.Logger
 	Store        db.DataStore
+	SqlStore     *sqlstore.SqlStore
 	Data         *data.DataConn
 	Edu          *edu.EduConn
 	VTU          *airtime.AirtimeConn
@@ -120,6 +126,14 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		)
 	}
 
+	tvSubService := tvservice.NewTVSubService(opt.Logger, opt.SqlStore)
+	telecomService := telecomservice.NewTelecomService(opt.SqlStore, opt.Logger)
+
+	productService := &services.ProductServiceImpl{
+		TVSubService:    tvSubService,
+		TelecomProducts: telecomService,
+	}
+
 	return &HttpHandler{
 		logger:      opt.Logger,
 		idGenerator: idgenerator.New(),
@@ -149,5 +163,6 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		point:                opt.Point,
 		smsClient:            opt.SMSClient,
 		verifyClient:         opt.VerifyClient,
+		productClient:        productService,
 	}
 }
