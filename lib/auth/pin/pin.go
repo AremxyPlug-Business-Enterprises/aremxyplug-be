@@ -72,7 +72,6 @@ func (p *PinConfig) UpdatePin(userID string, newPin string) error {
 func generatePin(pin string) (string, error) {
 	pinByte, err := bcrypt.GenerateFromPassword([]byte(pin), 10)
 
-	//log.Println(string(pinByte))
 	if err != nil {
 		return "", err
 	}

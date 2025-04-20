@@ -375,8 +375,8 @@ func (handler *HttpHandler) UpdatePassword(w http.ResponseWriter, r *http.Reques
 	ok := handler.encrypt.ComparePasscode(payload.Old_password, hashedPassword)
 	if !ok {
 		handler.logger.Error("store validating password")
-		w.WriteHeader(http.StatusUnauthorized)
-		response := responseFormat.CustomResponse{Status: http.StatusUnauthorized, Message: "error", Data: map[string]interface{}{"data": "password incorrect"}}
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "incorrect password"}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -389,7 +389,7 @@ func (handler *HttpHandler) UpdatePassword(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := handler.store.UpdateUserPassword(user.Email, string(newHashedPassword)); err != nil {
-		handler.logger.Error("error updating the user's balance")
+		handler.logger.Error("error updating the user's password")
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)

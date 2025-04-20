@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -309,7 +308,25 @@ func (m *mongoStore) GetDepositID(virtualNuban string) (result interface{}, err 
 	return resp, nil
 }
 
-func (m *mongoStore) GetBalance(virtualNuban string) (balance float64, err error) {
+func (m *mongoStore) CreateInitialBalance(userID, virtualNuban string) error {
+
+	balance, err := primitive.ParseDecimal128("0.00")
+	if err != nil {
+		m.logger.Error(err.Error())
+		return err
+	}
+
+	initialBalance := models.Balance{
+		VirtualNuban: virtualNuban,
+		UserID:       userID,
+		Balance:      balance,
+	}
+
+	_, err = m.col(balColl).InsertOne(context.Background(), initialBalance)
+	return err
+}
+
+func (m *mongoStore) GetBalance(virtualNuban string) (balance decimal.Decimal, err error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -321,17 +338,17 @@ func (m *mongoStore) GetBalance(virtualNuban string) (balance float64, err error
 	var bal models.Balance
 	e := result.Decode(&bal)
 	if e == mongo.ErrNoDocuments {
-		return 0, nil
+		return decimal.Decimal{}, nil
 	} else if e != nil {
-		return 0, e
+		return decimal.Decimal{}, e
 	}
 
-	retrievedBalance, _ := decimal.NewFromString(bal.Balance.String())
+	retrievedBalance, err := decimal.NewFromString(bal.Balance.String())
+	if err != nil {
+		return decimal.Decimal{}, err
+	}
 
-	priceStr := retrievedBalance.String()
-	returnedBalance, _ := strconv.ParseFloat(priceStr, 64)
-
-	return returnedBalance, nil
+	return retrievedBalance, nil
 }
 
 func (m *mongoStore) GetBalanceDetails(id string) (models.Balance, error) {
@@ -384,15 +401,23 @@ func (m *mongoStore) SaveBalance(virtualNuban string, balance models.Balance) er
 	return nil
 }
 
-func (m *mongoStore) UpdateBalance(virtualNuban string, balance float64) error {
+func (m *mongoStore) UpdateBalance(virtualNuban string, balance decimal.Decimal) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	filter := bson.D{primitive.E{Key: "virtualNuban", Value: virtualNuban}}
 
-	updateFilter := bson.D{{Key: "$set", Value: bson.D{primitive.E{Key: "balance", Value: balance}}}}
+	bal, err := primitive.ParseDecimal128(balance.String())
+	if err != nil {
+		m.logger.Error(err.Error())
+		return err
+	}
 
-	_, err := m.col(balColl).UpdateOne(ctx, filter, updateFilter)
+	updateFilter := bson.D{{Key: "$set", Value: bson.D{
+		{Key: "balance", Value: bal},
+	}}}
+
+	_, err = m.col(balColl).UpdateOne(ctx, filter, updateFilter)
 	if err != nil {
 		return err
 	}

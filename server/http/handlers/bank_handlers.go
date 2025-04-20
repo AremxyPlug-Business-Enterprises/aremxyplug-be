@@ -29,26 +29,32 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		// first decode the request body
 		info := models.TransferInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
 
 		userBalance, err := handler.getUserBalance(userDetails.ID)
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance: %s", err.Error())}}
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance: %s", err.Error())}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		bal, _ := strconv.ParseFloat(userBalance.Balance.String(), 64)
+		bal, err := userBalance.Decimal()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance decimal: %s", err.Error())}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
 
 		newBal, valid, err := handler.checkTransfer(bal, info.Amount)
 		if !valid || err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not complete transfer: %s", err.Error())}}
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not complete transfer: %s", err.Error())}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -268,10 +274,10 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 }
 
 // Call this fucction before payments.
-func (handler *HttpHandler) checkPayment(bal, payValue float64) (newBal float64, canPay bool, err error) {
+func (handler *HttpHandler) checkPayment(bal, payValue decimal.Decimal) (newBal float64, canPay bool, err error) {
 	paymentERROR := errors.New("insufficient funds to complete payment")
 
-	balanceValue, paymentValue := decimal.NewFromFloat(bal), decimal.NewFromFloat(payValue)
+	balanceValue, paymentValue := bal, payValue
 
 	valid, err := balance.CanPay(balanceValue, paymentValue)
 	if !valid || err != nil {
@@ -286,19 +292,19 @@ func (handler *HttpHandler) checkPayment(bal, payValue float64) (newBal float64,
 	return newBalance, true, nil
 }
 
-func (handler *HttpHandler) checkTransfer(bal, amount float64) (newBal float64, canTrsf bool, err error) {
+func (handler *HttpHandler) checkTransfer(bal decimal.Decimal, amount float64) (newBal float64, canTrsf bool, err error) {
 
 	transferERROR := errors.New("insufficient funds to complete transfer")
 
-	balanceValue, transferAmount := decimal.NewFromFloat(bal), decimal.NewFromFloat(amount)
+	transferAmount := decimal.NewFromFloatWithExponent(amount, -2)
 
-	valid, err := balance.CanTransfer(balanceValue, transferAmount)
+	valid, err := balance.CanTransfer(bal, transferAmount)
 	if !valid || err != nil {
 
 		return 0, false, transferERROR
 	}
 
-	balanceAfter := balance.NewBalanceTransfer(balanceValue, transferAmount)
+	balanceAfter := balance.NewBalanceTransfer(bal, transferAmount)
 
 	bal_String := balanceAfter.String()
 	newBalance, _ := strconv.ParseFloat(bal_String, 64)
@@ -346,11 +352,11 @@ func (handler *HttpHandler) refreshBalance(id string) error {
 	return nil
 }
 
-func (handler *HttpHandler) getBalance(virtualNuban string) (balance float64, err error) {
+func (handler *HttpHandler) getBalance(virtualNuban string) (balance decimal.Decimal, err error) {
 
 	bal, err := handler.bankTranc.GetBalance(virtualNuban)
 	if err != nil {
-		return 0, err
+		return decimal.Decimal{}, err
 	}
 
 	return bal, nil

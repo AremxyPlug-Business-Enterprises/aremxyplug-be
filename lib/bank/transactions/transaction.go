@@ -3,6 +3,7 @@ package transactions
 import (
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
+	"github.com/shopspring/decimal"
 )
 
 // all functions here are to call from the database
@@ -69,17 +70,17 @@ func (t *Transaction) GetDepositDetails(id string) (models.DepositResponse, erro
 }
 
 // should be called at any point where the user get their balance
-func (t *Transaction) GetBalance(virtualNuban string) (float64, error) {
+func (t *Transaction) GetBalance(virtualNuban string) (decimal.Decimal, error) {
 	bal, err := t.store.GetBalance(virtualNuban)
 	if err != nil {
-		return 0, err
+		return decimal.NewFromFloat(0), err
 	}
 	return bal, nil
 }
 
 // To be used after making payment
 func (t *Transaction) UpdateBalance(virtualNuban string, amount float64) error {
-	err := t.store.UpdateBalance(virtualNuban, amount)
+	err := t.store.UpdateBalance(virtualNuban, decimal.NewFromFloatWithExponent(amount, -2))
 	if err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ package db
 import (
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
+	"github.com/shopspring/decimal"
 )
 
 type DataStore interface {
@@ -47,10 +48,11 @@ type BankStore interface {
 	SaveDeposit(detail models.DepositResponse) error
 	GetDepositID(virtualNuban string) (result interface{}, err error)
 	SaveDepositID(detail interface{}) error
-	GetBalance(virtualNuban string) (balance float64, err error)
+	GetBalance(virtualNuban string) (balance decimal.Decimal, err error)
 	SaveBalance(virtualNuban string, balance models.Balance) error
-	UpdateBalance(virtualNuban string, balance float64) error
+	UpdateBalance(virtualNuban string, balance decimal.Decimal) error
 	GetBalanceDetails(id string) (models.Balance, error)
+	CreateInitialBalance(userID, virtualNuban string) error
 }
 
 type UserStore interface {

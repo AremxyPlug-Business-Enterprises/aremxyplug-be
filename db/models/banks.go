@@ -1,6 +1,9 @@
 package models
 
-import "go.mongodb.org/mongo-driver/bson/primitive"
+import (
+	"github.com/shopspring/decimal"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
 type TransferInfo struct {
 	Bank_name      string  `json:"bank_name"`
@@ -61,4 +64,8 @@ type Balance struct {
 	VirtualNuban string               `json:"virtualNuban"`
 	UserID       string               `json:"user_id"`
 	Balance      primitive.Decimal128 `json:"balance"`
+}
+
+func (b Balance) Decimal() (decimal.Decimal, error) {
+	return decimal.NewFromString(b.Balance.String())
 }

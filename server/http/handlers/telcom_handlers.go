@@ -10,6 +10,7 @@ import (
 	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/go-chi/chi/v5"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
@@ -29,22 +30,33 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		data := telcom.AirtimeInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
-			fmt.Fprintf(w, "%v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Failed to decode airtime request", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Invalid request format"},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 
 		}
 		if len(data.Phone_no) != 11 {
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, "Phone number must be %d digits, got %d. Check the phone number and try again.", 11, len(data.Phone_no))
+			handler.logger.Error("Invalid phone length", zap.Int("length", len(data.Phone_no)))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Phone number must be 11 digits"},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
 
 		userBalance, err := handler.getUserBalance(id)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -52,18 +64,23 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		amount, err := strconv.Atoi(data.Amount)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		balance_string := userBalance.Balance.String()
-		bal, _ := strconv.ParseFloat(balance_string, 64)
+		bal, err := userBalance.Decimal()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
 
-		newBal, valid, err := handler.checkPayment(bal, float64(amount))
+		newBal, valid, err := handler.checkPayment(bal, decimal.NewFromFloatWithExponent(float64(amount), -2))
 		if !valid || err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -143,9 +160,13 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 	if r.Method == "POST" {
 		data := telcom.Recipient{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("error decoding json payload", zap.Error(err))
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Failed to decode recipient request", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Invalid request format"},
+			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -246,9 +267,14 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		data := telcom.DataInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "%v", err)
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Failed to decode DATA request", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Invalid request format"},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 
 		}
@@ -372,13 +398,12 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		balance_string := userBalance.Balance.String()
-		bal, _ := strconv.ParseFloat(balance_string, 64)
+		balance, err := userBalance.Decimal()
 
-		newBal, valid, err := handler.checkPayment(bal, float64(data.Amount))
+		newBal, valid, err := handler.checkPayment(balance, decimal.NewFromFloatWithExponent(float64(data.Amount), -2))
 		if !valid || err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}

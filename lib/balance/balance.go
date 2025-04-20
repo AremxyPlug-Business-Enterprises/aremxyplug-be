@@ -10,20 +10,14 @@ func isEnough(balance, paymentValue decimal.Decimal) bool {
 	return paymentValue.LessThanOrEqual(balance)
 }
 
-func NewBalanceDeposit(bal float64, deposit float64) (newBalance, depositAmount decimal.Decimal) {
-	// Calculate 1% of the deposit amount
+func NewBalanceDeposit(bal, deposit decimal.Decimal) (newBalance, depositAmount decimal.Decimal) {
 
-	fullDepositAmount := deposit / 100
-	depositAmount = decimal.NewFromFloat(fullDepositAmount)
-
-	deduction := decimal.NewFromFloat((0.01 * fullDepositAmount))
+	deduction := deposit.Mul(decimal.NewFromFloat(0.01))
 
 	// Subtract 1% of the deposit from the deposit amount
 	depositAfterDeduction := depositAmount.Sub(deduction)
 
-	// Add the adjusted deposit amount to the balance
-	balance := decimal.NewFromFloat(bal)
-	newBalance = balance.Add(depositAfterDeduction)
+	newBalance = bal.Add(depositAfterDeduction)
 
 	return newBalance, depositAfterDeduction
 }
