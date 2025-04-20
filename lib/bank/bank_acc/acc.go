@@ -37,7 +37,7 @@ var (
 )
 
 type BankConfig struct {
-	dbConn db.DataStore
+	dbConn db.BankStore
 	logger *zap.Logger
 }
 
@@ -124,15 +124,22 @@ func (b *BankConfig) VirtualAccount(user models.User) (models.AccountDetails, er
 		return models.AccountDetails{}, JSONError(err)
 	}
 
+	virtualAccount := apiResponse.Data.ID
+
 	result := models.AccountDetails{
 		Account_Name:     apiResponse.Data.Attributes.AccountName,
 		Account_No:       apiResponse.Data.Attributes.AccountNumber,
 		Bank_Name:        apiResponse.Data.Attributes.Bank.Name,
 		User_ID:          user.ID,
-		VirtualAccountID: apiResponse.Data.ID,
+		VirtualAccountID: virtualAccount,
 	}
 
 	if err := b.saveAccount(result); err != nil {
+		b.logger.Error("Error saving account details to the database:", zap.Error(err))
+		return models.AccountDetails{}, DBConnectionError(err)
+	}
+	if err := b.dbConn.CreateInitialBalance(user.ID, virtualAccount); err != nil {
+		b.logger.Error("Error creating initial balance:", zap.Error(err))
 		return models.AccountDetails{}, DBConnectionError(err)
 	}
 

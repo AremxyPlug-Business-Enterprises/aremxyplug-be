@@ -13,6 +13,7 @@ import (
 	"github.com/aremxyplug-be/db/mongo"
 	"github.com/aremxyplug-be/lib/balance"
 	"github.com/aremxyplug-be/lib/randomgen"
+	"github.com/shopspring/decimal"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/zap"
 )
@@ -139,7 +140,7 @@ func (c *Config) Deposit(virtualNuban string) error {
 		deposit_amount := data.Attributes.Amount
 		log.Println(deposit_amount)
 
-		newBalance, depositAmount := balance.NewBalanceDeposit(bal, deposit_amount)
+		newBalance, depositAmount := balance.NewBalanceDeposit(bal, decimal.NewFromFloatWithExponent(deposit_amount, -2))
 		parsedBalance, _ := primitive.ParseDecimal128(newBalance.String())
 		log.Println(newBalance)
 		userBalance := models.Balance{
