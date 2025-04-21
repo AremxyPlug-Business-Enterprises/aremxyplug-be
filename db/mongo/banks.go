@@ -372,7 +372,7 @@ func (m *mongoStore) SaveBalance(virtualNuban string, balance models.Balance) er
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.D{primitive.E{Key: "virtualnuban", Value: virtualNuban}}
+	filter := bson.D{primitive.E{Key: "virtualNuban", Value: virtualNuban}}
 
 	result := m.col(balColl).FindOne(ctx, filter)
 

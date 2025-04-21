@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 
@@ -17,13 +16,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/zap"
 )
-
-/*
-var (
-	api    = os.Getenv("ANCHOR_SANDBOX")
-	apikey = os.Getenv("ANCHORAPI_KEY")
-)
-*/
 
 var (
 	api    = os.Getenv("ANCHOR_API")
@@ -46,19 +38,18 @@ func NewDepositConfig(db db.DataStore, logger *zap.Logger) *Config {
 		logger: logger,
 	}
 }
-
-func (c *Config) Deposit(virtualNuban string) error {
+func (c *Config) Deposit(virtualNuban string, userID string) error {
 	// using the list payment endpoint.
 	url := fmt.Sprintf("%s/%s?%s=%s", api, "payments", "virtualNubanId", virtualNuban)
 
 	if virtualNuban == "" {
-		c.logger.Error("missing virtualNuban")
+		c.logger.Error("Deposit failed: missing virtualNuban")
 		return ErrEmptyVirtualNuban
 	}
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		// log the error
+		c.logger.Error("Deposit failed: unable to create new request", zap.Error(err))
 		return ErrNewRequestFailed
 	}
 	req.Header.Add("accept", "application/json")
@@ -67,8 +58,7 @@ func (c *Config) Deposit(virtualNuban string) error {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		// log the error
-		c.logger.Error(err.Error())
+		c.logger.Error("Deposit failed: API connection error", zap.Error(err))
 		return ErrAPIConnectionFailed
 	}
 	defer resp.Body.Close()
@@ -76,37 +66,22 @@ func (c *Config) Deposit(virtualNuban string) error {
 	apiResponse := paymentResponse{}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		c.logger.Error("Deposit failed: unable to read response body", zap.Error(err))
 		return JSONError(err)
 	}
-	c.logger.Log(c.logger.Level(), string(body))
-
-	/*
-		if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-			// log the error
-			c.logger.Error(err.Error())
-			return JSONError(err)
-
-		}
-	*/
+	c.logger.Debug("API Response Body", zap.String("body", string(body)))
 
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
+		c.logger.Error("Deposit failed: unable to unmarshal JSON response", zap.Error(err))
 		return JSONError(err)
 	}
-	log.Printf("%+v", apiResponse)
+	c.logger.Debug("Parsed API Response", zap.Any("response", apiResponse))
 
-	// create a separate collection for saving virtualNubans and their associated deposit ID
-
-	// range through the response and save only newly created deposits
-	// should track the deposits with their id
-	// how do I create or track a single deposit?
-
-	// the value of the new deposits should be added to the previous balance of the user.
 	paymentData := apiResponse.Data
 	for _, data := range paymentData {
-
 		orderID, err := randomgen.GenerateOrderID()
 		if err != nil {
-			// log the error
+			c.logger.Error("Deposit failed: unable to generate order ID", zap.Error(err))
 			return err
 		}
 
@@ -118,41 +93,36 @@ func (c *Config) Deposit(virtualNuban string) error {
 			ID:           data.ID,
 		}
 
-		log.Printf("%s", virtualNuban)
-		log.Printf("%s", deposit.ID)
-
 		if err := c.db.SaveDepositID(deposit); err != nil {
 			if err == mongo.ErrDepositIDExist {
+				c.logger.Info("Deposit ID already exists, skipping", zap.String("depositID", data.ID))
 				continue
 			}
-
-			c.logger.Error(err.Error())
+			c.logger.Error("Deposit failed: unable to save deposit ID", zap.Error(err))
 			return DBConnectionError(err)
 		}
 
 		bal, err := c.db.GetBalance(virtualNuban)
 		if err != nil {
-			c.logger.Error(err.Error())
+			c.logger.Error("Deposit failed: unable to fetch balance", zap.Error(err))
 			return DBConnectionError(err)
 		}
-		log.Println(bal)
+		c.logger.Debug("Fetched Balance", zap.Any("balance", bal))
 
-		deposit_amount := data.Attributes.Amount
-		log.Println(deposit_amount)
-
+		deposit_amount := data.Attributes.Amount * 0.01
 		newBalance, depositAmount := balance.NewBalanceDeposit(bal, decimal.NewFromFloatWithExponent(deposit_amount, -2))
 		parsedBalance, _ := primitive.ParseDecimal128(newBalance.String())
-		log.Println(newBalance)
+		c.logger.Debug("New Balance Calculated", zap.String("newBalance", newBalance.String()))
+
 		userBalance := models.Balance{
 			VirtualNuban: virtualNuban,
 			Balance:      parsedBalance,
+			UserID:       userID,
 		}
-		if err = c.db.SaveBalance(virtualNuban, userBalance); err != nil {
-			// log the error and return
+		if err := c.db.SaveBalance(virtualNuban, userBalance); err != nil {
+			c.logger.Error("Deposit failed: unable to save user balance", zap.Error(err))
 			return DBConnectionError(err)
 		}
-
-		log.Printf("%+v", data)
 
 		result := models.DepositResponse{
 			Amount:         fmt.Sprintf("%v", depositAmount),
@@ -168,13 +138,11 @@ func (c *Config) Deposit(virtualNuban string) error {
 			Session_ID:     data.Attributes.PaymentReference,
 		}
 
-		log.Printf("%+v", result)
-
 		if err := c.saveTransaction(result); err != nil {
-			// log the error and return
+			c.logger.Error("Deposit failed: unable to save transaction", zap.Error(err))
 			return DBConnectionError(err)
 		}
-
+		c.logger.Info("Deposit transaction saved successfully", zap.Any("transaction", result))
 	}
 
 	return nil
