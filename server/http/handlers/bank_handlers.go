@@ -245,17 +245,17 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 
 	id := userDetails.ID
 
-	bal, err := handler.getUserBalance(id)
-	if err != nil {
+	if err := handler.refreshBalance(id); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not refresh balance: %s", err.Error())}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	if err := handler.refreshBalance(id); err != nil {
+	bal, err := handler.getUserBalance(id)
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not refresh balance: %s", err.Error())}}
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -345,14 +345,14 @@ func (handler *HttpHandler) getVirtualNuban(id string) (string, error) {
 	return acc_details.VirtualAccountID, nil
 }
 
-func (handler *HttpHandler) refreshBalance(id string) error {
-	virtualNuban, err := handler.getVirtualNuban(id)
+func (handler *HttpHandler) refreshBalance(userID string) error {
+	virtualNuban, err := handler.getVirtualNuban(userID)
 	if err != nil {
 		handler.logger.Error(err.Error())
 		return err
 	}
 
-	if err := handler.bankDep.Deposit(virtualNuban); err != nil {
+	if err := handler.bankDep.Deposit(virtualNuban, userID); err != nil {
 		handler.logger.Error(err.Error())
 		return err
 	}

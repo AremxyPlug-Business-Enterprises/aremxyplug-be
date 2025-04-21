@@ -15,7 +15,7 @@ func NewBalanceDeposit(bal, deposit decimal.Decimal) (newBalance, depositAmount 
 	deduction := deposit.Mul(decimal.NewFromFloat(0.01))
 
 	// Subtract 1% of the deposit from the deposit amount
-	depositAfterDeduction := depositAmount.Sub(deduction)
+	depositAfterDeduction := deposit.Sub(deduction)
 
 	newBalance = bal.Add(depositAfterDeduction)
 
