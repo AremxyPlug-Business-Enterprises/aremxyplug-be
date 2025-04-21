@@ -61,9 +61,9 @@ type DepositResponse struct {
 }
 
 type Balance struct {
-	VirtualNuban string               `json:"virtualNuban"`
-	UserID       string               `json:"user_id"`
-	Balance      primitive.Decimal128 `json:"balance"`
+	VirtualNuban string               `json:"virtualNuban" bson:"virtualNuban"`
+	UserID       string               `json:"user_id" bson:"user_id"`
+	Balance      primitive.Decimal128 `json:"balance" bson:"balance"`
 }
 
 func (b Balance) Decimal() (decimal.Decimal, error) {

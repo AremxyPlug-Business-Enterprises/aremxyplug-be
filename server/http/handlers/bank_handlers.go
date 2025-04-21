@@ -260,11 +260,19 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userBal, err := bal.Decimal()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user's balance: %s", err.Error())}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
 	userBalance := struct {
 		Balance string `json:"balance"`
 		UserID  string `json:"user_id"`
 	}{
-		Balance: bal.Balance.String(),
+		Balance: userBal.String(),
 		UserID:  bal.UserID,
 	}
 
