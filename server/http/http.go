@@ -59,10 +59,12 @@ type ServerConfig struct {
 func MountServer(config ServerConfig) *chi.Mux {
 	router := chi.NewRouter()
 
+	allowedOrigin := []string{"http://localhost:3000", "https://test.aremxyplug.com", "https://aremxyplug.com"}
+
 	// Middlewares
 	router.Use(cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowCredentials: false,
+		AllowedOrigins:   allowedOrigin,
+		AllowCredentials: true,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Origin"},
 		ExposedHeaders:   []string{"Authorization"},
@@ -355,5 +357,9 @@ func productRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 			router.Patch("/{planID}", httpHandler.TelecomPlans)
 			router.Delete("/{planID}", httpHandler.TelecomPlans)
 		})
+
+		// Electric Subscription Routes
+
+		// Education Pin Routes
 	})
 }

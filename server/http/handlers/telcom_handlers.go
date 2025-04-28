@@ -16,11 +16,15 @@ import (
 
 // Airtime is use to carry out buying of airtime(POST) and returning all the transactions made by the user(GET)
 func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
-
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user details: %s", err.Error())}}
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("failed to get user details: %s", err.Error())},
+		}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -39,11 +43,11 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			}
 			json.NewEncoder(w).Encode(response)
 			return
-
 		}
+
 		if len(data.Phone_no) != 11 {
 			w.WriteHeader(http.StatusBadRequest)
-			handler.logger.Error("Invalid phone length", zap.Int("length", len(data.Phone_no)))
+			handler.logger.Error("Invalid phone number length", zap.Int("length", len(data.Phone_no)))
 			response := responseFormat.CustomResponse{
 				Status:  http.StatusBadRequest,
 				Message: "error",
@@ -56,7 +60,12 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		userBalance, err := handler.getUserBalance(id)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			handler.logger.Error("Failed to retrieve user balance", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": err.Error()},
+			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -64,7 +73,12 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		amount, err := strconv.Atoi(data.Amount)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			handler.logger.Error("Failed to convert amount to integer", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": err.Error()},
+			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -72,7 +86,12 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		bal, err := userBalance.Decimal()
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			handler.logger.Error("Failed to convert balance to decimal", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": err.Error()},
+			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -80,7 +99,12 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		newBal, valid, err := handler.checkPayment(bal, decimal.NewFromFloatWithExponent(float64(amount), -2))
 		if !valid || err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			handler.logger.Error("Payment validation failed", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": err.Error()},
+			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -89,46 +113,81 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		res, err := handler.vtuClient.BuyAirtime(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...\n %s\n", err)
+			handler.logger.Error("Failed to purchase airtime", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "An internal error occurred while purchasing airtime, please try again."},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
 
 		if err := handler.updateBalance(id, newBal); err != nil {
 			w.WriteHeader(http.StatusNotModified)
-			response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+			handler.logger.Error("Failed to update user balance", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusNotModified,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Payment successful but server failed to modify balance"},
+			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		json.NewEncoder(w).Encode(res)
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": res},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {
 		res, err := handler.vtuClient.GetUserTransaction(username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			handler.logger.Error("Failed to get user's airtime transactions", zap.String("username", username), zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Error occurred while retrieving user's records"},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		json.NewEncoder(w).Encode(res)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"transactions": res},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 }
 
 // GetAirtimeTransactions return all the airtime transactions in the database, to be used by admin.
 func (handler *HttpHandler) GetAirtimeTransactions(w http.ResponseWriter, r *http.Request) {
-
 	resp, err := handler.vtuClient.GetAllTransactions()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
-		fmt.Fprintln(w, "Error occurred while getting transactions")
+		handler.logger.Error("Failed to get all airtime transactions", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error occurred while retrieving transactions"},
+		}
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"transactions": resp},
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 // GetAirtimeInfo returns the details of an airtime transaction.
@@ -138,12 +197,22 @@ func (handler *HttpHandler) GetAirtimeInfo(w http.ResponseWriter, r *http.Reques
 	res, err := handler.dataClient.GetTransactionDetail(id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		handler.logger.Error("Api response error", zap.Error(err))
-		fmt.Fprintln(w, "Error getting transaction detail.")
+		handler.logger.Error("Failed to get transaction detail", zap.String("transactionID", id), zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error getting transaction detail"},
+		}
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	json.NewEncoder(w).Encode(res)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"transaction_details": res},
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Request) {
@@ -257,11 +326,16 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user details: %s", err.Error())}}
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("failed to get user details: %s", err.Error())},
+		}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	// id := userDetails.ID
+	id := userDetails.ID
 	username := userDetails.Username
 
 	if r.Method == "POST" {
@@ -276,62 +350,115 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			}
 			json.NewEncoder(w).Encode(response)
 			return
-
 		}
-		/*
-			bal, err := handler.getBalance(id)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
 
-			amount, err := strconv.Atoi(data.Amount)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		userBalance, err := handler.getUserBalance(id)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Failed to retrieve user balance", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": err.Error()},
+			}
 			json.NewEncoder(w).Encode(response)
 			return
-			}
+		}
 
-			newBal, valid, err := handler.checkTransfer(bal, float64(amount))
-			if !valid || err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
+		plan, err := handler.productClient.GetPlanByID(data.Plan)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Failed to get plan amount", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Failed to retrieve plan amount"},
 			}
-		*/
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		bal, err := userBalance.Decimal()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Failed to convert balance to decimal", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": err.Error()},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		newBal, valid, err := handler.checkPayment(bal, decimal.NewFromFloat(plan.Amount))
+		if !valid || err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Payment validation failed", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": err.Error()},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		data.Username = username
 		res, err := handler.dataClient.BuyData(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
+			handler.logger.Error("Failed to purchase data", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "An internal error occurred while purchasing data, please try again."},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
-		/*
-			if err := handler.updateBalance(id, newBal); err != nil {
-				w.WriteHeader(http.StatusNotModified)
-				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
-				json.NewEncoder(w).Encode(response)
-				return
+
+		if err := handler.updateBalance(id, newBal); err != nil {
+			w.WriteHeader(http.StatusNotModified)
+			handler.logger.Error("Failed to update user balance", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusNotModified,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Payment successful but server failed to modify balance"},
 			}
-		*/
-		json.NewEncoder(w).Encode(res)
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": res},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {
 		res, err := handler.dataClient.GetUserTransactions(username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			handler.logger.Error("Failed to get user's data transactions", zap.String("username", username), zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Error occurred while retrieving user's records"},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		json.NewEncoder(w).Encode(res)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"transactions": res},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 
 }
@@ -339,41 +466,63 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 // GetDataInfo checks and returns the details of a given transaction.
 func (handler *HttpHandler) GetDataInfo(w http.ResponseWriter, r *http.Request) {
 
-	//id := r.URL.Query().Get("id")
 	id := chi.URLParam(r, "id")
 
 	res, err := handler.dataClient.GetTransactionDetail(id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		handler.logger.Error("Api response error", zap.Error(err))
-		fmt.Fprintln(w, "Error getting transaction detail.")
+		handler.logger.Error("Failed to get transaction detail", zap.String("transactionID", id), zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error getting transaction detail"},
+		}
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	json.NewEncoder(w).Encode(res)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"transaction_details": res},
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 // GetTransactions returns the list of transaction carried out in the server. It is for admins to view all transactions.
 func (handler *HttpHandler) GetDataTransactions(w http.ResponseWriter, r *http.Request) {
-
 	resp, err := handler.dataClient.GetAllTransactions()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		handler.logger.Error("Api response error", zap.Error(err))
-		fmt.Fprintf(w, "Error getting users transactions records: %v", err)
+		handler.logger.Error("Failed to get all transactions", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error occurred while retrieving transactions"},
+		}
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"transactions": resp},
+	}
+	json.NewEncoder(w).Encode(response)
 
 }
 
 func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Request) {
-
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user details: %s", err.Error())}}
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("failed to get user details: %s", err.Error())},
+		}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -383,27 +532,52 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 	if r.Method == "POST" {
 		data := telcom.SpectranetInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
-			fmt.Fprintf(w, "%v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Failed to decode Spectranet data request", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Invalid request format"},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
-
 		}
 
 		userBalance, err := handler.getUserBalance(id)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			handler.logger.Error("Failed to retrieve user balance", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": err.Error()},
+			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
 
 		balance, err := userBalance.Decimal()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Failed to convert balance to decimal", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": err.Error()},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
 
 		newBal, valid, err := handler.checkPayment(balance, decimal.NewFromFloatWithExponent(float64(data.Amount), -2))
 		if !valid || err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			handler.logger.Error("Payment validation failed", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": err.Error()},
+			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
@@ -411,139 +585,219 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 		res, err := handler.dataClient.BuySpecData(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
+			handler.logger.Error("Failed to purchase Spectranet data", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "An internal error occurred while purchasing data, please try again."},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
 
 		if err := handler.updateBalance(id, newBal); err != nil {
 			w.WriteHeader(http.StatusNotModified)
-			response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
+			handler.logger.Error("Failed to update user balance", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusNotModified,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Payment successful but server failed to modify balance"},
+			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		json.NewEncoder(w).Encode(res)
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": res},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {
 		res, err := handler.dataClient.GetSpecUserTransactions(username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			handler.logger.Error("Failed to get user's Spectranet transactions", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Error occurred while retrieving user's records"},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		json.NewEncoder(w).Encode(res)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"transactions": res},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 
 }
 
 func (handler *HttpHandler) GetSpecDataDetails(w http.ResponseWriter, r *http.Request) {
 
-	//id := r.URL.Query().Get("id")
 	id := chi.URLParam(r, "id")
 
 	res, err := handler.dataClient.GetSpecTransDetails(id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		handler.logger.Error("Api response error", zap.Error(err))
-		fmt.Fprintln(w, "Error getting transaction detail.")
+		handler.logger.Error("Failed to get Spectranet transaction details", zap.String("transactionID", id), zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error getting transaction detail"},
+		}
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	json.NewEncoder(w).Encode(res)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"transaction_details": res},
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 // To be used by admin
 func (handler *HttpHandler) GetSpectranetTransactions(w http.ResponseWriter, r *http.Request) {
-
 	resp, err := handler.dataClient.GetAllSpecTransactions()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
-		fmt.Fprintln(w, "Error occurred while getting transactions")
-		return
-	}
-
-	json.NewEncoder(w).Encode(resp)
-}
-
-func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
-
-	userDetails, err := handler.GetUserDetails(r)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user details: %s", err.Error())}}
+		handler.logger.Error("Failed to get Spectranet transactions", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error occurred while retrieving transactions"},
+		}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	//id := userDetails.ID
+
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"transactions": resp},
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("failed to get user details: %s", err.Error())},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	// id := userDetails.ID
 	username := userDetails.Username
 
 	if r.Method == "POST" {
 		data := telcom.SmileInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Decoding JSON response", zap.Error(err))
-			fmt.Fprintf(w, "%v", err)
-			return
-
-		}
-		/*
-			bal, err := handler.getBalance(id)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Failed to decode Smile data request", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Invalid request format"},
 			}
-
-			amount, err := strconv.Atoi(data.Amount)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
-			}
+		}
 
-			newBal, valid, err := handler.checkTransfer(bal, float64(amount))
-			if !valid || err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-		*/
+		// bal, err := handler.getBalance(id)
+		// if err != nil {
+		// 	w.WriteHeader(http.StatusBadRequest)
+		// 	handler.logger.Error("Failed to retrieve user balance", zap.Error(err))
+		// 	response := responseFormat.CustomResponse{
+		// 		Status:  http.StatusBadRequest,
+		// 		Message: "error",
+		// 		Data:    map[string]interface{}{"data": err.Error()},
+		// 	}
+		// 	json.NewEncoder(w).Encode(response)
+		// 	return
+		// }
+
+		// newBal, valid, err := handler.checkPayment(bal, decimal.NewFromFloat(float64(amount)))
+		// if !valid || err != nil {
+		// 	w.WriteHeader(http.StatusBadRequest)
+		// 	handler.logger.Error("Payment validation failed", zap.Error(err))
+		// 	response := responseFormat.CustomResponse{
+		// 		Status:  http.StatusBadRequest,
+		// 		Message: "error",
+		// 		Data:    map[string]interface{}{"data": err.Error()},
+		// 	}
+		// 	json.NewEncoder(w).Encode(response)
+		// 	return
+		// }
+
 		res, err := handler.dataClient.BuySmileData(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintf(w, "An internal error occurred while purchasing data, please try again...")
+			handler.logger.Error("Failed to purchase Smile data", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "An internal error occurred while purchasing data, please try again."},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
-		/*
-			if err := handler.updateBalance(id, newBal); err != nil {
-				w.WriteHeader(http.StatusNotModified)
-				response := responseFormat.CustomResponse{Status: http.StatusNotModified, Message: "error", Data: map[string]interface{}{"data": "payment successful but server failed to modify balance"}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
-		*/
-		json.NewEncoder(w).Encode(res)
+
+		// if err := handler.updateBalance(id, newBal); err != nil {
+		// 	w.WriteHeader(http.StatusNotModified)
+		// 	handler.logger.Error("Failed to update user balance", zap.Error(err))
+		// 	response := responseFormat.CustomResponse{
+		// 		Status:  http.StatusNotModified,
+		// 		Message: "error",
+		// 		Data:    map[string]interface{}{"data": "Payment successful but server failed to modify balance"},
+		// 	}
+		// 	json.NewEncoder(w).Encode(response)
+		// 	return
+		// }
+
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": res},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {
 		res, err := handler.dataClient.GetSmileUserTransactions(username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			handler.logger.Error("Failed to get user's Smile transactions", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Error occurred while retrieving user's records"},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		json.NewEncoder(w).Encode(res)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"transactions": res},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 
 }

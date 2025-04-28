@@ -70,8 +70,8 @@ func (t *Transaction) GetDepositDetails(id string) (models.DepositResponse, erro
 }
 
 // should be called at any point where the user get their balance
-func (t *Transaction) GetBalance(virtualNuban string) (decimal.Decimal, error) {
-	bal, err := t.store.GetBalance(virtualNuban)
+func (t *Transaction) GetBalance(userID string) (decimal.Decimal, error) {
+	bal, err := t.store.GetBalance(userID)
 	if err != nil {
 		return decimal.NewFromFloat(0), err
 	}
@@ -79,8 +79,8 @@ func (t *Transaction) GetBalance(virtualNuban string) (decimal.Decimal, error) {
 }
 
 // To be used after making payment
-func (t *Transaction) UpdateBalance(virtualNuban string, amount float64) error {
-	err := t.store.UpdateBalance(virtualNuban, decimal.NewFromFloatWithExponent(amount, -2))
+func (t *Transaction) UpdateBalance(userID string, amount float64) error {
+	err := t.store.UpdateBalance(userID, decimal.NewFromFloatWithExponent(amount, -2))
 	if err != nil {
 		return err
 	}

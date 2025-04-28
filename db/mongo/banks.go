@@ -326,12 +326,12 @@ func (m *mongoStore) CreateInitialBalance(userID, virtualNuban string) error {
 	return err
 }
 
-func (m *mongoStore) GetBalance(virtualNuban string) (balance decimal.Decimal, err error) {
+func (m *mongoStore) GetBalance(userID string) (balance decimal.Decimal, err error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.D{primitive.E{Key: "virtualnuban", Value: virtualNuban}}
+	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
 
 	result := m.col(balColl).FindOne(ctx, filter)
 
@@ -368,11 +368,11 @@ func (m *mongoStore) GetBalanceDetails(id string) (models.Balance, error) {
 	return resp, nil
 }
 
-func (m *mongoStore) SaveBalance(virtualNuban string, balance models.Balance) error {
+func (m *mongoStore) SaveBalance(userID string, balance models.Balance) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.D{primitive.E{Key: "virtualNuban", Value: virtualNuban}}
+	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
 
 	result := m.col(balColl).FindOne(ctx, filter)
 
@@ -401,11 +401,11 @@ func (m *mongoStore) SaveBalance(virtualNuban string, balance models.Balance) er
 	return nil
 }
 
-func (m *mongoStore) UpdateBalance(virtualNuban string, balance decimal.Decimal) error {
+func (m *mongoStore) UpdateBalance(userID string, balance decimal.Decimal) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.D{primitive.E{Key: "virtualNuban", Value: virtualNuban}}
+	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
 
 	bal, err := primitive.ParseDecimal128(balance.String())
 	if err != nil {

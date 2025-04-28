@@ -346,13 +346,13 @@ func (handler *HttpHandler) getVirtualNuban(id string) (string, error) {
 }
 
 func (handler *HttpHandler) refreshBalance(userID string) error {
-	virtualNuban, err := handler.getVirtualNuban(userID)
+	virtualNubanID, err := handler.getVirtualNuban(userID)
 	if err != nil {
 		handler.logger.Error(err.Error())
 		return err
 	}
 
-	if err := handler.bankDep.Deposit(virtualNuban, userID); err != nil {
+	if err := handler.bankDep.Deposit(virtualNubanID, userID); err != nil {
 		handler.logger.Error(err.Error())
 		return err
 	}
@@ -360,9 +360,9 @@ func (handler *HttpHandler) refreshBalance(userID string) error {
 	return nil
 }
 
-func (handler *HttpHandler) getBalance(virtualNuban string) (balance decimal.Decimal, err error) {
+func (handler *HttpHandler) getBalance(userID string) (balance decimal.Decimal, err error) {
 
-	bal, err := handler.bankTranc.GetBalance(virtualNuban)
+	bal, err := handler.bankTranc.GetBalance(userID)
 	if err != nil {
 		return decimal.Decimal{}, err
 	}

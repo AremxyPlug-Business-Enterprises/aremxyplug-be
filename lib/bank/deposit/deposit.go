@@ -38,12 +38,12 @@ func NewDepositConfig(db db.DataStore, logger *zap.Logger) *Config {
 		logger: logger,
 	}
 }
-func (c *Config) Deposit(virtualNuban string, userID string) error {
+func (c *Config) Deposit(virtualaccountid string, userID string) error {
 	// using the list payment endpoint.
-	url := fmt.Sprintf("%s/%s?%s=%s", api, "payments", "virtualNubanId", virtualNuban)
+	url := fmt.Sprintf("%s/%s?%s=%s", api, "payments", "virtualNubanId", virtualaccountid)
 
-	if virtualNuban == "" {
-		c.logger.Error("Deposit failed: missing virtualNuban")
+	if virtualaccountid == "" {
+		c.logger.Error("Deposit failed: missing account number")
 		return ErrEmptyVirtualNuban
 	}
 
@@ -102,7 +102,7 @@ func (c *Config) Deposit(virtualNuban string, userID string) error {
 			return DBConnectionError(err)
 		}
 
-		bal, err := c.db.GetBalance(virtualNuban)
+		bal, err := c.db.GetBalance(userID)
 		if err != nil {
 			c.logger.Error("Deposit failed: unable to fetch balance", zap.Error(err))
 			return DBConnectionError(err)
