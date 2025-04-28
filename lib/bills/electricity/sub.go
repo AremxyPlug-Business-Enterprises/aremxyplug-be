@@ -124,8 +124,8 @@ func (e *ElectricConn) QueryTransaction(id string) (models.ElectricResult, error
 }
 
 // get transaction history
-func (e *ElectricConn) GetUserTransactions(user string) ([]models.ElectricResult, error) {
-	result, err := e.getAllTransaction("user")
+func (e *ElectricConn) GetUserTransactions(username string) ([]models.ElectricResult, error) {
+	result, err := e.getAllTransaction(username)
 	if err != nil {
 		return nil, e.logAndReturnError("failed to get user's transactions", err)
 	}
@@ -204,8 +204,8 @@ func (e *ElectricConn) getTransactionDetails(id string) (models.ElectricResult, 
 	return result, nil
 }
 
-func (e *ElectricConn) getAllTransaction(user string) ([]models.ElectricResult, error) {
-	result, err := e.db.GetAllElectricSubTransactions(user)
+func (e *ElectricConn) getAllTransaction(username string) ([]models.ElectricResult, error) {
+	result, err := e.db.GetAllElectricSubTransactions(username)
 	if err != nil {
 		return nil, err
 	}

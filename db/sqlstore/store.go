@@ -232,3 +232,43 @@ func (s *SqlStore) GetPlansByProductID(productID int) ([]models.Plan, error) {
 	s.logger.Info("Plans retrieved successfully", zap.Int("productID", productID), zap.Int("count", len(plans)))
 	return plans, nil
 }
+
+func (s *SqlStore) GetPlanByID(planID int) (*models.Plan, error) {
+	rows, err := s.db.Query(`
+	SELECT 
+		p.plan_id, 
+		p.product_id, 
+		p.amount, 
+		p.validity, 
+		p.size, 
+		pr.plan_type 
+	FROM plans 
+	WHERE p.plan_id = ?`, planID)
+	if err != nil {
+		s.logger.Error("Failed to retrieve plan", zap.Int("planID", planID), zap.Error(err))
+		return nil, fmt.Errorf("failed to retrieve plan with ID %d: %v", planID, err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		s.logger.Warn("No plan found", zap.Int("planID", planID))
+		return nil, fmt.Errorf("no plan found with ID %d", planID)
+	}
+
+	var plan models.Plan
+	err = rows.Scan(
+		&plan.PlanID,
+		&plan.ProductID,
+		&plan.Amount,
+		&plan.Validity,
+		&plan.Size,
+		&plan.PlanType,
+	)
+	if err != nil {
+		s.logger.Error("Failed to scan plan row", zap.Error(err))
+		return nil, fmt.Errorf("failed to scan plan row: %v", err)
+	}
+
+	s.logger.Info("Plan retrieved successfully", zap.Int("planID", plan.PlanID))
+	return &plan, nil
+}

@@ -82,11 +82,11 @@ func (m *mongoStore) GetElectricSubDetails(id string) (models.ElectricResult, er
 	return res, nil
 }
 
-func (m *mongoStore) GetAllElectricSubTransactions(user string) ([]models.ElectricResult, error) {
+func (m *mongoStore) GetAllElectricSubTransactions(username string) ([]models.ElectricResult, error) {
 	ctx := context.Background()
 	res := []models.ElectricResult{}
 
-	cur, err := m.getAllRecords(dataColl, user)
+	cur, err := m.getAllRecords(dataColl, username)
 	if err != nil {
 		return []models.ElectricResult{}, err
 	}

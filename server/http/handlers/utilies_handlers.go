@@ -123,30 +123,50 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Error occurred while getting user's records"},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		json.NewEncoder(w).Encode(res)
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": res},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 
 }
 
 // GetEduInfo returns the details of an airtime transaction.
 func (handler *HttpHandler) GetEduInfo(w http.ResponseWriter, r *http.Request) {
-
-	//id := r.URL.Query().Get("id")
 	id := chi.URLParam(r, "id")
 
 	res, err := handler.dataClient.GetTransactionDetail(id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		handler.logger.Error("Api response error", zap.Error(err))
-		fmt.Fprintln(w, "Error getting transaction detail.")
+		handler.logger.Error("Failed to get education transaction detail", zap.String("id", id), zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error occurred while retrieving transaction details"},
+		}
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	json.NewEncoder(w).Encode(res)
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": res},
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 // To be used by admins to view transactions in the databases
@@ -155,12 +175,23 @@ func (handler *HttpHandler) GetEduTransactions(w http.ResponseWriter, r *http.Re
 	resp, err := handler.eduClient.GetAllTransaction("user")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
-		fmt.Fprintln(w, "Error occurred while getting transactions")
+		handler.logger.Error("Error getting user's transactions", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error occurred while retrieving transactions"},
+		}
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": resp},
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Request) {
@@ -248,12 +279,23 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 		res, err := handler.tvClient.GetUserTransactions("user")
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			handler.logger.Error("Failed to get user's TV transactions", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Error occurred while retrieving user's TV transactions"},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		json.NewEncoder(w).Encode(res)
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": res},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 }
 
@@ -261,12 +303,23 @@ func (handler *HttpHandler) GetTvSubscriptions(w http.ResponseWriter, r *http.Re
 	resp, err := handler.tvClient.GetAllTransactions()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
-		fmt.Fprintln(w, "Error occurred while getting transactions")
+		handler.logger.Error("Error getting user's TV transactions", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error occurred while retrieving TV transactions"},
+		}
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": resp},
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func (handler *HttpHandler) GetTvSubDetails(w http.ResponseWriter, r *http.Request) {
@@ -275,12 +328,23 @@ func (handler *HttpHandler) GetTvSubDetails(w http.ResponseWriter, r *http.Reque
 	res, err := handler.tvClient.GetTransactionDetails(id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		handler.logger.Error("Api response error", zap.Error(err))
-		fmt.Fprintln(w, "Error getting transaction details...")
+		handler.logger.Error("Failed to get TV subscription details", zap.String("id", id), zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error occurred while retrieving transaction details"},
+		}
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	json.NewEncoder(w).Encode(res)
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": res},
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request) {
@@ -365,26 +429,43 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			response := responseFormat.CustomResponse{
 				Status:  http.StatusInternalServerError,
 				Message: "error",
-				Data:    map[string]interface{}{"data": "Subscription active but balance update failed. Contact support."},
+				Data:    map[string]interface{}{"error": "Subscription active but balance update failed. Contact support."},
 			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
 
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(res)
+		handler.logger.Info("Electricity subscription processed successfully", zap.Any("response", res))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": res},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.electClient.GetUserTransactions("user")
+		res, err := handler.electClient.GetUserTransactions(userDetails.Username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Api response error", zap.Error(err))
-			fmt.Fprintln(w, "Errror occurred while getting user's records")
+			handler.logger.Error("Failed to get user's electric bill transactions", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Error occurred while retrieving user's electric bill transactions"},
+			}
+			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		json.NewEncoder(w).Encode(res)
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": res},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 }
 
@@ -392,12 +473,23 @@ func (handler *HttpHandler) GetElectricBills(w http.ResponseWriter, r *http.Requ
 	resp, err := handler.electClient.GetAllTransactions()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
-		fmt.Fprintln(w, "Error occurred while getting transactions")
+		handler.logger.Error("Error getting user's electric bill transactions", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error occurred while retrieving electric bill transactions"},
+		}
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	json.NewEncoder(w).Encode(resp)
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": resp},
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func (handler *HttpHandler) GetElectricBillDetails(w http.ResponseWriter, r *http.Request) {
@@ -406,12 +498,23 @@ func (handler *HttpHandler) GetElectricBillDetails(w http.ResponseWriter, r *htt
 	res, err := handler.electClient.GetTransactionDetails(id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		handler.logger.Error("Api response error", zap.Error(err))
-		fmt.Fprintln(w, "Error getting transaction detail.")
+		handler.logger.Error("Failed to get electric bill transaction details", zap.String("id", id), zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error occurred while retrieving transaction details"},
+		}
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	json.NewEncoder(w).Encode(res)
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": res},
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func (handler *HttpHandler) TvSubHandler(w http.ResponseWriter, r *http.Request) {

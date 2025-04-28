@@ -48,9 +48,9 @@ type BankStore interface {
 	SaveDeposit(detail models.DepositResponse) error
 	GetDepositID(virtualNuban string) (result interface{}, err error)
 	SaveDepositID(detail interface{}) error
-	GetBalance(virtualNuban string) (balance decimal.Decimal, err error)
-	SaveBalance(virtualNuban string, balance models.Balance) error
-	UpdateBalance(virtualNuban string, balance decimal.Decimal) error
+	GetBalance(userID string) (balance decimal.Decimal, err error)
+	SaveBalance(userID string, balance models.Balance) error
+	UpdateBalance(userID string, balance decimal.Decimal) error
 	GetBalanceDetails(id string) (models.Balance, error)
 	CreateInitialBalance(userID, virtualNuban string) error
 }
@@ -96,5 +96,5 @@ type UtilitiesStore interface {
 	GetAllTvSubTransactions(user string) ([]models.BillResult, error)
 	SaveElectricTransaction(details *models.ElectricResult) error
 	GetElectricSubDetails(id string) (models.ElectricResult, error)
-	GetAllElectricSubTransactions(user string) ([]models.ElectricResult, error)
+	GetAllElectricSubTransactions(username string) ([]models.ElectricResult, error)
 }
