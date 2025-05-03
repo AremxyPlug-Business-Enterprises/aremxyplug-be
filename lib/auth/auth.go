@@ -76,5 +76,6 @@ func (a *AuthConn) Authorize(next http.Handler) http.Handler {
 		}
 
 		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("Invalid or expired token"))
 	})
 }

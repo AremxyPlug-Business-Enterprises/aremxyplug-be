@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	api = os.Getenv("VTPASS")
+	api = os.Getenv("VTPASS_SANDBOX")
 	pk  = os.Getenv("APIKey")
 	sk  = os.Getenv("SK")
 )
@@ -67,6 +67,10 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 		return nil, e.logAndReturnError("error decoding response body", err)
 	}
 	log.Println(apiResponse)
+	if apiResponse.Code != "000" {
+		e.logger.Error("error processing payment", zap.Any("apiresponse", apiResponse))
+		return nil, e.logAndReturnError("error processing payment", errors.New(""))
+	}
 	transDetails := apiResponse.Contents.Transactions
 	description := data.DiscoType + " " + data.Meter_Type
 
@@ -275,6 +279,11 @@ func (e *ElectricConn) verifyMeterNo(discoType, meterNo, meterType string) (bool
 	apiResponse := models.VerifyMeterResponse{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		return false, err
+	}
+	e.logger.Info("verify meter response", zap.String("code", apiResponse.Code))
+	if apiResponse.Code != "000" {
+		e.logger.Error("error verifying meter number", zap.Any("apiresponse", apiResponse))
+		return false, errors.New("invalid meter number")
 	}
 
 	if apiResponse.Content.Err != "" {
