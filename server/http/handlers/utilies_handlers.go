@@ -233,7 +233,7 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		newBal, valid, err := handler.checkPayment(bal, decimal.NewFromFloatWithExponent(float64(data.Amount), -2))
+		newBal, valid, err := handler.checkPayment(bal, decimal.NewFromFloat(float64(data.Amount)))
 		if !valid || err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("TV payment validation failed", zap.Error(err))
@@ -385,7 +385,7 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		newBal, valid, err := handler.checkPayment(bal, decimal.NewFromFloatWithExponent(float64(data.Amount), -2))
+		newBal, valid, err := handler.checkPayment(bal, decimal.NewFromFloat(float64(data.Amount)))
 		if !valid || err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Electricity payment validation failed", zap.Error(err))
