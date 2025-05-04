@@ -44,6 +44,7 @@ func NewTvConn(db db.UtilitiesStore, Logger *zap.Logger) *TvConn {
 func (t *TvConn) BuySub(data models.TvInfo) (*models.BillResult, error) {
 
 	data.RequestID = randomgen.GenerateRequestID()
+	data.SubType = "change"
 	orderID, err := randomgen.GenerateOrderID()
 	if err != nil {
 		return nil, t.logAndReturnError("error generating orderID", err)
@@ -62,12 +63,16 @@ func (t *TvConn) BuySub(data models.TvInfo) (*models.BillResult, error) {
 	}
 	defer resp.Body.Close()
 
-	apiResponse := &models.TvAPI{}
+	apiResponse := models.TvAPI{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		log.Print(err)
+		return nil, t.logAndReturnError("error decoding response body", err)
 	}
-	log.Println(apiResponse)
-	fmt.Printf("%v\n", apiResponse)
+	log.Printf("%+v", apiResponse)
+	if apiResponse.Code != "000" {
+		t.logger.Error("error processing payment", zap.Any("apiresponse", apiResponse))
+		return nil, t.logAndReturnError("error processing payment", errors.New(""))
+	}
+	fmt.Printf("%+v\n", apiResponse)
 
 	result := &models.BillResult{
 		DecoderType:   data.DecoderType,
@@ -75,12 +80,12 @@ func (t *TvConn) BuySub(data models.TvInfo) (*models.BillResult, error) {
 		IucNumber:     data.SmartCard_Number,
 		Phone:         data.Phone,
 		Email:         data.Email,
-		Product:       apiResponse.Content.Transcations.Type,
-		Description:   apiResponse.Content.Transcations.Product_Desc,
+		Product:       apiResponse.Content.Transactions.Type,
+		Description:   apiResponse.Content.Transactions.Product_Desc,
 		OrderID:       orderID,
 		TranscationID: transactionID,
 		RequestID:     apiResponse.RequestID,
-		Amount:        apiResponse.Content.Transcations.Amount,
+		Amount:        int(apiResponse.Content.Transactions.Amount),
 	}
 
 	if err := t.saveTransaction(result); err != nil {

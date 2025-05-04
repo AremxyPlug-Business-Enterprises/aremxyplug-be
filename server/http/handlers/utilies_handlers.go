@@ -220,6 +220,18 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 
 		}
 
+		if data.Amount == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Invalid TV subscription amount", zap.Int("amount", data.Amount))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Amount must be greater than zero"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		bal, err := handler.getBalance(id)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError) // Assume DB error
@@ -399,7 +411,7 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 		}
 
 		if data.Amount < 1000 {
-			w.WriteHeader(http.StatusBadRequest) // Changed from 500 to 400
+			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Invalid electric bill amount", zap.Int("amount", data.Amount))
 			response := responseFormat.CustomResponse{
 				Status:  http.StatusBadRequest,

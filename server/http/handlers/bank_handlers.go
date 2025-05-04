@@ -321,13 +321,9 @@ func (handler *HttpHandler) checkTransfer(bal decimal.Decimal, amount float64) (
 
 }
 
-func (handler *HttpHandler) updateBalance(id string, newBalance float64) error {
+func (handler *HttpHandler) updateBalance(userID string, newBalance float64) error {
 
-	virtualNuban, err := handler.getVirtualNuban(id)
-	if err != nil {
-		return err
-	}
-	if err := handler.bankTranc.UpdateBalance(virtualNuban, newBalance); err != nil {
+	if err := handler.bankTranc.UpdateBalance(userID, newBalance); err != nil {
 		return err
 	}
 
