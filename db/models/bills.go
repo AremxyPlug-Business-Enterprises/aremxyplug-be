@@ -10,33 +10,28 @@ type TvInfo struct {
 	SubType          string `json:"sub_type"`
 	RequestID        string `json:"request_id"`
 }
-
 type TvAPI struct {
 	Code      string     `json:"code"`
 	Content   Tv_Content `json:"content"`
-	Date      Trans_Date `json:"transaction_date"`
+	Date      string     `json:"transaction_date"` // Direct string match for ISO datetime
 	RequestID string     `json:"requestId"`
 	Response  string     `json:"response_description"`
 }
 
 type Tv_Content struct {
-	Transcations Transactions_Details `json:"transactions"`
+	Transactions Transactions_Details `json:"transactions"` // Fixed spelling to match JSON
 }
 
 type Transactions_Details struct {
 	Status        string  `json:"status"`
 	Product_Desc  string  `json:"product_name"`
-	Unit_Price    float64 `json:"unit_price"`
+	Unit_Price    float64 `json:"unit_price,string"` // Handle string->float conversion
 	Commission    float64 `json:"commission"`
 	Email         string  `json:"email"`
 	Phone         string  `json:"phone"`
-	Amount        int     `json:"amount"`
+	Amount        float64 `json:"amount,string"` // Handle string->float conversion
 	TransactionID string  `json:"transactionId"`
 	Type          string  `json:"type"`
-}
-
-type Trans_Date struct {
-	Date string `json:"date"`
 }
 
 type BillResult struct {

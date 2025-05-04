@@ -66,28 +66,32 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		return nil, e.logAndReturnError("error decoding response body", err)
 	}
-	log.Println(apiResponse)
+	log.Printf("%+v", apiResponse)
 	if apiResponse.Code != "000" {
 		e.logger.Error("error processing payment", zap.Any("apiresponse", apiResponse))
 		return nil, e.logAndReturnError("error processing payment", errors.New(""))
 	}
-	transDetails := apiResponse.Contents.Transactions
+	transDetails := apiResponse.Content
 	description := data.DiscoType + " " + data.Meter_Type
 
-	parts := strings.Split(apiResponse.Purchased_Token, ":")
+	token := apiResponse.Token
 
-	token_generated := strings.TrimSpace(parts[1])
-	billGenerated := token_generated
+	billGenerated := ""
+	if token != "" {
+		parts := strings.Split(apiResponse.Token, ":")
+		token_generated := strings.TrimSpace(parts[1])
+		billGenerated = token_generated
+	}
 
 	result := &models.ElectricResult{
-		Amount:        apiResponse.Amount,
+		Amount:        strconv.Itoa(apiResponse.Amount),
 		DiscoType:     data.DiscoType,
 		MeterType:     data.Meter_Type,
-		MeterNumber:   transDetails.Meter_No,
+		MeterNumber:   transDetails.Transactions.UniqueElement,
 		Phone:         data.Phone,
 		BillGenerated: billGenerated,
 		Email:         data.Email,
-		Product:       transDetails.Type,
+		Product:       transDetails.Transactions.ProductName,
 		Description:   description,
 		OrderID:       orderID,
 		TransactionID: transactionID,

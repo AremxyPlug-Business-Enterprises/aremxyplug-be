@@ -11,12 +11,39 @@ type ElectricInfo struct {
 }
 
 type ElectricAPI struct {
-	Code            string          `json:"code"`
-	Contents        Content         `json:"content"`
-	TransactionDate TransactionDate `json:"transaction_date"`
-	RequestID       string          `json:"requestId"`
-	Amount          string          `json:"amount"`
-	Purchased_Token string          `json:"purchased_code"`
+	Code                 string  `json:"code"`
+	Content              Content `json:"content"`
+	ResponseDescription  string  `json:"response_description"`
+	RequestID            string  `json:"requestId"`
+	Amount               int     `json:"amount"`
+	TransactionDate      string  `json:"transaction_date"`
+	PurchasedToken       string  `json:"purchased_code"`
+	CustomerName         string  `json:"customerName"`
+	CustomerAddress      string  `json:"customerAddress"`
+	MeterNumber          string  `json:"meterNumber"`
+	Token                string  `json:"token"`
+	TokenAmount          float64 `json:"tokenAmount"`
+	ExchangeReference    string  `json:"exchangeReference"`
+	ResetToken           string  `json:"resetToken"`
+	ConfigureToken       string  `json:"configureToken"`
+	Units                string  `json:"units"`
+	FixChargeAmount      float64 `json:"fixChargeAmount"`
+	Tariff               string  `json:"tariff"`
+	TaxAmount            float64 `json:"taxAmount"`
+	DebtAmount           float64 `json:"debtAmount"`
+	Kct1                 string  `json:"kct1"`
+	Kct2                 string  `json:"kct2"`
+	Penalty              float64 `json:"penalty"`
+	CostOfUnit           float64 `json:"costOfUnit"`
+	Announcement         string  `json:"announcement"`
+	MeterCost            float64 `json:"meterCost"`
+	CurrentCharge        float64 `json:"currentCharge"`
+	LossOfRevenue        float64 `json:"lossOfRevenue"`
+	TariffBaseRate       float64 `json:"tariffBaseRate"`
+	InstallationFee      float64 `json:"installationFee"`
+	ReconnectionFee      float64 `json:"reconnectionFee"`
+	MeterServiceCharge   float64 `json:"meterServiceCharge"`
+	AdministrativeCharge float64 `json:"administrativeCharge"`
 }
 
 type Content struct {
@@ -24,19 +51,33 @@ type Content struct {
 }
 
 type TransactionDetails struct {
-	Status        string  `json:"status"`
-	Product_Name  string  `json:"product_name"` // map to description, split end to bill generated
-	Meter_No      string  `json:"unique_element"`
-	Unit_Price    float64 `json:"unit_price"`
-	Commission    float64 `json:"commission"`
-	Phone         string  `json:"phone"`
-	Type          string  `json:"type"`
-	TransactionID string  `json:"transactionId"`
-	Email         string  `json:"email"`
+	Status              string            `json:"status"`
+	ProductName         string            `json:"product_name"`
+	UniqueElement       string            `json:"unique_element"`
+	UnitPrice           string            `json:"unit_price"`
+	Quantity            int               `json:"quantity"`
+	ServiceVerification interface{}       `json:"service_verification"`
+	Channel             string            `json:"channel"`
+	Commission          float64           `json:"commission"`
+	TotalAmount         int               `json:"total_amount"`
+	Discount            interface{}       `json:"discount"`
+	Type                string            `json:"type"`
+	Email               string            `json:"email"`
+	Phone               string            `json:"phone"`
+	Name                interface{}       `json:"name"`
+	ConvinienceFee      int               `json:"convinience_fee"` // Note JSON typo
+	Amount              string            `json:"amount"`
+	Platform            string            `json:"platform"`
+	Method              string            `json:"method"`
+	TransactionID       string            `json:"transactionId"`
+	CommissionDetails   CommissionDetails `json:"commission_details"`
 }
 
-type TransactionDate struct {
-	Date string `json:"date"`
+type CommissionDetails struct {
+	Amount          int    `json:"amount"`
+	Rate            string `json:"rate"`
+	RateType        string `json:"rate_type"`
+	ComputationType string `json:"computation_type"`
 }
 
 type VerifyMeterResponse struct {
