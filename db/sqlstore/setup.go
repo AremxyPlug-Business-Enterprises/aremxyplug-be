@@ -13,13 +13,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-var networkIDs = map[string]int{
-	"MTN":     1,
-	"GLO":     2,
-	"9MOBILE": 3,
-	"AIRTEL":  4,
-}
-
 var (
 	dbUser     = os.Getenv("SQL_DB_USER")
 	dbPassword = os.Getenv("SQL_DB_PASSWORD")
