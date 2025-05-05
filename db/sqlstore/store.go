@@ -215,7 +215,6 @@ func (s *SqlStore) GetPlansByProductID(productID int) ([]models.Plan, error) {
 			&plan.Amount,
 			&plan.Validity,
 			&plan.Size,
-			&plan.PlanType,
 		)
 		if err != nil {
 			s.logger.Error("Failed to scan plan row", zap.Error(err))
@@ -236,14 +235,13 @@ func (s *SqlStore) GetPlansByProductID(productID int) ([]models.Plan, error) {
 func (s *SqlStore) GetPlanByID(planID int) (*models.Plan, error) {
 	rows, err := s.db.Query(`
 	SELECT 
-		p.plan_id, 
-		p.product_id, 
-		p.amount, 
-		p.validity, 
-		p.size, 
-		pr.plan_type 
+		plan_id, 
+		product_id, 
+		amount, 
+		validity, 
+		size 
 	FROM plans 
-	WHERE p.plan_id = ?`, planID)
+	WHERE plan_id = ?`, planID)
 	if err != nil {
 		s.logger.Error("Failed to retrieve plan", zap.Int("planID", planID), zap.Error(err))
 		return nil, fmt.Errorf("failed to retrieve plan with ID %d: %v", planID, err)
@@ -262,7 +260,6 @@ func (s *SqlStore) GetPlanByID(planID int) (*models.Plan, error) {
 		&plan.Amount,
 		&plan.Validity,
 		&plan.Size,
-		&plan.PlanType,
 	)
 	if err != nil {
 		s.logger.Error("Failed to scan plan row", zap.Error(err))
