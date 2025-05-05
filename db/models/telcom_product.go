@@ -12,6 +12,7 @@ type Plan struct {
 	Amount    float64
 	Validity  string
 	Size      string
+	PlanType  string
 }
 
 type PlanUpdate struct {
