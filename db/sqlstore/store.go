@@ -215,6 +215,7 @@ func (s *SqlStore) GetPlansByProductID(productID int) ([]models.Plan, error) {
 			&plan.Amount,
 			&plan.Validity,
 			&plan.Size,
+			&plan.PlanType,
 		)
 		if err != nil {
 			s.logger.Error("Failed to scan plan row", zap.Error(err))
