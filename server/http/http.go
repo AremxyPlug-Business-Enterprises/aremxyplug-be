@@ -280,8 +280,10 @@ func pinRoute(r chi.Router, httpHandler *handlers.HttpHandler) {
 func extraRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/extra", func(router chi.Router) {
 		router.Route("/referral", func(router chi.Router) {
-			router.Get("/", httpHandler.Referral)
-			router.Post("/", httpHandler.Referral)
+			router.Get("/", httpHandler.ReferralCode)
+			router.Route("/referred-users", func(ro chi.Router) {
+				ro.Get("/", httpHandler.Referral)
+			})
 		})
 		router.Route("/point", func(router chi.Router) {
 			router.Get("/", httpHandler.Points)
