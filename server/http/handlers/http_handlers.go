@@ -108,6 +108,8 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		HasNIN:          false,
 		HasVirtualNuban: false,
 		IsVerified:      false,
+		ReferralCount:   0,
+		LastTransaction: timestamp,
 		HasPin:          false,
 	}
 
