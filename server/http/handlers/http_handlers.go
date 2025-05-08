@@ -59,7 +59,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	timestamp := handler.timeHelper.Now().Unix()
+	timestamp := handler.timeHelper.Now().UTC()
 	Id, err := handler.otp.GenerateID()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -113,10 +113,21 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 
 	err = handler.store.SaveUser(newUser)
 	if err != nil {
+		handler.logger.Error("error saving user", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
+	}
+
+	if user.InvitationCode != "" {
+		err := handler.store.UpdateReferralCount(user.InvitationCode)
+		if err != nil {
+			handler.logger.Error("error updating referral count", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+		}
 	}
 
 	userResponse := dto.UserResponse{
@@ -442,6 +453,13 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 		}
 		respondWithSuccess(w, http.StatusCreated, "success", "Password reset email sent successfully")
 
+	case "resetpin":
+		if err := handler.sendOTP(user, "PIN Reset", resetPinAlias); err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Error sending PIN reset OTP", err)
+			return
+		}
+		respondWithError(w, http.StatusInternalServerError, "Error sending PIN reset OTP", err)
+
 	default:
 		http.NotFound(w, r)
 	}
@@ -560,6 +578,11 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Authorization", jwtToken)
 		data := map[string]interface{}{"data": "otp verification successful"}
 		respondWithSuccess(w, http.StatusOK, "success", data)
+
+	case "resetpin":
+		data := map[string]interface{}{"data": email}
+		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
+
 	default:
 		http.NotFound(w, r)
 	}

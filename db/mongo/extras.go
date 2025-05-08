@@ -3,58 +3,111 @@ package mongo
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/aremxyplug-be/db/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.uber.org/zap"
 )
 
-func (m *mongoStore) UpdateReferralCount(referralCode string) error {
+func (m *mongoStore) UpdateReferralCount(referrersCode string) error {
 	// TODO: using the referral code as the filter, update the count field on the user document
 	ctx := context.Background()
 
-	filter := bson.D{primitive.E{Key: "ref_code", Value: referralCode}}
-	updateFilter := bson.D{}
+	filter := bson.D{primitive.E{Key: "ref_code", Value: referrersCode}}
+	updateFilter := bson.D{
+		{Key: "$inc", Value: bson.D{{Key: "count", Value: 1}}},
+	}
 
 	updateResult, err := m.col("").UpdateOne(ctx, filter, updateFilter)
 	if err != nil || updateResult.MatchedCount == 0 {
+		m.logger.Error("failed to update user's referral count", zap.Error(err))
 		return errors.New("failed to update user's referral count")
 	}
 
 	return nil
 }
 
-func (m *mongoStore) CreateUserReferral(userID, refcode string) error {
-	// TODO: create a referral document for user using userID and refCode
+func (m *mongoStore) CreateUserReferral(newUserID, referralCode string) error {
 	ctx := context.Background()
 
-	refDoc := models.Referral{
-		UserID:  userID,
-		RefCode: refcode,
-		Count:   0,
+	referral := models.Referral{
+		UserID:     newUserID,
+		ReferrerID: "", // default, updated if referralCode is valid
+		ReferredAt: time.Now().UTC(),
+		IsActive:   true,
 	}
 
-	_, err := m.col("").InsertOne(ctx, refDoc)
+	// If a referral code is provided, try to find the referrer
+	if referralCode != "" {
+		var referrer models.User
+		err := m.col("users").FindOne(ctx, bson.M{"invitation_code": referralCode}).Decode(&referrer)
+		if err == nil {
+			referral.ReferrerID = referrer.ID
+
+			// OPTIONAL: Immediately update the referrer's count (if you're storing it)
+			if err := m.UpdateReferralCount(referrer.ID); err != nil {
+				m.logger.Error("failed to update referrer count", zap.Error(err))
+				return fmt.Errorf("failed to update referrer count: %w", err)
+			}
+		}
+	}
+
+	_, err := m.col("referrals").InsertOne(ctx, referral)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create referral record: %w", err)
 	}
 
 	return nil
 }
 
-func (m *mongoStore) GetReferral(userID string) (string, error) {
-	// TODO: get user referral code from the user's document
+func (m *mongoStore) GetReferredUsers(referrerID string) ([]models.ReferredUserInfo, error) {
 	ctx := context.Background()
 
-	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
-	refDoc := models.Referral{}
+	pipeline := mongo.Pipeline{
+		// Match referrals where this user is the referrer
+		{{Key: "$match", Value: bson.M{"referrerID": referrerID}}},
 
-	findResult := m.col("").FindOne(ctx, filter)
-	if err := findResult.Decode(&refDoc); err != nil {
-		return "", err
+		// Join with users collection to get referred user's details
+		{{
+			Key: "$lookup", Value: bson.M{
+				"from":         "users",
+				"localField":   "user_id",
+				"foreignField": "id",
+				"as":           "user_info",
+			},
+		}},
+
+		// Unwind the user_info array to get a flat document
+		{{Key: "$unwind", Value: "$user_info"}},
+
+		// Project desired fields
+		{{
+			Key: "$project", Value: bson.M{
+				"user_id":     "$user_id",
+				"full_name":   "$user_info.fullname",
+				"email":       "$user_info.email",
+				"is_active":   "$is_active",
+				"referred_at": "$referred_at",
+			},
+		}},
 	}
 
-	return refDoc.RefCode, nil
+	cursor, err := m.col("referrals").Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("aggregation error: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var results []models.ReferredUserInfo
+	if err := cursor.All(ctx, &results); err != nil {
+		return nil, fmt.Errorf("cursor decode error: %w", err)
+	}
+
+	return results, nil
 }
 
 func (m *mongoStore) UpdatePoint(userID string, points int) error {
