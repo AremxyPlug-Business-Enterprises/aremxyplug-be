@@ -12,8 +12,8 @@ type User struct {
 	PhoneNumber     string    `json:"phone_number" bson:"phonenumber" validate:"required"`
 	Country         string    `json:"country" bson:"country" validate:"required"`
 	InvitationCode  string    `json:"invitation_code" bson:"invitation_Code"`
-	CreatedAt       int64     `json:"created_at" bson:"created_at"`
-	UpdatedAt       int64     `json:"updated_at" bson:"updated_at"`
+	CreatedAt       time.Time `json:"created_at" bson:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at" bson:"updated_at"`
 	BVN             string    `json:"bvn" bson:"bvn"`
 	NIN             string    `json:"nin" bson:"nin"`
 	DOB             time.Time `json:"birth_date" bson:"birth_date"`
@@ -23,6 +23,8 @@ type User struct {
 	HasNIN          bool      `json:"has_nin" bson:"has_nin"`
 	HasVirtualNuban bool      `json:"has_virtual_nuban" bson:"has_virtual_nuban"`
 	ExpireAt        time.Time `bson:"expireAt"`
+	ReferralCount   int       `json:"referral_count" bson:"referral_count"`
+	LastTransaction time.Time `json:"last_transaction" bson:"last_transaction"`
 	Address         Address   `json:"address" bson:"address"`
 }
 

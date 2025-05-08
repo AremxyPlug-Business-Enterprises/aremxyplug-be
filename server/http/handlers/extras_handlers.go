@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/aremxyplug-be/db/models"
@@ -9,74 +10,86 @@ import (
 	"go.uber.org/zap"
 )
 
-func (handler *HttpHandler) Referral(w http.ResponseWriter, r *http.Request) {
+func (handler *HttpHandler) ReferralCode(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: first create the referral upon signup.
 	// this function should be the endpoint where the user retrieves referral information
-	/*
-		user, err := handler.GetUserDetails(r)
-		if err != nil {
-			handler.logger.Error("Failed to get user details", zap.Error(err))
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
 
-		referral, err := handler.referral.GetReferral(user.ID)
-		if err != nil {
-			handler.logger.Error("Failed to get referral", zap.Error(err))
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
+	user, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
-		requestURL := r.URL.String()
-
-		parsedURL, err := url.Parse(requestURL)
-		if err != nil {
-			handler.logger.Error("Failed to parse URL", zap.Error(err))
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-		schema := parsedURL.Scheme
-		host := parsedURL.Host
-
-		referralString := fmt.Sprintf("%s://%s/%s/%s?%s=%s", schema, host, "app", "register", "referral", referral)
-
-		json.NewEncoder(w).Encode(referralString)
-	*/
-	referralString := "https://www.aremxyplug.com/app/register/referral/username"
-	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"referral_link": referralString}}
+	referralString := fmt.Sprintf("%s/%s", "https://www.aremxyplug.com/app/register/referral", user.Username)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data: map[string]interface{}{
+			"referral_code": user.Username,
+			"referral_link": referralString,
+		},
+	}
 	json.NewEncoder(w).Encode(response)
 	handler.logger.Info("Referral link generated successfully", zap.String("referral_link", referralString))
+}
+
+func (handler *HttpHandler) Referral(w http.ResponseWriter, r *http.Request) {
+
+	user, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	referrals, err := handler.store.GetReferredUsers(user.Username)
+	if err != nil {
+		handler.logger.Error("Failed to get referred users", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data: map[string]interface{}{
+			"referrals": referrals,
+		},
+	}
+	json.NewEncoder(w).Encode(response)
+
 }
 
 func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: implement logic for point balance retrieval for GET requests
-	/*
-		user, err := handler.GetUserDetails(r)
-		if err != nil {
-			handler.logger.Error("Failed to get user details", zap.Error(err))
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-	*/
-	if r.Method == "GET" {
-		/*
-			points, err := handler.point.GetPoints(user.ID)
-			if err != nil {
-				handler.logger.Error("Failed to get points", zap.Error(err))
-			}
 
-			json.NewEncoder(w).Encode(points)
-		*/
+	user, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if r.Method == "GET" {
+
+		points, err := handler.point.GetPoints(user.ID)
+		if err != nil {
+			handler.logger.Error("Failed to get points", zap.Error(err))
+		}
+
+		json.NewEncoder(w).Encode(points)
 
 		dummy_points := 30
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"available_points": dummy_points}}
@@ -84,19 +97,19 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 		handler.logger.Info("Points retrieved successfully", zap.Int("available_points", dummy_points))
 	}
 	// TODO: implement logic for point balance usage for POST requests
-	/*
-		if r.Method == "POST" {
-			// TODO: first check if the user can redeem point. If user can redeem point then return true and allow user to carry out transaction
-			var pointsToRedeem int
-			canRedeem := handler.point.RedeemPoints(user.ID, pointsToRedeem)
-			if !canRedeem {
-				handler.logger.Warn("User cannot redeem points", zap.Int("points_to_redeem", pointsToRedeem))
-				w.WriteHeader(http.StatusBadRequest)
-			}
 
-			w.WriteHeader(http.StatusOK)
+	if r.Method == "POST" {
+		// TODO: first check if the user can redeem point. If user can redeem point then return true and allow user to carry out transaction
+		var pointsToRedeem int
+		canRedeem := handler.point.RedeemPoints(user.ID, pointsToRedeem)
+		if !canRedeem {
+			handler.logger.Warn("User cannot redeem points", zap.Int("points_to_redeem", pointsToRedeem))
+			w.WriteHeader(http.StatusBadRequest)
 		}
-	*/
+
+		w.WriteHeader(http.StatusOK)
+	}
+
 }
 
 // should write a function for redeem point...
@@ -153,6 +166,14 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 		pin := models.UserPin{
 			UserID: user.ID,
 			Pin:    newPin.Pin,
+		}
+
+		if user.HasPin {
+			handler.logger.Warn("User already has a pin", zap.String("user_id", user.ID))
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "user already has a pin"}}
+			json.NewEncoder(w).Encode(response)
+			return
 		}
 
 		if err := handler.pin.SavePin(pin); err != nil {
@@ -267,6 +288,46 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "pin OK"}}
 	json.NewEncoder(w).Encode(response)
 	handler.logger.Info("Pin verified successfully", zap.String("user_id", user.ID))
+}
+
+func (handler *HttpHandler) ResetPin(w http.ResponseWriter, r *http.Request) {
+
+	user, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	type resetPinInput struct {
+		Pin string `json:"pin"`
+	}
+
+	resetPin := resetPinInput{}
+
+	if err := json.NewDecoder(r.Body).Decode(&resetPin); err != nil {
+		handler.logger.Error("Failed to decode request body", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if err := handler.pin.UpdatePin(user.ID, resetPin.Pin); err != nil {
+		handler.logger.Error("Failed to update pin", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "database error"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	handler.logger.Info("Pin reset successful", zap.String("user_id", user.ID))
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"msg": "pin reset successfully"}}
+	json.NewEncoder(w).Encode(response)
+
 }
 
 func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Request) {

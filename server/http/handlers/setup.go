@@ -16,7 +16,6 @@ import (
 	"github.com/aremxyplug-be/lib/key_generator"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
-	"github.com/aremxyplug-be/lib/referral"
 	"github.com/aremxyplug-be/lib/services"
 	telecomservice "github.com/aremxyplug-be/lib/services/telcom"
 	tvservice "github.com/aremxyplug-be/lib/services/tvsub"
@@ -41,6 +40,7 @@ const (
 	PasswordResetAlias = "password-reset"
 	PasswordOTPAlias   = "password-otp"
 	verifyEmailAlias   = "verify-email1"
+	resetPinAlias      = "reset-pin"
 	signInVerification = "signin-verification"
 	welcomeMessage     = "verify-email"
 )
@@ -69,7 +69,6 @@ type HttpHandler struct {
 	bankTranc            *transactions.Transaction
 	bankTrf              *transfer.Config
 	bankDep              *deposit.Config
-	referral             *referral.RefConfig
 	point                *pointredeem.PointConfig
 	pin                  *auth_pin.PinConfig
 	smsClient            *termii.SMSConn
@@ -93,7 +92,6 @@ type HandlerOptions struct {
 	BankTranc    *transactions.Transaction
 	BankTrf      *transfer.Config
 	BankDep      *deposit.Config
-	Referral     *referral.RefConfig
 	Point        *pointredeem.PointConfig
 	Pin          *auth_pin.PinConfig
 	SMSClient    *termii.SMSConn

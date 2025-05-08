@@ -15,7 +15,6 @@ import (
 	"github.com/aremxyplug-be/lib/emailclient"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
-	"github.com/aremxyplug-be/lib/referral"
 	"github.com/aremxyplug-be/lib/smsclient/termii"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
@@ -49,7 +48,6 @@ type ServerConfig struct {
 	BankTranc    *transactions.Transaction
 	BankTrf      *transfer.Config
 	BankDep      *deposit.Config
-	Referral     *referral.RefConfig
 	Point        *pointredeem.PointConfig
 	Pin          *auth_pin.PinConfig
 	SmsClient    *termii.SMSConn
@@ -92,7 +90,6 @@ func MountServer(config ServerConfig) *chi.Mux {
 		BankTranc:    config.BankTranc,
 		BankTrf:      config.BankTrf,
 		BankDep:      config.BankDep,
-		Referral:     config.Referral,
 		Point:        config.Point,
 		Pin:          config.Pin,
 		SMSClient:    config.SmsClient,
@@ -275,7 +272,9 @@ func pinRoute(r chi.Router, httpHandler *handlers.HttpHandler) {
 		router.Post("/", httpHandler.Pin)
 		router.Patch("/", httpHandler.Pin)
 		router.Post("/verify", httpHandler.VerifyPIN)
+		router.Put("/reset", httpHandler.ResetPin)
 	})
+
 }
 
 func extraRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
@@ -303,6 +302,7 @@ func verifyOTPRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 		router.Post("/signin", httpHandler.VerifyOTP)
 		router.Post("/signup", httpHandler.VerifyOTP)
 		router.Post("/resetpassword", httpHandler.VerifyOTP)
+		router.Post("/resetpin", httpHandler.VerifyOTP)
 	})
 }
 
@@ -311,6 +311,7 @@ func sendOTPRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 		router.Post("/signin", httpHandler.SendOTP)
 		router.Post("/signup", httpHandler.SendOTP)
 		router.Post("/resetpassword", httpHandler.SendOTP)
+		router.Post("/resetpin", httpHandler.SendOTP)
 	})
 }
 

@@ -284,7 +284,13 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 		}
 
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(res)
+		handler.logger.Info("TV subscription processed successfully", zap.Any("response", res))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": res},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {

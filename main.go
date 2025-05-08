@@ -22,7 +22,6 @@ import (
 	zapLogger "github.com/aremxyplug-be/lib/logger"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
-	"github.com/aremxyplug-be/lib/referral"
 	"github.com/aremxyplug-be/lib/smsclient/termii"
 	vtu "github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
@@ -77,7 +76,6 @@ func main() {
 	bankTransc := transactions.NewTransaction(store)
 	bankTrf := transfer.NewConfig(store, logger)
 	bankDep := deposit.NewDepositConfig(store, logger)
-	ref := referral.NewRefConfig(store)
 	point := pointredeem.NewPointConfig(store)
 	pin := auth_pin.NewPinConfig(logger, store)
 	sms := termii.NewSMSConn(store, logger)
@@ -99,7 +97,6 @@ func main() {
 		BankTranc:    bankTransc,
 		BankTrf:      bankTrf,
 		BankDep:      bankDep,
-		Referral:     ref,
 		Point:        point,
 		Pin:          pin,
 		SmsClient:    sms,
