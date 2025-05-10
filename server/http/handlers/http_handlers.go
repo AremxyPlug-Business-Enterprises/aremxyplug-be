@@ -123,7 +123,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if user.InvitationCode != "" {
-		err := handler.store.UpdateReferralCount(user.InvitationCode)
+		err := handler.store.CreateUserReferral(userId, user.InvitationCode)
 		if err != nil {
 			handler.logger.Error("error updating referral count", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -460,7 +460,7 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusInternalServerError, "Error sending PIN reset OTP", err)
 			return
 		}
-		respondWithError(w, http.StatusInternalServerError, "Error sending PIN reset OTP", err)
+		respondWithSuccess(w, http.StatusOK, "success", "PIN reset OTP sent successfully")
 
 	default:
 		http.NotFound(w, r)

@@ -13,19 +13,27 @@ import (
 	"go.uber.org/zap"
 )
 
-func (m *mongoStore) UpdateReferralCount(referrersCode string) error {
+var (
+	ErrMatchedCount = errors.New("failed to update user's referral count")
+)
+
+func (m *mongoStore) updateReferralCount(referrersCode string) error {
 	// TODO: using the referral code as the filter, update the count field on the user document
 	ctx := context.Background()
 
-	filter := bson.D{primitive.E{Key: "ref_code", Value: referrersCode}}
+	filter := bson.D{primitive.E{Key: "username", Value: referrersCode}}
 	updateFilter := bson.D{
 		{Key: "$inc", Value: bson.D{{Key: "count", Value: 1}}},
 	}
 
-	updateResult, err := m.col("").UpdateOne(ctx, filter, updateFilter)
-	if err != nil || updateResult.MatchedCount == 0 {
-		m.logger.Error("failed to update user's referral count", zap.Error(err))
-		return errors.New("failed to update user's referral count")
+	updateResult, err := m.col("user").UpdateOne(ctx, filter, updateFilter)
+	if err != nil {
+		m.logger.Error("error communicating with database", zap.Error(err))
+		return errors.New("an error occurred while updating referral count")
+	}
+	if updateResult.MatchedCount == 0 {
+		m.logger.Error("failed to update user's referral count", zap.Any("matchedCount", "no matched document updated"))
+		return ErrMatchedCount
 	}
 
 	return nil
@@ -34,23 +42,32 @@ func (m *mongoStore) UpdateReferralCount(referrersCode string) error {
 func (m *mongoStore) CreateUserReferral(newUserID, referralCode string) error {
 	ctx := context.Background()
 
-	referral := models.Referral{
-		UserID:     newUserID,
-		ReferrerID: "", // default, updated if referralCode is valid
-		ReferredAt: time.Now().UTC(),
-		IsActive:   true,
+	referral := models.Referral{}
+
+	if referralCode == "" {
+		referral = models.Referral{
+			UserID:     newUserID,
+			ReferrerID: "",
+			ReferredAt: time.Now().UTC(),
+			IsActive:   true,
+		}
+	} else {
+		referral.ReferrerID = referralCode
 	}
 
 	// If a referral code is provided, try to find the referrer
 	if referralCode != "" {
 		var referrer models.User
-		err := m.col("users").FindOne(ctx, bson.M{"invitation_code": referralCode}).Decode(&referrer)
+		err := m.col("user").FindOne(ctx, bson.M{"invitation_code": referralCode}).Decode(&referrer)
 		if err == nil {
 			referral.ReferrerID = referrer.ID
 
 			// OPTIONAL: Immediately update the referrer's count (if you're storing it)
-			if err := m.UpdateReferralCount(referrer.ID); err != nil {
+			if err := m.updateReferralCount(referrer.ID); err != nil {
 				m.logger.Error("failed to update referrer count", zap.Error(err))
+				if err == ErrMatchedCount {
+					m.logger.Error("no matched document", zap.Error(err))
+				}
 				return fmt.Errorf("failed to update referrer count: %w", err)
 			}
 		}
@@ -74,7 +91,7 @@ func (m *mongoStore) GetReferredUsers(referrerID string) ([]models.ReferredUserI
 		// Join with users collection to get referred user's details
 		{{
 			Key: "$lookup", Value: bson.M{
-				"from":         "users",
+				"from":         "user",
 				"localField":   "user_id",
 				"foreignField": "id",
 				"as":           "user_info",
