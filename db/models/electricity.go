@@ -8,6 +8,7 @@ type ElectricInfo struct {
 	Phone      string `json:"phone"`
 	Email      string `json:"email"`
 	RequestID  string `json:"request_id"`
+	Name       string
 }
 
 type ElectricAPI struct {

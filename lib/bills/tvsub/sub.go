@@ -80,6 +80,7 @@ func (t *TvConn) BuySub(data models.TvInfo) (*models.BillResult, error) {
 		IucNumber:     data.SmartCard_Number,
 		Phone:         data.Phone,
 		Email:         data.Email,
+		Name:          data.Name,
 		Product:       apiResponse.Content.Transactions.Type,
 		Description:   apiResponse.Content.Transactions.Product_Desc,
 		OrderID:       orderID,
@@ -89,7 +90,7 @@ func (t *TvConn) BuySub(data models.TvInfo) (*models.BillResult, error) {
 	}
 
 	if err := t.saveTransaction(result); err != nil {
-		t.logAndReturnError("error saving transaction to database", err)
+		return nil, t.logAndReturnError("error saving transaction to database", err)
 	}
 
 	return result, nil

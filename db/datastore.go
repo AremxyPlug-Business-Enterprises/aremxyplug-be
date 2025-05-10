@@ -23,7 +23,6 @@ type Extras interface {
 	GetPin(userID string) (string, error)
 	UpdatePin(data models.UserPin) error
 	SavePin(data models.UserPin) error
-	UpdateReferralCount(referralCode string) error
 	CreateUserReferral(newUserID, referralCode string) error
 	GetReferredUsers(referrerID string) ([]models.ReferredUserInfo, error)
 	UpdatePoint(userID string, points int) error

@@ -9,6 +9,7 @@ type TvInfo struct {
 	Phone            string `json:"phone"`
 	SubType          string `json:"sub_type"`
 	RequestID        string `json:"request_id"`
+	Name             string
 }
 type TvAPI struct {
 	Code      string     `json:"code"`

@@ -219,6 +219,7 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 
 		}
+		data.Name = userDetails.Username
 
 		if data.Amount == 0 {
 			w.WriteHeader(http.StatusBadRequest)
@@ -389,6 +390,7 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			json.NewEncoder(w).Encode(response)
 			return
 		}
+		data.Name = userDetails.Username
 
 		bal, err := handler.getBalance(id)
 		if err != nil {

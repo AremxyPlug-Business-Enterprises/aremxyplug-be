@@ -89,6 +89,7 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 		MeterType:     data.Meter_Type,
 		MeterNumber:   transDetails.Transactions.UniqueElement,
 		Phone:         data.Phone,
+		Name:          data.Name,
 		BillGenerated: billGenerated,
 		Email:         data.Email,
 		Product:       transDetails.Transactions.ProductName,
