@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 type EduInfo struct {
 	Exam_Type    string `json:"exam_type"`
 	Phone_Number string `json:"phone_no"`
@@ -29,17 +31,17 @@ type EduApiResponse struct {
 }
 
 type EduResponse struct {
-	OrderID         int      `json:"order_id" bson:"order_id"`
-	Email           string   `json:"email" bson:"email"`
-	Phone           string   `json:"phone_no" bson:"phone_no"`
-	TransactionID   string   `json:"transaction_id"`
-	Name            string   `json:"name" bson:"name"`
-	ReferenceNumber string   `json:"reference_no" bson:"reference_no"`
-	Product         string   `json:"product" bson:"product"`
-	Amount          float64  `json:"amount" bson:"amount"`
-	Exam_Type       string   `json:"exam_type" bson:"exam_type"`
-	Description     string   `json:"description" bson:"description"`
-	Status          string   `json:"status" bson:"status"`
-	Pin_Generated   []string `json:"pins_generated" bson:"pins_generated"`
-	CreatedAt       string   `json:"created_at" bson:"created_at"`
+	OrderID         int       `json:"order_id" bson:"order_id"`
+	Email           string    `json:"email" bson:"email"`
+	Phone           string    `json:"phone_no" bson:"phone_no"`
+	TransactionID   string    `json:"transaction_id"`
+	Name            string    `json:"name" bson:"name"`
+	ReferenceNumber string    `json:"reference_no" bson:"reference_no"`
+	Product         string    `json:"product" bson:"product"`
+	Amount          float64   `json:"amount" bson:"amount"`
+	Exam_Type       string    `json:"exam_type" bson:"exam_type"`
+	Description     string    `json:"description" bson:"description"`
+	Status          string    `json:"status" bson:"status"`
+	Pin_Generated   []string  `json:"pins_generated" bson:"pins_generated"`
+	CreatedAt       time.Time `json:"created_at" bson:"created_at"`
 }

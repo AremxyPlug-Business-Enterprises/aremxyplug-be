@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
@@ -128,7 +129,7 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 		Description:     apiResponse.Message,
 		OrderID:         id,
 		Pin_Generated:   pinGenerated,
-		CreatedAt:       apiResponse.Date,
+		CreatedAt:       time.Now().UTC(),
 		TransactionID:   transactionID,
 	}
 

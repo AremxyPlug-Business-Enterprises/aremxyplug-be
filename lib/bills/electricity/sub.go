@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
@@ -97,6 +98,7 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 		OrderID:       orderID,
 		TransactionID: transactionID,
 		RequestID:     apiResponse.RequestID,
+		CreatedAt:     time.Now().UTC(),
 	}
 
 	if err := e.saveTransaction(result); err != nil {
