@@ -85,7 +85,7 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 	}
 
 	result := &models.ElectricResult{
-		Amount:        strconv.Itoa(apiResponse.Amount),
+		Amount:        strconv.FormatFloat(apiResponse.Amount, 'f', 2, 64),
 		DiscoType:     data.DiscoType,
 		MeterType:     data.Meter_Type,
 		MeterNumber:   transDetails.Transactions.UniqueElement,
