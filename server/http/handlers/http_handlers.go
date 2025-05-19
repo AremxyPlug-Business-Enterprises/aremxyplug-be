@@ -209,15 +209,6 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	hasPin := user.HasPin
 
-	if !hasPin {
-		handler.logger.Warn("pin not yet set", zap.Any("userID", user.ID))
-		w.Header().Set("Authorization", jwtToken)
-		w.WriteHeader(http.StatusAccepted)
-		response := responseFormat.CustomResponse{Status: http.StatusAccepted, Message: "success", Data: map[string]interface{}{"msg": "user's pin not set"}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
 	cookie := &http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
@@ -229,6 +220,18 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.SetCookie(w, cookie)
+
+	if !hasPin {
+		handler.logger.Warn("pin not yet set", zap.Any("userID", user.ID))
+		w.Header().Set("Authorization", jwtToken)
+		w.WriteHeader(http.StatusAccepted)
+		response := responseFormat.CustomResponse{Status: http.StatusAccepted, Message: "success", Data: map[string]interface{}{
+			"msg":      "user's pin not set",
+			"customer": userResponse,
+		}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
 	w.Header().Set("Authorization", jwtToken)
 	w.WriteHeader(http.StatusOK)
