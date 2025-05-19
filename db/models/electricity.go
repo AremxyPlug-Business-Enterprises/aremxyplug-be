@@ -18,7 +18,7 @@ type ElectricAPI struct {
 	Content              Content `json:"content"`
 	ResponseDescription  string  `json:"response_description"`
 	RequestID            string  `json:"requestId"`
-	Amount               int     `json:"amount"`
+	Amount               float64 `json:"amount"`
 	TransactionDate      string  `json:"transaction_date"`
 	PurchasedToken       string  `json:"purchased_code"`
 	CustomerName         string  `json:"customerName"`
