@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 type ElectricInfo struct {
 	DiscoType  string `json:"disco_type"` // Name of service to buy
 	Meter_No   string `json:"meter_no"`   // meter number
@@ -93,17 +95,19 @@ type verifyContent struct {
 }
 
 type ElectricResult struct {
-	Amount        string `json:"amount"`
-	DiscoType     string `json:"disco_type" bson:"DiscoType"`
-	MeterType     string `json:"meter_type" bson:"meter_type"` // Prepaid
-	Name          string `json:"name" bson:"name"`
-	MeterNumber   string `json:"meter_number" bson:"meter_number"`
-	Phone         string `json:"phone" bson:"phone"`
-	Email         string `json:"email" bson:"email"`
-	Product       string `json:"product" bson:"product"`
-	Description   string `json:"description" bson:"description"` // append serviceID and variation code.
-	BillGenerated string `json:"bill_generated" bson:"bill_generated"`
-	OrderID       int    `json:"order_id" bson:"order_id"`
-	TransactionID string `json:"transaction_id" bson:"transaction_id"`
-	RequestID     string `json:"request_id" bson:"request_ID"`
+	Amount         string    `json:"amount"`
+	DiscoType      string    `json:"disco_type" bson:"DiscoType"`
+	MeterType      string    `json:"meter_type" bson:"meter_type"` // Prepaid
+	Name           string    `json:"name" bson:"name"`
+	MeterNumber    string    `json:"meter_number" bson:"meter_number"`
+	Phone          string    `json:"phone" bson:"phone"`
+	Email          string    `json:"email" bson:"email"`
+	Product        string    `json:"product" bson:"product"`
+	Description    string    `json:"description" bson:"description"` // append serviceID and variation code.
+	BillGenerated  string    `json:"bill_generated" bson:"bill_generated"`
+	OrderID        int       `json:"order_id" bson:"order_id"`
+	TransactionID  string    `json:"transaction_id" bson:"transaction_id"`
+	ReferenceNuber string    `json:"reference_number" bson:"reference_number"`
+	RequestID      string    `json:"request_id" bson:"request_ID"`
+	CreatedAt      time.Time `json:"created_at" bson:"created_at"`
 }
