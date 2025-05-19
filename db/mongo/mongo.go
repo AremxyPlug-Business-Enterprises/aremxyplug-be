@@ -297,7 +297,7 @@ func (m *mongoStore) VerifyUser(identifier string) (*models.User, error) {
 	filter := bson.M{
 		"$or": []bson.M{
 			{"email": identifier},
-			{"phone": identifier},
+			{"phonenumber": identifier},
 		},
 	}
 

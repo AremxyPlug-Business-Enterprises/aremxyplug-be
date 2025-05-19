@@ -184,10 +184,29 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		userDetails := struct {
+			ID          string `json:"id"`
+			FullName    string `json:"fullname"`
+			Username    string `json:"username"`
+			Email       string `json:"email"`
+			PhoneNumber string `json:"phone_number"`
+		}{
+
+			ID:          user.ID,
+			FullName:    user.FullName,
+			Username:    user.Username,
+			Email:       user.Email,
+			PhoneNumber: user.PhoneNumber,
+		}
+
 		w.WriteHeader(http.StatusCreated)
-		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"msg": "user pin created successfully"}}
-		json.NewEncoder(w).Encode(response)
 		handler.logger.Info("User pin created successfully", zap.String("user_id", user.ID))
+		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{
+			"msg":  "user pin created successfully",
+			"user": userDetails,
+		}}
+		json.NewEncoder(w).Encode(response)
+
 	}
 
 	if r.Method == "PATCH" {

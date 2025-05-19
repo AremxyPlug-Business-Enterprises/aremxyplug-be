@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
@@ -261,6 +262,17 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 
 		res, err := handler.tvClient.BuySub(data)
 		if err != nil {
+			if err == tvsub.ErrInvalidCardNumber {
+				handler.logger.Error("Invalid card number", zap.String("card_number", data.SmartCard_Number))
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{
+					Status:  http.StatusBadRequest,
+					Message: "error",
+					Data:    map[string]interface{}{"data": "Invalid card number"},
+				}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to buy TV subscription", zap.Error(err))
 			response := responseFormat.CustomResponse{

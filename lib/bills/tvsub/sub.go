@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
@@ -21,6 +22,10 @@ var (
 	api = os.Getenv("VTPASS_SANDBOX")
 	pk  = os.Getenv("APIKey")
 	sk  = os.Getenv("SK")
+)
+
+var (
+	ErrInvalidCardNumber = errors.New("invalid card number")
 )
 
 type TvConn struct {
@@ -54,7 +59,7 @@ func (t *TvConn) BuySub(data models.TvInfo) (*models.BillResult, error) {
 	if err != nil || !valid {
 		// return unable to verify the card number
 		t.logger.Error("Verification failed", zap.Error(err))
-		return nil, err
+		return nil, ErrInvalidCardNumber
 	}
 	resp, err := t.buySub(data)
 	if err != nil {
@@ -87,6 +92,7 @@ func (t *TvConn) BuySub(data models.TvInfo) (*models.BillResult, error) {
 		TranscationID: transactionID,
 		RequestID:     apiResponse.RequestID,
 		Amount:        int(apiResponse.Content.Transactions.Amount),
+		CreatedAt:     time.Now().UTC(),
 	}
 
 	if err := t.saveTransaction(result); err != nil {
