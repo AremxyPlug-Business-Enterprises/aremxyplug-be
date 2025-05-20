@@ -58,17 +58,17 @@ type TransactionDetails struct {
 	ProductName         string            `json:"product_name"`
 	UniqueElement       string            `json:"unique_element"`
 	UnitPrice           string            `json:"unit_price"`
-	Quantity            int               `json:"quantity"`
+	Quantity            float64           `json:"quantity"`
 	ServiceVerification interface{}       `json:"service_verification"`
 	Channel             string            `json:"channel"`
 	Commission          float64           `json:"commission"`
-	TotalAmount         int               `json:"total_amount"`
+	TotalAmount         float64           `json:"total_amount"`
 	Discount            interface{}       `json:"discount"`
 	Type                string            `json:"type"`
 	Email               string            `json:"email"`
 	Phone               string            `json:"phone"`
 	Name                interface{}       `json:"name"`
-	ConvinienceFee      int               `json:"convinience_fee"` // Note JSON typo
+	ConvinienceFee      float64           `json:"convinience_fee"` // Note JSON typo
 	Amount              string            `json:"amount"`
 	Platform            string            `json:"platform"`
 	Method              string            `json:"method"`
