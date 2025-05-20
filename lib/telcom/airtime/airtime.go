@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models/telcom"
@@ -19,8 +18,8 @@ import (
 )
 
 var (
-	api   = os.Getenv("EASYACCESS")
-	token = os.Getenv("EASYACCESS_AUTH")
+	api   = os.Getenv("SMSSERVERS_BASE_URL")
+	token = os.Getenv("SMSSERVERS_API_KEY")
 )
 
 type AirtimeConn struct {
@@ -54,7 +53,7 @@ func (a *AirtimeConn) BuyAirtime(airtime telcom.AirtimeInfo) (*telcom.AirtimeRes
 	log.Println(resp.Status)
 	defer resp.Body.Close()
 
-	apiResponse := telcom.AirtimeApiResponse{}
+	apiResponse := vendResponse{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		if err == io.EOF {
 			return nil, logAndReturnError(a.logger, "Empty response from server")
@@ -62,28 +61,48 @@ func (a *AirtimeConn) BuyAirtime(airtime telcom.AirtimeInfo) (*telcom.AirtimeRes
 		return nil, logAndReturnError(a.logger, "Error returned from server")
 	}
 
+	log.Printf("%+v\n", apiResponse)
+
 	// check to see if the buy was successful. The response is printed to the log
-	if apiResponse.Success_Response == "false" {
-		log.Print(apiResponse.Message)
+	if apiResponse.Status == false {
+		log.Print(apiResponse.ServerMessage)
 		return nil, errors.New("failed to buy airtime")
 	}
 
+	network := ""
+
+	switch airtime.Network {
+	case "1":
+		network = "MTN"
+	case "2":
+		network = "AIRTEL"
+	case "3":
+		network = "GLO"
+	case "4":
+		network = "9MOBILE"
+
+	default:
+		network = "UNKNOWN"
+	}
+
 	transactionID := randomgen.GenerateTransactionID("vtu")
-	amount := strconv.Itoa(apiResponse.Amount)
-	product := apiResponse.Network + " " + airtime.Product
+	amount := apiResponse.Data.Amount
+	product := network + " " + "VTU"
+	Description := "Airtime purchase completed successfully"
 
 	result := &telcom.AirtimeResponse{
 		OrderID:         id,
 		Amount:          amount,
-		Network:         apiResponse.Network,
-		Description:     apiResponse.Message,
-		Phone_no:        apiResponse.Phone_no,
+		Network:         network,
+		Description:     Description,
+		Phone_no:        airtime.Phone_no,
 		Product:         product,
 		Name:            airtime.Username,
 		Recipient:       airtime.Recipient,
-		ReferenceNumber: apiResponse.Reference,
-		Status:          apiResponse.Status,
+		ReferenceNumber: strconv.Itoa(apiResponse.Data.RechargeID),
+		Status:          apiResponse.TextStatus,
 		TransactionID:   transactionID,
+		CreatedAt:       time.Now().UTC(),
 	}
 
 	// save transaction
@@ -103,6 +122,7 @@ func (a *AirtimeConn) GetTransactionDetail(id string) (telcom.AirtimeResponse, e
 	return result, nil
 }
 
+/*
 func (a *AirtimeConn) QueryTransaction(id string) (*telcom.AirtimeResponse, error) {
 	resp, err := a.queryTransaction(id)
 	if err != nil {
@@ -121,6 +141,7 @@ func (a *AirtimeConn) QueryTransaction(id string) (*telcom.AirtimeResponse, erro
 	return result, nil
 
 }
+*/
 
 func (a *AirtimeConn) GetUserTransaction(username string) ([]telcom.AirtimeResponse, error) {
 	resp, err := a.getAllTransactions(username)
@@ -143,23 +164,56 @@ func (a *AirtimeConn) GetAllTransactions() ([]telcom.AirtimeResponse, error) {
 
 func (a *AirtimeConn) buy(data telcom.AirtimeInfo) (*http.Response, error) {
 
-	formdata := url.Values{
-		"network":      {data.Network},
-		"amount":       {data.Amount},
-		"mobileno":     {data.Phone_no},
-		"airtime_type": {data.AirtimeType},
+	userReference := randomgen.GenerateRequestID()
+
+	productcode := ""
+
+	switch data.Network {
+	case "1":
+		productcode = "mtn_custom"
+	case "2":
+		productcode = "airtel_custom"
+	case "3":
+		productcode = "glo_custom"
+	case "4":
+		productcode = "9mobile_custom"
+
+	default:
+		productcode = ""
 	}
 
-	body := bytes.NewBufferString(formdata.Encode())
-	url := fmt.Sprintf("%s/%s.php", api, "airtime")
+	if productcode == "" {
+		a.logger.Error("Invalid network code", zap.String("network", data.Network))
+		return nil, errors.New("invalid network code")
+	}
 
-	req, err := http.NewRequest("POST", url, body)
+	amount, err := strconv.Atoi(data.Amount)
+	if err != nil {
+		a.logger.Error("Error converting amount to int", zap.Error(err))
+		return nil, err
+	}
+
+	payload := vendRequest{
+		ProductCode:   productcode,
+		Amount:        amount,
+		PhoneNumber:   data.Phone_no,
+		Action:        "vend",
+		UserReference: userReference,
+		BypassNetwork: "yes",
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		a.logger.Error("Error marshalling payload", zap.Error(err))
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", api, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("AuthorizationToken", token)
-	req.Header.Set("cache-control", "no-cache")
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Bearer", token)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -184,27 +238,28 @@ func (a *AirtimeConn) getAllTransactions(username string) ([]telcom.AirtimeRespo
 	return results, err
 }
 
+/*
 func (a *AirtimeConn) queryTransaction(id string) (*http.Response, error) {
 
-	var buf bytes.Buffer
-	json.NewEncoder(&buf).Encode(&id)
+		var buf bytes.Buffer
+		json.NewEncoder(&buf).Encode(&id)
 
-	req, err := http.NewRequest("POST", api+"query_transaction.php", &buf)
-	if err != nil {
-		return nil, err
+		req, err := http.NewRequest("POST", api+"query_transaction.php", &buf)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", token)
+		req.Header.Set("cache-control", "no-cache")
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		return resp, nil
 	}
-	req.Header.Set("Authorization", token)
-	req.Header.Set("cache-control", "no-cache")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return resp, nil
-}
-
+*/
 func logAndReturnError(logger *zap.Logger, errorMsg string) error {
 	logger.Error(errorMsg)
 	return errors.New(errorMsg)

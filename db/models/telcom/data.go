@@ -1,5 +1,7 @@
 package telcom
 
+import "time"
+
 type DataInfo struct {
 	Network       int    `json:"network"`
 	Network_id    int    `json:"newtork_id"`
@@ -12,18 +14,18 @@ type DataInfo struct {
 }
 
 type DataResult struct {
-	OrderID         int    `json:"order_id" bson:"order_id"`
-	TransactionID   string `json:"transaction_id" bson:"transaction_id"`
-	ReferenceNumber string `json:"reference_number" bson:"reference_number"`
-	Network         string `json:"network" bson:"network"`
-	Username        string `json:"username" bson:"username"`
-	PlanName        string `json:"plan_name" bson:"plan_name"`
-	Plan_Amount     string `json:"plan_amount" bson:"plan_amount"`
-	Status          string `json:"Status" bson:"status"`
-	Name            string `json:"Name" bson:"name"`
-	Phone_Number    string `json:"Phone_Number" bson:"phone_number"`
-	CreatedAt       string `json:"CreatedAt" bson:"created_at"`
-	ApiID           int    `bson:"apiID"`
+	OrderID         int       `json:"order_id" bson:"order_id"`
+	TransactionID   string    `json:"transaction_id" bson:"transaction_id"`
+	ReferenceNumber string    `json:"reference_number" bson:"reference_number"`
+	Network         string    `json:"network" bson:"network"`
+	Username        string    `json:"username" bson:"username"`
+	PlanName        string    `json:"plan_name" bson:"plan_name"`
+	Plan_Amount     string    `json:"plan_amount" bson:"plan_amount"`
+	Status          string    `json:"Status" bson:"status"`
+	Name            string    `json:"Name" bson:"name"`
+	Phone_Number    string    `json:"Phone_Number" bson:"phone_number"`
+	CreatedAt       time.Time `json:"CreatedAt" bson:"created_at"`
+	ApiID           int       `bson:"apiID"`
 }
 
 type APIResponse struct {

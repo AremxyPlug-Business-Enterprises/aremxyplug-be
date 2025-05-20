@@ -80,6 +80,11 @@ func (d *DataConn) BuyData(data telcom.DataInfo) (*telcom.DataResult, error) {
 			return nil, d.logAndReturnError("error while decoding json", err)
 		}
 
+		if apiResponse.Status != "successful" {
+			d.logger.Error("server response error", zap.Any("apiresponse", apiResponse))
+			return nil, d.logAndReturnError("failed to purchase data", errors.New(apiResponse.Status))
+		}
+
 		transactionID := randomgen.GenerateTransactionID("dat")
 		result := &telcom.DataResult{
 			Network:         apiResponse.Plan_network,
@@ -87,7 +92,7 @@ func (d *DataConn) BuyData(data telcom.DataInfo) (*telcom.DataResult, error) {
 			ReferenceNumber: apiResponse.Ident,
 			Plan_Amount:     apiResponse.Plan_amount,
 			PlanName:        apiResponse.Plan_Name,
-			CreatedAt:       time.Now().String(),
+			CreatedAt:       time.Now().UTC(),
 			OrderID:         id,
 			Username:        data.Username,
 			TransactionID:   transactionID,
