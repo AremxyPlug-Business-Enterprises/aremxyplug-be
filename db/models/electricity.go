@@ -77,10 +77,10 @@ type TransactionDetails struct {
 }
 
 type CommissionDetails struct {
-	Amount          int    `json:"amount"`
-	Rate            string `json:"rate"`
-	RateType        string `json:"rate_type"`
-	ComputationType string `json:"computation_type"`
+	Amount          float64 `json:"amount"`
+	Rate            string  `json:"rate"`
+	RateType        string  `json:"rate_type"`
+	ComputationType string  `json:"computation_type"`
 }
 
 type VerifyMeterResponse struct {
