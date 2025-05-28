@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
@@ -118,13 +119,21 @@ func (c *Config) Deposit(virtualaccountid string, userID string) error {
 			VirtualNuban: virtualNuban,
 			Balance:      parsedBalance,
 			UserID:       userID,
+			UpdateAt:     time.Now().UTC(),
 		}
-		if err := c.db.SaveBalance(virtualNuban, userBalance); err != nil {
+		if err := c.db.SaveBalance(userID, userBalance); err != nil {
 			c.logger.Error("Deposit failed: unable to save user balance", zap.Error(err))
 			return DBConnectionError(err)
 		}
 
+		createdAt, err := time.Parse(time.RFC3339, data.Attributes.CreatedAt)
+		if err != nil {
+			c.logger.Error("Deposit failed: unable to parse createdAt", zap.Error(err))
+			return err
+		}
+
 		result := models.DepositResponse{
+			UserID:         userID,
 			Amount:         fmt.Sprintf("%v", depositAmount),
 			WalletType:     "Nigerian NGN Wallet",
 			Bank_Name:      attributes.CounterParty.Bank.Name,
@@ -136,6 +145,7 @@ func (c *Config) Deposit(virtualaccountid string, userID string) error {
 			Order_ID:       orderID,
 			Transaction_ID: transctionID,
 			Session_ID:     data.Attributes.PaymentReference,
+			CreatedAt:      createdAt,
 		}
 
 		if err := c.saveTransaction(result); err != nil {

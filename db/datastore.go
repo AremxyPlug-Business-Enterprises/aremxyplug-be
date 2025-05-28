@@ -1,6 +1,8 @@
 package db
 
 import (
+	"time"
+
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/shopspring/decimal"
@@ -29,6 +31,7 @@ type Extras interface {
 	CreatePointDoc(userID string) error
 	CanRedeemPoints(userID string, points int) bool
 	GetPoint(userID string) (models.Points, error)
+	GetChart(userID string, rangeType string, fromTime time.Time, toTime time.Time) (models.StatsResponse, error)
 }
 
 type BankStore interface {

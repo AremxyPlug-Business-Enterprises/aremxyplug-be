@@ -137,11 +137,8 @@ func MountServer(config ServerConfig) *chi.Mux {
 		//  Airtime Routes
 		airtimeRoutes(authRouter, httpHandler)
 
-		// TvSubscription Routes
-		tvSubscriptionRoutes(authRouter, httpHandler)
-
-		// Electricity bills routes
-		electricityBillRoutes(authRouter, httpHandler)
+		// TvSubscription, Electricity bills Routes
+		billRoutes(authRouter, httpHandler)
 
 		// bank routes
 		bankRoutes(authRouter, httpHandler)
@@ -157,6 +154,8 @@ func MountServer(config ServerConfig) *chi.Mux {
 		checkVerification(authRouter, httpHandler)
 
 		productRoutes(authRouter, httpHandler)
+
+		authRouter.Get("/chart", httpHandler.Chart)
 
 	})
 
@@ -234,21 +233,22 @@ func airtimeRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	})
 }
 
-func tvSubscriptionRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
-	r.Route("/tvsub", func(router chi.Router) {
-		router.Post("/", httpHandler.TVSubscriptions)
-		router.Get("/", httpHandler.TVSubscriptions)
-		router.Get("/{id}", httpHandler.GetTvSubDetails)
-		router.Get("/transactions", httpHandler.GetTvSubscriptions)
-	})
-}
+func billRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/bills", func(router chi.Router) {
+		router.Route("/tvsub", func(ro chi.Router) {
+			ro.Post("/", httpHandler.TVSubscriptions)
+			ro.Get("/", httpHandler.TVSubscriptions)
+			ro.Get("/{id}", httpHandler.GetTvSubDetails)
+			ro.Get("/transactions", httpHandler.GetTvSubscriptions)
+		})
 
-func electricityBillRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
-	r.Route("/electric-bill", func(router chi.Router) {
-		router.Post("/", httpHandler.ElectricBill)
-		router.Get("/", httpHandler.ElectricBill)
-		router.Get("/{id}", httpHandler.GetElectricBillDetails)
-		router.Get("/transactions", httpHandler.GetElectricBills)
+		router.Route("/electric-bill", func(ro chi.Router) {
+			ro.Post("/", httpHandler.ElectricBill)
+			ro.Get("/", httpHandler.ElectricBill)
+			ro.Get("/{id}", httpHandler.GetElectricBillDetails)
+			ro.Get("/transactions", httpHandler.GetElectricBills)
+		})
+		router.Post("/verify", httpHandler.VerifyBill)
 	})
 }
 

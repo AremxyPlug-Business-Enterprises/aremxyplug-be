@@ -42,27 +42,22 @@ func (m *mongoStore) updateReferralCount(referrersCode string) error {
 func (m *mongoStore) CreateUserReferral(newUserID, referralCode string) error {
 	ctx := context.Background()
 
-	referral := models.Referral{}
-
-	if referralCode == "" {
-		referral = models.Referral{
-			UserID:     newUserID,
-			ReferrerID: "",
-			ReferredAt: time.Now().UTC(),
-			IsActive:   true,
-		}
-	} else {
-		referral.ReferrerID = referralCode
+	referral := models.Referral{
+		UserID:     newUserID,
+		ReferredAt: time.Now().UTC(),
+		IsActive:   true,
 	}
 
-	// If a referral code is provided, try to find the referrer
+	// If a referral code is provided, resolve the actual user ID
 	if referralCode != "" {
 		var referrer models.User
 		err := m.col("user").FindOne(ctx, bson.M{"invitation_code": referralCode}).Decode(&referrer)
-		if err == nil {
+		if err != nil {
+			m.logger.Warn("referral code not found or invalid", zap.String("code", referralCode), zap.Error(err))
+		} else {
 			referral.ReferrerID = referrer.ID
 
-			// OPTIONAL: Immediately update the referrer's count (if you're storing it)
+			// Update referrer's referral count
 			if err := m.updateReferralCount(referrer.ID); err != nil {
 				m.logger.Error("failed to update referrer count", zap.Error(err))
 				if err == ErrMatchedCount {
@@ -73,8 +68,8 @@ func (m *mongoStore) CreateUserReferral(newUserID, referralCode string) error {
 		}
 	}
 
-	_, err := m.col("referrals").InsertOne(ctx, referral)
-	if err != nil {
+	// Save the referral record
+	if _, err := m.col("referrals").InsertOne(ctx, referral); err != nil {
 		return fmt.Errorf("failed to create referral record: %w", err)
 	}
 

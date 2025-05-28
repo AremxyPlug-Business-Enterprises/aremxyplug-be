@@ -3,22 +3,22 @@ package telcom
 import "time"
 
 type DataInfo struct {
+	UserID        string
 	Network       int    `json:"network"`
-	Network_id    int    `json:"newtork_id"`
 	Plan          int    `json:"plan"`
-	Plan_id       string `json:"plan_id"`
 	Mobile_Num    string `json:"mobile_number"`
-	Ported_number bool   `json:"Ported_number"`
 	Name          string `json:"name"`
-	Username      string
+	Ported_number bool   `json:"Ported_number"`
+	FullName      string
 }
 
 type DataResult struct {
+	UserID          string    `json:"user_id" bson:"user_id"`
 	OrderID         int       `json:"order_id" bson:"order_id"`
 	TransactionID   string    `json:"transaction_id" bson:"transaction_id"`
 	ReferenceNumber string    `json:"reference_number" bson:"reference_number"`
 	Network         string    `json:"network" bson:"network"`
-	Username        string    `json:"username" bson:"username"`
+	FullName        string    `json:"full_name" bson:"full_name"`
 	PlanName        string    `json:"plan_name" bson:"plan_name"`
 	Plan_Amount     string    `json:"plan_amount" bson:"plan_amount"`
 	Status          string    `json:"Status" bson:"status"`

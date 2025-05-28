@@ -87,6 +87,7 @@ func (d *DataConn) BuyData(data telcom.DataInfo) (*telcom.DataResult, error) {
 
 		transactionID := randomgen.GenerateTransactionID("dat")
 		result := &telcom.DataResult{
+			UserID:          data.UserID,
 			Network:         apiResponse.Plan_network,
 			Phone_Number:    apiResponse.Mobile_number,
 			ReferenceNumber: apiResponse.Ident,
@@ -94,7 +95,7 @@ func (d *DataConn) BuyData(data telcom.DataInfo) (*telcom.DataResult, error) {
 			PlanName:        apiResponse.Plan_Name,
 			CreatedAt:       time.Now().UTC(),
 			OrderID:         id,
-			Username:        data.Username,
+			FullName:        data.FullName,
 			TransactionID:   transactionID,
 			Status:          apiResponse.Status,
 			Name:            data.Name,
@@ -143,6 +144,7 @@ func (d *DataConn) BuySpecData(data telcom.SpectranetInfo) (*telcom.SpectranetRe
 
 	trans_content := apiResponse.Content.Transcations
 	result := &telcom.SpectranetResult{
+		UserID:          data.UserID,
 		Network:         data.Network,
 		Product:         data.Product,
 		Plan:            data.Plan,
@@ -193,6 +195,7 @@ func (d *DataConn) BuySmileData(data telcom.SmileInfo) (*telcom.SmileResult, err
 
 	trans_content := apiResponse.Content.Transcations
 	result := &telcom.SmileResult{
+		UserID:          data.UserID,
 		Network:         data.Network,
 		ProductPlan:     trans_content.Product_Desc,
 		Email:           data.Email,

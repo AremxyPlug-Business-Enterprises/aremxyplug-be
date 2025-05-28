@@ -1,6 +1,7 @@
 package telcom
 
 type SmileInfo struct {
+	UserID       string
 	Network      string `json:"network"`
 	Email        string `json:"email"`
 	Phone_Number string `json:"phone_no"`
@@ -39,6 +40,7 @@ type transaction_Date struct {
 }
 
 type SmileResult struct {
+	UserID          string `json:"user_id" bson:"user_id"`
 	Network         string `json:"network" bson:"network"`
 	ProductPlan     string `json:"plan" bson:"product"`
 	Email           string `json:"email" bson:"email"`
@@ -55,6 +57,7 @@ type SmileResult struct {
 }
 
 type SpectranetInfo struct {
+	UserID       string
 	Network      string `json:"network"`  // ServiceID
 	Product      string `json:"product"`  //
 	Plan         string `json:"plan"`     // variation code?
@@ -104,6 +107,7 @@ type card struct {
 }
 
 type SpectranetResult struct {
+	UserID          string `json:"user_id" bson:"user_id"`
 	Network         string `json:"network" bson:"network"`
 	Product         string `json:"product" bson:"product"`
 	Plan            string `json:"plan" bson:"plan"`

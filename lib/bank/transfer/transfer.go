@@ -190,6 +190,7 @@ func (c *Config) TransferToBank(info models.TransferInfo) (models.TransferRespon
 	}
 
 	result := models.TransferResponse{
+		UserID:         info.UserID,
 		Bank_Name:      counterparty.BankName,
 		Account_Name:   counterparty.AccountName,
 		Account_No:     counterparty.AccountNumber,
