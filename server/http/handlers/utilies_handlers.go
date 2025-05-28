@@ -91,6 +91,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		data.UserID = id
 		res, err := handler.eduClient.BuyEduPin(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -260,6 +261,7 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
+		data.UserID = id
 		res, err := handler.tvClient.BuySub(data)
 		if err != nil {
 			if err == tvsub.ErrInvalidCardNumber {
@@ -442,6 +444,7 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
+		data.UserID = userDetails.ID
 		res, err := handler.electClient.PayBill(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -784,6 +787,130 @@ func (handler *HttpHandler) handleDeleteTVSub(w http.ResponseWriter, r *http.Req
 		Status:  http.StatusOK,
 		Message: "success",
 		Data:    map[string]interface{}{"data": fmt.Sprintf("TV subscription with ID %d deleted successfully", subID)},
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) VerifyBill(w http.ResponseWriter, r *http.Request) {
+	data := struct {
+		DiscoType        string `json:"disco_type"`
+		Meter_No         string `json:"meter_no"`
+		Meter_Type       string `json:"meter_type"`
+		DecoderType      string `json:"decoder_type"`
+		SmartCard_Number string `json:"iuc_number"`
+	}{}
+
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		handler.logger.Error("Decoding JSON response", zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("Failed to decode request body: %s", err.Error())},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Ensure only one of disco_type or decoder_type is provided
+	if data.DiscoType != "" && data.DecoderType != "" {
+		handler.logger.Error("both disco_type and decoder_type provided")
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"error": "provide either 'disco_type' or 'decoder_type', not both"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Handle Electricity (DiscoType) case
+	if data.DiscoType != "" {
+		// Validate required fields
+		if data.Meter_No == "" || data.Meter_Type == "" {
+			handler.logger.Error("missing meter details for disco_type")
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"error": "meter_no and meter_type are required for disco_type"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Call your electricity verification function here
+		result, err := handler.electClient.VerifyMeterNo(data.DiscoType, data.Meter_No, data.Meter_Type)
+		if err != nil {
+			handler.logger.Error("electricity bill verification failed", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"error": "electricity verification failed: " + err.Error()},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Success response
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": result},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Handle DecoderType case
+	if data.DecoderType != "" {
+		// Validate required fields
+		if data.SmartCard_Number == "" {
+			handler.logger.Error("missing smart card number for decoder_type")
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"error": "iuc_number is required for decoder_type"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Call your decoder verification function here
+		result, err := handler.tvClient.VerifyCard(data.DecoderType, data.SmartCard_Number)
+		if err != nil {
+			handler.logger.Error("decoder verification failed", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"error": "decoder verification failed: " + err.Error()},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Success response
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": result},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// If neither type is provided
+	handler.logger.Error("missing required type")
+	w.WriteHeader(http.StatusBadRequest)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusBadRequest,
+		Message: "error",
+		Data:    map[string]interface{}{"error": "either 'disco_type' or 'decoder_type' must be provided"},
 	}
 	json.NewEncoder(w).Encode(response)
 }

@@ -39,10 +39,11 @@ func New(connectURI, databaseName string, logger *zap.Logger) (db.DataStore, *mo
 var _ db.DataStore = &mongoStore{}
 
 var (
-	dataColl = "data"
-	eduColl  = "edu"
-	airColl  = "airtime"
-	tvColl   = "tv-sub"
+	dataColl     = "data"
+	eduColl      = "edu"
+	airColl      = "airtime"
+	tvColl       = "tv-sub"
+	electricColl = "elect-sub"
 )
 
 type mongoStore struct {
@@ -361,14 +362,14 @@ func (m *mongoStore) saveToDB(collectionName string, details interface{}) error 
 	return nil
 }
 
-func (m *mongoStore) getAllRecords(collectionName, username string) (*mongo.Cursor, error) {
+func (m *mongoStore) getAllRecords(collectionName, userID string) (*mongo.Cursor, error) {
 	ctx := context.Background()
 	var filter bson.D
 
-	if username == "" {
+	if userID == "" {
 		filter = bson.D{}
 	} else {
-		filter = bson.D{primitive.E{Key: "username", Value: username}}
+		filter = bson.D{primitive.E{Key: "user_id", Value: userID}}
 	}
 
 	cur, err := m.col(collectionName).Find(ctx, filter)

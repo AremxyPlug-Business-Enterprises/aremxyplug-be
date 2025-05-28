@@ -1,7 +1,7 @@
 package telcom
 
 type TelcomRecipient struct {
-	UserID    string      `json:"userID" bson:"userID"`
+	UserID    string      `json:"user_id" bson:"user_id"`
 	Recipient []Recipient `json:"recipients" bson:"recipients"`
 }
 

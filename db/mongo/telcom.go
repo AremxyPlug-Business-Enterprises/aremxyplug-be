@@ -44,11 +44,11 @@ func (m *mongoStore) GetDataTransactionDetails(id string) (telcom.DataResult, er
 }
 
 // getAllRecords returns all the data transactions associated to a user, if an empty string is passed it returns all data transactions.
-func (m *mongoStore) GetAllDataTransactions(username string) ([]telcom.DataResult, error) {
+func (m *mongoStore) GetAllDataTransactions(userID string) ([]telcom.DataResult, error) {
 	ctx := context.Background()
 	res := []telcom.DataResult{}
 
-	cur, err := m.getAllRecords(dataColl, username)
+	cur, err := m.getAllRecords(dataColl, userID)
 	if err != nil {
 		return []telcom.DataResult{}, err
 	}
@@ -84,11 +84,11 @@ func (m *mongoStore) GetSpecTransDetails(id string) (telcom.SpectranetResult, er
 	return res, nil
 }
 
-func (m *mongoStore) GetAllSpecDataTransactions(username string) ([]telcom.SpectranetResult, error) {
+func (m *mongoStore) GetAllSpecDataTransactions(userID string) ([]telcom.SpectranetResult, error) {
 	ctx := context.Background()
 	res := []telcom.SpectranetResult{}
 
-	cur, err := m.getAllRecords(dataColl, username)
+	cur, err := m.getAllRecords(dataColl, userID)
 	if err != nil {
 		return []telcom.SpectranetResult{}, err
 	}
@@ -123,11 +123,11 @@ func (m *mongoStore) GetSmileTransDetails(id string) (telcom.SmileResult, error)
 	return res, nil
 }
 
-func (m *mongoStore) GetAllSmileDataTransactions(username string) ([]telcom.SmileResult, error) {
+func (m *mongoStore) GetAllSmileDataTransactions(userID string) ([]telcom.SmileResult, error) {
 	ctx := context.Background()
 	res := []telcom.SmileResult{}
 
-	cur, err := m.getAllRecords(dataColl, username)
+	cur, err := m.getAllRecords(dataColl, userID)
 	if err != nil {
 		return []telcom.SmileResult{}, err
 	}
@@ -170,11 +170,11 @@ func (m *mongoStore) GetAirtimeTransactionDetails(id string) (telcom.AirtimeResp
 	return res, nil
 }
 
-func (m *mongoStore) GetAllAirtimeTransactions(username string) ([]telcom.AirtimeResponse, error) {
+func (m *mongoStore) GetAllAirtimeTransactions(userID string) ([]telcom.AirtimeResponse, error) {
 	ctx := context.Background()
 	res := []telcom.AirtimeResponse{}
 
-	cur, err := m.getAllRecords(dataColl, username)
+	cur, err := m.getAllRecords(dataColl, userID)
 	if err != nil {
 		return []telcom.AirtimeResponse{}, err
 	}

@@ -29,7 +29,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := userDetails.ID
-	username := userDetails.Username
+	fullName := userDetails.FullName
 
 	if r.Method == "POST" {
 		data := telcom.AirtimeInfo{}
@@ -109,7 +109,8 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		data.Username = username
+		data.FullName = fullName
+		data.UserID = id
 		res, err := handler.vtuClient.BuyAirtime(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -145,10 +146,10 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.vtuClient.GetUserTransaction(username)
+		res, err := handler.vtuClient.GetUserTransaction(id)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Failed to get user's airtime transactions", zap.String("username", username), zap.Error(err))
+			handler.logger.Error("Failed to get user's airtime transactions", zap.String("user_id", id), zap.Error(err))
 			response := responseFormat.CustomResponse{
 				Status:  http.StatusInternalServerError,
 				Message: "error",
@@ -336,7 +337,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := userDetails.ID
-	username := userDetails.Username
+	fullName := userDetails.FullName
 
 	if r.Method == "POST" {
 		data := telcom.DataInfo{}
@@ -404,7 +405,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		data.Username = username
+		data.FullName = fullName
 		res, err := handler.dataClient.BuyData(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -440,10 +441,10 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.dataClient.GetUserTransactions(username)
+		res, err := handler.dataClient.GetUserTransactions(id)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Failed to get user's data transactions", zap.String("username", username), zap.Error(err))
+			handler.logger.Error("Failed to get user's data transactions", zap.String("user_id", id), zap.Error(err))
 			response := responseFormat.CustomResponse{
 				Status:  http.StatusInternalServerError,
 				Message: "error",

@@ -40,22 +40,12 @@ func NewElectricConn(db db.UtilitiesStore, logger *zap.Logger) *ElectricConn {
 // pay electricity bill
 func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult, error) {
 
-	log.Printf("%+v", data)
-
 	data.RequestID = randomgen.GenerateRequestID()
 	orderID, err := randomgen.GenerateOrderID()
 	if err != nil {
 		return nil, e.logAndReturnError("error generating orderID", err)
 	}
 	transactionID := randomgen.GenerateTransactionID("ele")
-	log.Printf("%+v", data)
-	validNo, err := e.verifyMeterNo(data.DiscoType, data.Meter_No, data.Meter_Type)
-	if err != nil {
-		return nil, e.logAndReturnError("error verifying meter number", err)
-	}
-	if !validNo {
-		return nil, e.logAndReturnError("meter number is not valid", errors.New("invalid meter number"))
-	}
 
 	resp, err := e.payBill(data)
 	if err != nil {
@@ -85,6 +75,7 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 	}
 
 	result := &models.ElectricResult{
+		UserID:        data.UserID,
 		Amount:        strconv.FormatFloat(apiResponse.Amount, 'f', 2, 64),
 		DiscoType:     data.DiscoType,
 		MeterType:     data.Meter_Type,
@@ -253,10 +244,10 @@ func (e *ElectricConn) logAndReturnError(errorMsg string, err error) error {
 }
 
 // return an error message for when the meter number is not correct
-func (e *ElectricConn) verifyMeterNo(discoType, meterNo, meterType string) (bool, error) {
+func (e *ElectricConn) VerifyMeterNo(discoType, meterNo, meterType string) (verifyResponse, error) {
 
 	if meterNo == "" {
-		return false, errors.New("no meter number")
+		return verifyResponse{}, errors.New("no meter number provided")
 	}
 
 	formdata := url.Values{
@@ -270,7 +261,7 @@ func (e *ElectricConn) verifyMeterNo(discoType, meterNo, meterType string) (bool
 
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
-		return false, err
+		return verifyResponse{}, err
 	}
 	req.Header.Set("api-key", pk)
 	req.Header.Set("secret-key", sk)
@@ -280,21 +271,24 @@ func (e *ElectricConn) verifyMeterNo(discoType, meterNo, meterType string) (bool
 	resp, err := client.Do(req)
 
 	if err != nil {
-		return false, err
+		return verifyResponse{}, err
 	}
 
-	apiResponse := models.VerifyMeterResponse{}
+	apiResponse := serverResponse{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		return false, err
+		return verifyResponse{}, err
 	}
 	e.logger.Info("verify meter response", zap.String("code", apiResponse.Code))
 	if apiResponse.Code != "000" {
 		e.logger.Error("error verifying meter number", zap.Any("apiresponse", apiResponse))
-		return false, errors.New("invalid meter number")
+		return verifyResponse{}, errors.New("invalid meter number")
 	}
 
 	if apiResponse.Content.Err != "" {
-		return false, errors.New(apiResponse.Content.Err)
+		return verifyResponse{}, errors.New(apiResponse.Content.Err)
 	}
-	return true, nil
+	return verifyResponse{
+		Name:     apiResponse.Content.Name,
+		Meter_No: apiResponse.Content.Meter_Number,
+	}, nil
 }

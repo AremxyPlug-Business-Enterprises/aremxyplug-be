@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,12 +17,13 @@ import (
 )
 
 var (
-	bankTransColl = "bank-transactions"
-	balColl       = "balance"
-	bankColl      = "bank"
-	virtualColl   = "virtualAccount"
-	counterColl   = "counterParty"
-	deptColl      = "deposit"
+	depositColl  = "deposit-transactions"
+	transferColl = "transfer"
+	balColl      = "balance"
+	bankColl     = "bank"
+	virtualColl  = "virtualAccount"
+	counterColl  = "counterParty"
+	deptColl     = "deposit"
 )
 
 var (
@@ -127,7 +129,7 @@ func (m *mongoStore) SaveCounterParty(counterparty interface{}) error {
 }
 
 func (m *mongoStore) SaveTransfer(transfer models.TransferResponse) error {
-	err := m.saveToDB(bankTransColl, transfer)
+	err := m.saveToDB(transferColl, transfer)
 	return err
 }
 
@@ -149,7 +151,7 @@ func (m *mongoStore) GetCounterParty(accountNumber, bankname string) (models.Cou
 }
 
 func (m *mongoStore) GetTransferDetails(id string) (models.TransferResponse, error) {
-	resp := m.getRecord(id, bankTransColl)
+	resp := m.getRecord(id, transferColl)
 	result := models.TransferResponse{}
 	err := resp.Decode(&result)
 	if err != nil {
@@ -159,11 +161,11 @@ func (m *mongoStore) GetTransferDetails(id string) (models.TransferResponse, err
 	return result, nil
 }
 
-func (m *mongoStore) GetAllTransferHistory(user string) ([]models.TransferResponse, error) {
+func (m *mongoStore) GetAllTransferHistory(userID string) ([]models.TransferResponse, error) {
 	ctx := context.Background()
 	result := []models.TransferResponse{}
 
-	findResult, err := m.getAllRecords(bankTransColl, user)
+	findResult, err := m.getAllRecords(transferColl, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +185,7 @@ func (m *mongoStore) GetAllTransferHistory(user string) ([]models.TransferRespon
 }
 
 func (m *mongoStore) GetDepositDetails(id string) (models.DepositResponse, error) {
-	resp := m.getRecord(id, bankTransColl)
+	resp := m.getRecord(id, depositColl)
 	result := models.DepositResponse{}
 	err := resp.Decode(&result)
 	if err != nil {
@@ -193,11 +195,11 @@ func (m *mongoStore) GetDepositDetails(id string) (models.DepositResponse, error
 	return result, nil
 }
 
-func (m *mongoStore) GetAllDepositHistory(user string) ([]models.DepositResponse, error) {
+func (m *mongoStore) GetAllDepositHistory(userID string) ([]models.DepositResponse, error) {
 	ctx := context.Background()
 	result := []models.DepositResponse{}
 
-	findResult, err := m.getAllRecords(bankTransColl, user)
+	findResult, err := m.getAllRecords(depositColl, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -215,52 +217,68 @@ func (m *mongoStore) GetAllDepositHistory(user string) ([]models.DepositResponse
 	return result, nil
 }
 
-func (m *mongoStore) GetAllBankTransactions(user string) ([]interface{}, error) {
+func (m *mongoStore) GetAllBankTransactions(userID string) ([]interface{}, error) {
 	ctx := context.Background()
-	cur, err := m.getAllRecords(bankTransColl, user)
+	var transactions []interface{}
+
+	// Fetch deposits
+	depositCursor, err := m.col(depositColl).Find(ctx, bson.D{{Key: "user_id", Value: userID}})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query deposit collection: %w", err)
 	}
+	defer depositCursor.Close(ctx)
 
-	var transactionHistory []interface{}
-
-	for cur.Next(ctx) {
-
-		var raw bson.Raw
-
-		if err := cur.Decode(&raw); err != nil {
-			return nil, err
+	for depositCursor.Next(ctx) {
+		var deposit models.DepositResponse
+		if err := depositCursor.Decode(&deposit); err != nil {
+			return nil, fmt.Errorf("failed to decode deposit record: %w", err)
 		}
+		transactions = append(transactions, deposit)
+	}
 
-		if raw.Lookup("").Type == bson.TypeString {
-			var deposit models.DepositResponse
+	// Fetch transfers
+	transferCursor, err := m.col(transferColl).Find(ctx, bson.D{{Key: "user_id", Value: userID}})
+	if err != nil {
+		return nil, fmt.Errorf("failed to query transfer collection: %w", err)
+	}
+	defer transferCursor.Close(ctx)
 
-			if err := bson.Unmarshal(raw, &deposit); err != nil {
-				return nil, err
-			}
-
-			transactionHistory = append(transactionHistory, deposit)
-		} else if raw.Lookup("").Type == bson.TypeString {
-			var tranfer models.TransferResponse
-
-			if err := bson.Unmarshal(raw, &tranfer); err != nil {
-				return nil, err
-			}
-
-			transactionHistory = append(transactionHistory, tranfer)
+	for transferCursor.Next(ctx) {
+		var transfer models.TransferResponse
+		if err := transferCursor.Decode(&transfer); err != nil {
+			return nil, fmt.Errorf("failed to decode transfer record: %w", err)
 		}
+		transactions = append(transactions, transfer)
 	}
 
-	if err := cur.Err(); err != nil {
-		return nil, err
+	// Check cursor errors
+	if err := depositCursor.Err(); err != nil {
+		return nil, fmt.Errorf("deposit cursor error: %w", err)
+	}
+	if err := transferCursor.Err(); err != nil {
+		return nil, fmt.Errorf("transfer cursor error: %w", err)
 	}
 
-	return transactionHistory, nil
+	// Sort transactions by time (newest first)
+	sort.Slice(transactions, func(i, j int) bool {
+		return getTransactionTime(transactions[i]).After(getTransactionTime(transactions[j]))
+	})
 
+	return transactions, nil
 }
 
+func getTransactionTime(record interface{}) time.Time {
+	switch t := record.(type) {
+	case models.DepositResponse:
+		return t.CreatedAt
+	case models.TransferResponse:
+		return t.CreatedAt
+	default:
+		return time.Time{}
+	}
+}
 func (m *mongoStore) SaveDeposit(detail models.DepositResponse) error {
-	err := m.saveToDB(bankTransColl, detail)
+	err := m.saveToDB(depositColl, detail)
 	return err
 }
 

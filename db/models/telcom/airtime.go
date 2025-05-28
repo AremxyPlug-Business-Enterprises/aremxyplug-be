@@ -3,11 +3,12 @@ package telcom
 import "time"
 
 type AirtimeInfo struct {
+	UserID    string
 	Network   string `json:"network"`
 	Amount    string `json:"amount"`
 	Phone_no  string `json:"mobileno"`
 	Recipient string `json:"recipient,omitempty"`
-	Username  string
+	FullName  string
 }
 
 type AirtimeApiResponse struct {
@@ -23,6 +24,7 @@ type AirtimeApiResponse struct {
 }
 
 type AirtimeResponse struct {
+	UserID          string    `json:"user_id" bson:"user_id"`
 	Status          string    `json:"status" bson:"status"`
 	Network         string    `json:"network" bson:"network"`
 	Amount          string    `json:"amount" bson:"amount"`

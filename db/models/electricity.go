@@ -11,6 +11,7 @@ type ElectricInfo struct {
 	Email      string `json:"email"`
 	RequestID  string `json:"request_id"`
 	Name       string
+	UserID     string
 }
 
 type ElectricAPI struct {
@@ -83,19 +84,9 @@ type CommissionDetails struct {
 	ComputationType string  `json:"computation_type"`
 }
 
-type VerifyMeterResponse struct {
-	Code    string        `json:"code"`
-	Content verifyContent `json:"content"`
-}
-
-type verifyContent struct {
-	Name         string `json:"name"`
-	Meter_Number string `json:"meter_number"`
-	Err          string `json:"error,omitempty"`
-}
-
 type ElectricResult struct {
-	Amount         string    `json:"amount"`
+	UserID         string    `json:"user_id" bson:"user_id"`
+	Amount         string    `json:"amount" bson:"amount"`
 	DiscoType      string    `json:"disco_type" bson:"DiscoType"`
 	MeterType      string    `json:"meter_type" bson:"meter_type"` // Prepaid
 	Name           string    `json:"name" bson:"name"`

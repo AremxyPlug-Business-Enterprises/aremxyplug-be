@@ -64,7 +64,7 @@ func (a *AirtimeConn) BuyAirtime(airtime telcom.AirtimeInfo) (*telcom.AirtimeRes
 	log.Printf("%+v\n", apiResponse)
 
 	// check to see if the buy was successful. The response is printed to the log
-	if apiResponse.Status == false {
+	if !apiResponse.Status {
 		log.Print(apiResponse.ServerMessage)
 		return nil, errors.New("failed to buy airtime")
 	}
@@ -91,13 +91,14 @@ func (a *AirtimeConn) BuyAirtime(airtime telcom.AirtimeInfo) (*telcom.AirtimeRes
 	Description := "Airtime purchase completed successfully"
 
 	result := &telcom.AirtimeResponse{
+		UserID:          airtime.UserID,
 		OrderID:         id,
 		Amount:          amount,
 		Network:         network,
 		Description:     Description,
 		Phone_no:        airtime.Phone_no,
 		Product:         product,
-		Name:            airtime.Username,
+		Name:            airtime.FullName,
 		Recipient:       airtime.Recipient,
 		ReferenceNumber: strconv.Itoa(apiResponse.Data.RechargeID),
 		Status:          apiResponse.TextStatus,
@@ -233,8 +234,8 @@ func (a *AirtimeConn) getTransacationDetails(id string) (telcom.AirtimeResponse,
 	return result, err
 }
 
-func (a *AirtimeConn) getAllTransactions(username string) ([]telcom.AirtimeResponse, error) {
-	results, err := a.db.GetAllAirtimeTransactions(username)
+func (a *AirtimeConn) getAllTransactions(userID string) ([]telcom.AirtimeResponse, error) {
+	results, err := a.db.GetAllAirtimeTransactions(userID)
 	return results, err
 }
 

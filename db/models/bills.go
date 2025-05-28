@@ -3,6 +3,7 @@ package models
 import "time"
 
 type TvInfo struct {
+	UserID           string
 	DecoderType      string `json:"decoder_type"`
 	SmartCard_Number string `json:"iuc_number"`
 	Package          string `json:"package"`
@@ -38,6 +39,7 @@ type Transactions_Details struct {
 }
 
 type BillResult struct {
+	UserID          string    `json:"user_id" bson:"user_id"`
 	DecoderType     string    `json:"decoder_type" bson:"decoder_type"`
 	Package         string    `json:"package" bson:"package"`
 	IucNumber       string    `json:"iuc_number" bson:"iuc_number"`

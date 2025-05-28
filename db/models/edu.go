@@ -3,6 +3,7 @@ package models
 import "time"
 
 type EduInfo struct {
+	UserID       string `json:"user_id"`
 	Exam_Type    string `json:"exam_type"`
 	Phone_Number string `json:"phone_no"`
 	Amount       string `json:"amount"`
@@ -31,6 +32,7 @@ type EduApiResponse struct {
 }
 
 type EduResponse struct {
+	UserID          string    `json:"user_id" bson:"user_id"`
 	OrderID         int       `json:"order_id" bson:"order_id"`
 	Email           string    `json:"email" bson:"email"`
 	Phone           string    `json:"phone_no" bson:"phone_no"`

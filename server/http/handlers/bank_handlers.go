@@ -59,6 +59,8 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		info.UserID = userBalance.UserID
+
 		resp, err := handler.bankTrf.TransferToBank(info)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)

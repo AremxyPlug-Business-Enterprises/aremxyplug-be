@@ -33,10 +33,6 @@ type TvConn struct {
 	logger *zap.Logger
 }
 
-type responses struct {
-	Code string `json:"code"`
-}
-
 func NewTvConn(db db.UtilitiesStore, Logger *zap.Logger) *TvConn {
 	return &TvConn{
 		db:     db,
@@ -55,12 +51,7 @@ func (t *TvConn) BuySub(data models.TvInfo) (*models.BillResult, error) {
 		return nil, t.logAndReturnError("error generating orderID", err)
 	}
 	transactionID := randomgen.GenerateTransactionID("tv")
-	valid, err := verifyCard(data.SmartCard_Number, data.DecoderType)
-	if err != nil || !valid {
-		// return unable to verify the card number
-		t.logger.Error("Verification failed", zap.Error(err))
-		return nil, ErrInvalidCardNumber
-	}
+
 	resp, err := t.buySub(data)
 	if err != nil {
 		t.logger.Error("Buying failed", zap.Error(err))
@@ -164,7 +155,7 @@ func (t *TvConn) GetAllTransactions() ([]models.BillResult, error) {
 
 }
 
-func verifyCard(iucNumber, service string) (bool, error) {
+func (t *TvConn) VerifyCard(service, iucNumber string) (verifyResponse, error) {
 	formdata := url.Values{
 		"billersCode": {iucNumber},
 		"serviceID":   {service},
@@ -175,7 +166,7 @@ func verifyCard(iucNumber, service string) (bool, error) {
 
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
-		return false, err
+		return verifyResponse{}, err
 	}
 	req.Header.Set("api-key", pk)
 	req.Header.Set("secret-key", sk)
@@ -186,21 +177,24 @@ func verifyCard(iucNumber, service string) (bool, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return false, err
+		return verifyResponse{}, err
 	}
 	defer resp.Body.Close()
 
-	apiResponse := responses{}
+	apiResponse := serverResponse{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		return false, err
+		return verifyResponse{}, err
 	}
 	code := apiResponse.Code
 	log.Println(code)
 	if code != "000" {
-		return false, errors.New("smart card number is not valid")
+		return verifyResponse{}, ErrInvalidCardNumber
 	}
 
-	return true, nil
+	return verifyResponse{
+		Name:  apiResponse.Content.CustomerName,
+		Phone: apiResponse.Content.CustomerNumber,
+	}, nil
 }
 
 func (t *TvConn) buySub(data models.TvInfo) (*http.Response, error) {

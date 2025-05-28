@@ -34,11 +34,11 @@ func (m *mongoStore) GetTvSubscriptionDetails(id string) (models.BillResult, err
 	return res, nil
 }
 
-func (m *mongoStore) GetAllTvSubTransactions(user string) ([]models.BillResult, error) {
+func (m *mongoStore) GetAllTvSubTransactions(userID string) ([]models.BillResult, error) {
 	ctx := context.Background()
 	res := []models.BillResult{}
 
-	cur, err := m.getAllRecords(dataColl, user)
+	cur, err := m.getAllRecords(tvColl, userID)
 	if err != nil {
 		return []models.BillResult{}, err
 	}
@@ -56,7 +56,7 @@ func (m *mongoStore) GetAllTvSubTransactions(user string) ([]models.BillResult, 
 }
 
 func (m *mongoStore) SaveElectricTransaction(details *models.ElectricResult) error {
-	err := m.saveToDB(tvColl, details)
+	err := m.saveToDB(electricColl, details)
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func (m *mongoStore) SaveElectricTransaction(details *models.ElectricResult) err
 func (m *mongoStore) GetElectricSubDetails(id string) (models.ElectricResult, error) {
 	res := models.ElectricResult{}
 
-	result := m.getRecord(id, tvColl)
+	result := m.getRecord(id, electricColl)
 
 	err := result.Decode(&res)
 
@@ -82,11 +82,11 @@ func (m *mongoStore) GetElectricSubDetails(id string) (models.ElectricResult, er
 	return res, nil
 }
 
-func (m *mongoStore) GetAllElectricSubTransactions(username string) ([]models.ElectricResult, error) {
+func (m *mongoStore) GetAllElectricSubTransactions(userID string) ([]models.ElectricResult, error) {
 	ctx := context.Background()
 	res := []models.ElectricResult{}
 
-	cur, err := m.getAllRecords(dataColl, username)
+	cur, err := m.getAllRecords(electricColl, userID)
 	if err != nil {
 		return []models.ElectricResult{}, err
 	}
@@ -132,11 +132,11 @@ func (m *mongoStore) GetEduTransactionDetails(id string) (models.EduResponse, er
 
 }
 
-func (m *mongoStore) GetAllEduTransactions(user string) ([]models.EduResponse, error) {
+func (m *mongoStore) GetAllEduTransactions(userID string) ([]models.EduResponse, error) {
 	ctx := context.Background()
 	res := []models.EduResponse{}
 
-	cur, err := m.getAllRecords(dataColl, user)
+	cur, err := m.getAllRecords(eduColl, userID)
 	if err != nil {
 		return []models.EduResponse{}, err
 	}
