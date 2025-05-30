@@ -11,7 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func (m *mongoStore) GetChart(userID string, fromTime time.Time, toTime time.Time) (models.StatsResponse, error) {
+func (m *mongoStore) GetChart(userID string, rangeType string, fromTime time.Time, toTime time.Time) (models.StatsResponse, error) {
 	ctx := context.Background()
 	resp := models.StatsResponse{}
 
