@@ -65,7 +65,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 		AllowCredentials: true,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Origin"},
-		ExposedHeaders:   []string{"Authorization"},
+		ExposedHeaders:   []string{"Authorization", "x-new-auth-token"},
 		Debug:            true,
 	}).Handler)
 	router.Use(setJSONContentType)
