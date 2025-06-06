@@ -214,7 +214,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Value:    refreshToken,
 		MaxAge:   1800,
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   true,
 		Path:     "/",
 		SameSite: http.SameSiteNoneMode,
 	}
