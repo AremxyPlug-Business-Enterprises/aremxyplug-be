@@ -64,7 +64,7 @@ func (a *AuthConn) Authorize(next http.Handler) http.Handler {
 						Value:    newRefresh,
 						MaxAge:   int(tokengenerator.RefreshTokenDuration.Seconds()),
 						HttpOnly: true,
-						Secure:   false,
+						Secure:   true,
 						Path:     "/",
 						SameSite: http.SameSiteNoneMode,
 					})
