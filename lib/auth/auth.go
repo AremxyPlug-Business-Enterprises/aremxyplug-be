@@ -60,13 +60,15 @@ func (a *AuthConn) Authorize(next http.Handler) http.Handler {
 				// Generate new refresh token
 				if newRefresh, err := a.jwt.GenerateTokenWithExpiration(newClaims, tokengenerator.RefreshTokenDuration); err == nil {
 					http.SetCookie(w, &http.Cookie{
-						Name:     "refresh_token",
-						Value:    newRefresh,
-						MaxAge:   int(tokengenerator.RefreshTokenDuration.Seconds()),
-						HttpOnly: true,
-						Secure:   true,
-						Path:     "/",
-						SameSite: http.SameSiteNoneMode,
+						Name:        "refresh_token",
+						Value:       newRefresh,
+						MaxAge:      int(tokengenerator.RefreshTokenDuration.Seconds()),
+						HttpOnly:    true,
+						Secure:      true,
+						Path:        "/",
+						SameSite:    http.SameSiteNoneMode,
+						Domain:      "aremxyplug.onrender.com",
+						Partitioned: true,
 					})
 				}
 
