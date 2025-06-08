@@ -1,6 +1,6 @@
 module github.com/aremxyplug-be
 
-go 1.21.12
+go 1.23.10
 
 require (
 	github.com/go-chi/chi/v5 v5.1.0

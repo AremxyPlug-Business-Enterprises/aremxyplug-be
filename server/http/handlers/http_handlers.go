@@ -210,13 +210,15 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	hasPin := user.HasPin
 
 	cookie := &http.Cookie{
-		Name:     "refresh_token",
-		Value:    refreshToken,
-		MaxAge:   1800,
-		HttpOnly: true,
-		Secure:   true,
-		Path:     "/",
-		SameSite: http.SameSiteNoneMode,
+		Name:        "refresh_token",
+		Value:       refreshToken,
+		MaxAge:      1800,
+		HttpOnly:    true,
+		Secure:      true,
+		Path:        "/",
+		SameSite:    http.SameSiteNoneMode,
+		Domain:      "aremxyplug.onrender.com",
+		Partitioned: true,
 	}
 
 	http.SetCookie(w, cookie)
