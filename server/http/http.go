@@ -98,7 +98,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 	// Routes
 	// Health check
-	router.Get("/health", healthCheck)
+	router.Get("/", healthCheck)
 	router.Post("/webhook", handlers.WebhookHandler)
 
 	router.Route("/api/v1", func(router chi.Router) {
@@ -361,8 +361,11 @@ func productRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 			router.Delete("/{planID}", httpHandler.TelecomPlans)
 		})
 
-		// Electric Subscription Routes
-
 		// Education Pin Routes
+		router.Route("/edu", func(router chi.Router) {
+			router.Get("/{id}", httpHandler.EduProduct)
+			router.Patch("/{id}", httpHandler.EduProduct)
+			router.Delete("/{id}", httpHandler.EduProduct) // Delete all edu pins
+		})
 	})
 }

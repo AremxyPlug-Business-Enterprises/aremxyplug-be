@@ -47,3 +47,9 @@ type EduResponse struct {
 	Pin_Generated   []string  `json:"pins_generated" bson:"pins_generated"`
 	CreatedAt       time.Time `json:"created_at" bson:"created_at"`
 }
+
+type EduRecord struct {
+	ID     int
+	Amount string
+	Name   string
+}

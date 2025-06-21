@@ -914,3 +914,158 @@ func (handler *HttpHandler) VerifyBill(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewEncoder(w).Encode(response)
 }
+
+func (handler *HttpHandler) EduProduct(w http.ResponseWriter, r *http.Request) {
+
+	switch r.Method {
+	case "PATCH":
+		data := struct {
+			ID     int    `json:"id"`
+			Amount string `json:"amount"`
+		}{}
+
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Failed to decode EduProduct request", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Invalid request format"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		if data.ID == 0 || data.Amount == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Invalid EduProduct data", zap.Any("data", data))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Name and price are required, and price must be greater than zero"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		record := models.EduRecord{
+			Amount: data.Amount,
+		}
+
+		err := handler.productClient.UpdateRecord(data.ID, record)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Failed to update EduProduct", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Failed to update education product"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("Education product updated successfully with ID %d", data.ID)},
+		}
+		json.NewEncoder(w).Encode(response)
+
+	case "GET":
+		id := chi.URLParam(r, "id")
+
+		productID, err := strconv.Atoi(id)
+		if err != nil || productID <= 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Invalid ID parameter", zap.String("id", id))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "ID must be a positive integer"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		res, err := handler.productClient.GetRecord(productID)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Failed to fetch EduProduct by ID", zap.Int("productID", productID), zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Failed to fetch education product by ID"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": res},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+
+	case "DELETE":
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Missing ID parameter")
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "ID parameter is required"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		productID, err := strconv.Atoi(id)
+		if err != nil || productID <= 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			handler.logger.Error("Invalid ID parameter", zap.String("id", id))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "ID must be a positive integer"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		err = handler.productClient.DeleteRecord(productID)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Failed to delete EduProduct", zap.Int("productID", productID), zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Failed to delete education product"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": fmt.Sprintf("Education product with ID %d deleted successfully", productID)},
+		}
+		json.NewEncoder(w).Encode(response)
+
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusMethodNotAllowed,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Method not allowed"},
+		}
+		json.NewEncoder(w).Encode(response)
+	}
+}
