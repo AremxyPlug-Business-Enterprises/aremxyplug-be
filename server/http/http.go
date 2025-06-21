@@ -155,6 +155,8 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		productRoutes(authRouter, httpHandler)
 
+		getTransactions(authRouter, httpHandler)
+
 		authRouter.Get("/chart", httpHandler.Chart)
 
 	})
@@ -367,5 +369,12 @@ func productRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 			router.Patch("/{id}", httpHandler.EduProduct)
 			router.Delete("/{id}", httpHandler.EduProduct) // Delete all edu pins
 		})
+	})
+}
+
+func getTransactions(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/transactions", func(router chi.Router) {
+		router.Get("/", httpHandler.GetTransactions)
+		router.Get("/{orderID}", httpHandler.GetTransactions)
 	})
 }

@@ -120,6 +120,7 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 
 	// associate the responses for the api
 	result := &models.EduResponse{
+		UserID:          eduInfo.UserID,
 		Amount:          apiResponse.Amount,
 		Phone:           eduInfo.Phone_Number,
 		ReferenceNumber: apiResponse.Reference,

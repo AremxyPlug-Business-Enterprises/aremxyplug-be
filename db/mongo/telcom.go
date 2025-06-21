@@ -155,7 +155,7 @@ func (m *mongoStore) SaveAirtimeTransaction(details *telcom.AirtimeResponse) err
 func (m *mongoStore) GetAirtimeTransactionDetails(id string) (telcom.AirtimeResponse, error) {
 	res := telcom.AirtimeResponse{}
 
-	result := m.getRecord(id, eduColl)
+	result := m.getRecord(id, airColl)
 
 	err := result.Decode(&res)
 
@@ -174,7 +174,7 @@ func (m *mongoStore) GetAllAirtimeTransactions(userID string) ([]telcom.AirtimeR
 	ctx := context.Background()
 	res := []telcom.AirtimeResponse{}
 
-	cur, err := m.getAllRecords(dataColl, userID)
+	cur, err := m.getAllRecords(airColl, userID)
 	if err != nil {
 		return []telcom.AirtimeResponse{}, err
 	}
