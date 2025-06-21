@@ -14,6 +14,7 @@ type DataStore interface {
 	UserStore
 	TelcomStore
 	UtilitiesStore
+	TransactionStore
 }
 
 type Extras interface {
@@ -99,4 +100,8 @@ type UtilitiesStore interface {
 	SaveElectricTransaction(details *models.ElectricResult) error
 	GetElectricSubDetails(id string) (models.ElectricResult, error)
 	GetAllElectricSubTransactions(username string) ([]models.ElectricResult, error)
+}
+
+type TransactionStore interface {
+	GetTransactions(filter map[string]interface{}, page, pageSize int) ([]models.Transaction, int, error)
 }

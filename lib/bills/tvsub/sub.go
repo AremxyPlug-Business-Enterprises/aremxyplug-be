@@ -71,6 +71,7 @@ func (t *TvConn) BuySub(data models.TvInfo) (*models.BillResult, error) {
 	fmt.Printf("%+v\n", apiResponse)
 
 	result := &models.BillResult{
+		UserID:        data.UserID,
 		DecoderType:   data.DecoderType,
 		Package:       data.Package,
 		IucNumber:     data.SmartCard_Number,

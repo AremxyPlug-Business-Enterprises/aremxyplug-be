@@ -406,6 +406,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		}
 
 		data.FullName = fullName
+		data.UserID = id
 		res, err := handler.dataClient.BuyData(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -583,6 +584,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
+		data.UserID = id
 		res, err := handler.dataClient.BuySpecData(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -745,6 +747,7 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 		// 	return
 		// }
 
+		data.UserID = userDetails.ID
 		res, err := handler.dataClient.BuySmileData(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
