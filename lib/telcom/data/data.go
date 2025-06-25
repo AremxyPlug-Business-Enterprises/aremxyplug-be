@@ -85,21 +85,30 @@ func (d *DataConn) BuyData(data telcom.DataInfo) (*telcom.DataResult, error) {
 			return nil, d.logAndReturnError("failed to purchase data", errors.New(apiResponse.Status))
 		}
 
+		network := apiResponse.Plan_network
+
+		networkProduct := network + " " + apiResponse.Plan_Name
+
+		transactionDesc := networkProduct + " " + apiResponse.Plan_Name
+
 		transactionID := randomgen.GenerateTransactionID("dat")
 		result := &telcom.DataResult{
-			UserID:          data.UserID,
-			Network:         apiResponse.Plan_network,
-			Phone_Number:    apiResponse.Mobile_number,
-			ReferenceNumber: apiResponse.Ident,
-			Plan_Amount:     apiResponse.Plan_amount,
-			PlanName:        apiResponse.Plan_Name,
-			CreatedAt:       time.Now().UTC(),
-			OrderID:         id,
-			FullName:        data.FullName,
-			TransactionID:   transactionID,
-			Status:          apiResponse.Status,
-			Name:            data.Name,
-			ApiID:           apiResponse.Id,
+			UserID:                 data.UserID,
+			Network:                network,
+			NetworkProduct:         networkProduct,
+			PhoneNumber:            apiResponse.Mobile_number,
+			ReferenceNumber:        apiResponse.Ident,
+			Plan_Amount:            apiResponse.Plan_amount,
+			PlanName:               apiResponse.Plan_Name,
+			CreatedAt:              time.Now().UTC(),
+			OrderID:                id,
+			FullName:               data.FullName,
+			TransactionProduct:     "Data Top-up",
+			TransactionDescription: transactionDesc,
+			TransactionID:          transactionID,
+			Status:                 apiResponse.Status,
+			RecipientName:          data.Name,
+			ApiID:                  apiResponse.Id,
 		}
 		if err := d.saveTransacation(result); err != nil {
 			d.logger.Error("Database error try again...", zap.Error(err))

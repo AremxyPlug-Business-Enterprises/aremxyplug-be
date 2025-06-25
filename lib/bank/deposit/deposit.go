@@ -133,19 +133,20 @@ func (c *Config) Deposit(virtualaccountid string, userID string) error {
 		}
 
 		result := models.DepositResponse{
-			UserID:         userID,
-			Amount:         fmt.Sprintf("%v", depositAmount),
-			WalletType:     "Nigerian NGN Wallet",
-			Bank_Name:      attributes.CounterParty.Bank.Name,
-			Account_Name:   attributes.CounterParty.AccountName,
-			Account_No:     attributes.CounterParty.AccountNumber,
-			Product:        "Virtual Account",
-			Description:    "NGN Wallet Top Up",
-			Message:        data.Attributes.Narration,
-			Order_ID:       orderID,
-			Transaction_ID: transctionID,
-			Session_ID:     data.Attributes.PaymentReference,
-			CreatedAt:      createdAt,
+			UserID:                 userID,
+			Status:                 "success",
+			Amount:                 fmt.Sprintf("%v", depositAmount),
+			WalletType:             "Nigerian NGN Wallet",
+			Bank_Name:              attributes.CounterParty.Bank.Name,
+			Account_Name:           attributes.CounterParty.AccountName,
+			Account_No:             attributes.CounterParty.AccountNumber,
+			TransactionProduct:     "Virtual Account",
+			TransactionDescription: "NGN Wallet Top Up",
+			Message:                data.Attributes.Narration,
+			Order_ID:               orderID,
+			Transaction_ID:         transctionID,
+			Session_ID:             data.Attributes.PaymentReference,
+			CreatedAt:              createdAt,
 		}
 
 		if err := c.saveTransaction(result); err != nil {

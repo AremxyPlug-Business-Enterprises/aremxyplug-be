@@ -38,20 +38,21 @@ type Transactions_Details struct {
 	Type          string  `json:"type"`
 }
 
-type BillResult struct {
-	UserID          string    `json:"user_id" bson:"user_id"`
-	DecoderType     string    `json:"decoder_type" bson:"decoder_type"`
-	Package         string    `json:"package" bson:"package"`
-	IucNumber       string    `json:"iuc_number" bson:"iuc_number"`
-	Phone           string    `json:"phone" bson:"phone"`
-	Email           string    `json:"email" bson:"email"`
-	Name            string    `json:"name" bson:"name"`
-	Amount          int       `json:"amount" bson:"amount"`
-	Product         string    `json:"product" bson:"product"`
-	Description     string    `json:"description" bson:"description"`
-	OrderID         int       `json:"order_id" bson:"order_id"`
-	TranscationID   string    `json:"transcation_id" bson:"transaction_id"`
-	RequestID       string    `json:"request_id" bson:"request_id"`
-	ReferenceNumber string    `json:"reference_number" bson:"reference_number"`
-	CreatedAt       time.Time `json:"created_at" bson:"created_at"`
+type TV_Result struct {
+	UserID                 string    `json:"user_id" bson:"user_id"`
+	Status                 string    `json:"status" bson:"status"`
+	DecoderType            string    `json:"decoder_type" bson:"decoder_type"`
+	Package                string    `json:"package" bson:"package"`
+	IucNumber              string    `json:"iuc_number" bson:"iuc_number"`
+	Phone                  string    `json:"phone_number" bson:"phone_number"`
+	Email                  string    `json:"email" bson:"email"`
+	FullName               string    `json:"full_name" bson:"full_name"`
+	Amount                 int       `json:"amount" bson:"amount"`
+	TransactionProduct     string    `json:"transaction_product" bson:"transactionproduct"`
+	TransactionDescription string    `json:"transaction_description" bson:"transaction_description"`
+	OrderID                int       `json:"order_id" bson:"order_id"`
+	TransactionID          string    `json:"transaction_id" bson:"transaction_id"`
+	RequestID              string    `json:"request_id" bson:"request_id"`
+	ReferenceNumber        string    `json:"reference_number" bson:"reference_number"`
+	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
 }

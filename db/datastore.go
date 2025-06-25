@@ -94,9 +94,9 @@ type UtilitiesStore interface {
 	SaveEduTransaction(details *models.EduResponse) error
 	GetEduTransactionDetails(id string) (models.EduResponse, error)
 	GetAllEduTransactions(user string) ([]models.EduResponse, error)
-	SaveTVSubcriptionTransaction(details *models.BillResult) error
-	GetTvSubscriptionDetails(id string) (models.BillResult, error)
-	GetAllTvSubTransactions(user string) ([]models.BillResult, error)
+	SaveTVSubcriptionTransaction(details *models.TV_Result) error
+	GetTvSubscriptionDetails(id string) (models.TV_Result, error)
+	GetAllTvSubTransactions(user string) ([]models.TV_Result, error)
 	SaveElectricTransaction(details *models.ElectricResult) error
 	GetElectricSubDetails(id string) (models.ElectricResult, error)
 	GetAllElectricSubTransactions(username string) ([]models.ElectricResult, error)
