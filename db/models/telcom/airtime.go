@@ -24,17 +24,19 @@ type AirtimeApiResponse struct {
 }
 
 type AirtimeResponse struct {
-	UserID          string    `json:"user_id" bson:"user_id"`
-	Status          string    `json:"status" bson:"status"`
-	Network         string    `json:"network" bson:"network"`
-	Amount          string    `json:"amount" bson:"amount"`
-	Phone_no        string    `json:"phone_no" bson:"phone_no"`
-	Name            string    `json:"name" bson:"name"`
-	Product         string    `json:"product" bson:"product"`
-	Recipient       string    `json:"recipient,omitempty" bson:"recipient,omitempty"`
-	OrderID         int       `json:"order_id" bson:"order_id"`
-	Description     string    `json:"description" bson:"description"`
-	TransactionID   string    `json:"transaction_id" bson:"transaction_id"`
-	ReferenceNumber string    `json:"reference_number" bson:"reference_number"`
-	CreatedAt       time.Time `json:"created_at" bson:"created_at"`
+	UserID                 string    `json:"user_id" bson:"user_id"`
+	Status                 string    `json:"status" bson:"status"`
+	Network                string    `json:"network" bson:"network"`
+	NetworkProduct         string    `json:"network_product" bson:"network_product"`
+	Amount                 string    `json:"amount" bson:"amount"`
+	Phone_no               string    `json:"phone_no" bson:"phone_no"`
+	FullName               string    `json:"full_name" bson:"full_name"`
+	Product                string    `json:"product" bson:"product"`
+	RecipientName          string    `json:"recipient_name,omitempty" bson:"recipient_name,omitempty"`
+	OrderID                int       `json:"order_id" bson:"order_id"`
+	TransactionProduct     string    `json:"transaction_product" bson:"transaction_product"`
+	TransactionDescription string    `json:"transaction_description" bson:"transaction_description"`
+	TransactionID          string    `json:"transaction_id" bson:"transaction_id"`
+	ReferenceNumber        string    `json:"reference_number" bson:"reference_number"`
+	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
 }

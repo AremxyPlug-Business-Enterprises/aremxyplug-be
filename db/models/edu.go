@@ -10,6 +10,7 @@ type EduInfo struct {
 	Email        string `json:"email"`
 	Quantity     int    `json:"quantity"`
 	Wallet_Type  string `json:"wallet_type"`
+	Name         string `json:"name"`
 }
 
 type EduApiResponse struct {
@@ -32,20 +33,21 @@ type EduApiResponse struct {
 }
 
 type EduResponse struct {
-	UserID          string    `json:"user_id" bson:"user_id"`
-	OrderID         int       `json:"order_id" bson:"order_id"`
-	Email           string    `json:"email" bson:"email"`
-	Phone           string    `json:"phone_no" bson:"phone_no"`
-	TransactionID   string    `json:"transaction_id"`
-	Name            string    `json:"name" bson:"name"`
-	ReferenceNumber string    `json:"reference_no" bson:"reference_no"`
-	Product         string    `json:"product" bson:"product"`
-	Amount          float64   `json:"amount" bson:"amount"`
-	Exam_Type       string    `json:"exam_type" bson:"exam_type"`
-	Description     string    `json:"description" bson:"description"`
-	Status          string    `json:"status" bson:"status"`
-	Pin_Generated   []string  `json:"pins_generated" bson:"pins_generated"`
-	CreatedAt       time.Time `json:"created_at" bson:"created_at"`
+	UserID                 string    `json:"user_id" bson:"user_id"`
+	Status                 string    `json:"status" bson:"status"`
+	Exam_Type              string    `json:"exam_type" bson:"exam_type"`
+	Quantity               int       `json:"quantity" bson:"quantity"`
+	PhoneNumber            string    `json:"phone_number" bson:"phone_number"`
+	Email                  string    `json:"email" bson:"email"`
+	Amount                 float64   `json:"amount" bson:"amount"`
+	FullName               string    `json:"full_name" bson:"full_name"`
+	TransactionProduct     string    `json:"transaction_product" bson:"transaction_product"`
+	TransactionDescription string    `json:"transaction_description" bson:"transaction_description"`
+	Pin_Generated          []string  `json:"pins_generated" bson:"pins_generated"`
+	OrderID                int       `json:"order_id" bson:"order_id"`
+	TransactionID          string    `json:"transaction_id" bson:"transaction_id"`
+	ReferenceNumber        string    `json:"reference_no" bson:"reference_no"`
+	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
 }
 
 type EduRecord struct {

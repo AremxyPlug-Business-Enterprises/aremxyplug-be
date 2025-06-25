@@ -214,7 +214,7 @@ func (handler *HttpHandler) fetchTransactionByProduct(orderID, product string) (
 		}
 		return store.GetDataTransactionDetails(orderID)
 
-	case "deposit-transaction":
+	case "deposit":
 		return store.GetDepositDetails(orderID)
 
 	case "transfer":

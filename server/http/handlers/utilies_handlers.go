@@ -404,7 +404,7 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			json.NewEncoder(w).Encode(response)
 			return
 		}
-		data.Name = userDetails.Username
+		data.FullName = userDetails.Username
 
 		bal, err := handler.getBalance(id)
 		if err != nil {

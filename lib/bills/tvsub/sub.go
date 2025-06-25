@@ -42,7 +42,7 @@ func NewTvConn(db db.UtilitiesStore, Logger *zap.Logger) *TvConn {
 
 // buy tvsubscription
 // first verifiy the smartcard number
-func (t *TvConn) BuySub(data models.TvInfo) (*models.BillResult, error) {
+func (t *TvConn) BuySub(data models.TvInfo) (*models.TV_Result, error) {
 
 	data.RequestID = randomgen.GenerateRequestID()
 	data.SubType = "change"
@@ -70,21 +70,22 @@ func (t *TvConn) BuySub(data models.TvInfo) (*models.BillResult, error) {
 	}
 	fmt.Printf("%+v\n", apiResponse)
 
-	result := &models.BillResult{
-		UserID:        data.UserID,
-		DecoderType:   data.DecoderType,
-		Package:       data.Package,
-		IucNumber:     data.SmartCard_Number,
-		Phone:         data.Phone,
-		Email:         data.Email,
-		Name:          data.Name,
-		Product:       apiResponse.Content.Transactions.Type,
-		Description:   apiResponse.Content.Transactions.Product_Desc,
-		OrderID:       orderID,
-		TranscationID: transactionID,
-		RequestID:     apiResponse.RequestID,
-		Amount:        int(apiResponse.Content.Transactions.Amount),
-		CreatedAt:     time.Now().UTC(),
+	result := &models.TV_Result{
+		UserID:                 data.UserID,
+		Status:                 apiResponse.Content.Transactions.Status,
+		DecoderType:            data.DecoderType,
+		Package:                data.Package,
+		IucNumber:              data.SmartCard_Number,
+		Phone:                  data.Phone,
+		Email:                  data.Email,
+		FullName:               data.Name,
+		TransactionProduct:     apiResponse.Content.Transactions.Type,
+		TransactionDescription: apiResponse.Content.Transactions.Product_Desc,
+		OrderID:                orderID,
+		TransactionID:          transactionID,
+		RequestID:              apiResponse.RequestID,
+		Amount:                 int(apiResponse.Content.Transactions.Amount),
+		CreatedAt:              time.Now().UTC(),
 	}
 
 	if err := t.saveTransaction(result); err != nil {
@@ -95,26 +96,26 @@ func (t *TvConn) BuySub(data models.TvInfo) (*models.BillResult, error) {
 }
 
 // query tvsubscription
-func (t *TvConn) QueryTransaction(requestID string) (models.BillResult, error) {
+func (t *TvConn) QueryTransaction(requestID string) (models.TV_Result, error) {
 
 	resp, err := t.queryTransaction(requestID)
 	if err != nil {
-		return models.BillResult{}, t.logAndReturnError("error communicating with server", err)
+		return models.TV_Result{}, t.logAndReturnError("error communicating with server", err)
 	}
 	defer resp.Body.Close()
 
 	apiResponse := &models.TvAPI{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		return models.BillResult{}, t.logAndReturnError("error decoding response body", err)
+		return models.TV_Result{}, t.logAndReturnError("error decoding response body", err)
 	}
 
 	if apiResponse.Code != "000" {
-		return models.BillResult{}, nil
+		return models.TV_Result{}, nil
 	}
 
 	result, err := t.getTransactionDetails(apiResponse.RequestID)
 	if err != nil {
-		return models.BillResult{}, t.logAndReturnError("failed to get user's transactions", err)
+		return models.TV_Result{}, t.logAndReturnError("failed to get user's transactions", err)
 	}
 
 	return result, nil
@@ -122,7 +123,7 @@ func (t *TvConn) QueryTransaction(requestID string) (models.BillResult, error) {
 }
 
 // get tvsubscription transaction history
-func (t *TvConn) GetUserTransactions(user string) ([]models.BillResult, error) {
+func (t *TvConn) GetUserTransactions(user string) ([]models.TV_Result, error) {
 
 	result, err := t.getAllTransaction("user")
 	if err != nil {
@@ -133,18 +134,18 @@ func (t *TvConn) GetUserTransactions(user string) ([]models.BillResult, error) {
 
 }
 
-func (t *TvConn) GetTransactionDetails(id string) (models.BillResult, error) {
+func (t *TvConn) GetTransactionDetails(id string) (models.TV_Result, error) {
 
 	result, err := t.getTransactionDetails(id)
 	if err != nil {
-		return models.BillResult{}, t.logAndReturnError("failed to get transaction details", err)
+		return models.TV_Result{}, t.logAndReturnError("failed to get transaction details", err)
 	}
 
 	return result, nil
 }
 
 // func to be used by admin to return all transaction in database
-func (t *TvConn) GetAllTransactions() ([]models.BillResult, error) {
+func (t *TvConn) GetAllTransactions() ([]models.TV_Result, error) {
 
 	result, err := t.getAllTransaction("")
 	if err != nil {
@@ -232,7 +233,7 @@ func (t *TvConn) buySub(data models.TvInfo) (*http.Response, error) {
 	return resp, nil
 }
 
-func (t *TvConn) saveTransaction(details *models.BillResult) error {
+func (t *TvConn) saveTransaction(details *models.TV_Result) error {
 	err := t.db.SaveTVSubcriptionTransaction(details)
 	if err != nil {
 		return err
@@ -240,15 +241,15 @@ func (t *TvConn) saveTransaction(details *models.BillResult) error {
 	return nil
 }
 
-func (t *TvConn) getTransactionDetails(id string) (models.BillResult, error) {
+func (t *TvConn) getTransactionDetails(id string) (models.TV_Result, error) {
 	result, err := t.db.GetTvSubscriptionDetails(id)
 	if err != nil {
-		return models.BillResult{}, err
+		return models.TV_Result{}, err
 	}
 	return result, nil
 }
 
-func (t *TvConn) getAllTransaction(user string) ([]models.BillResult, error) {
+func (t *TvConn) getAllTransaction(user string) ([]models.TV_Result, error) {
 	result, err := t.db.GetAllTvSubTransactions(user)
 	if err != nil {
 		return nil, err

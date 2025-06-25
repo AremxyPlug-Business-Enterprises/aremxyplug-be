@@ -3,15 +3,16 @@ package models
 import "time"
 
 type ElectricInfo struct {
-	DiscoType  string `json:"disco_type"` // Name of service to buy
-	Meter_No   string `json:"meter_no"`   // meter number
-	Meter_Type string `json:"meter_type"` // meter type
-	Amount     int    `json:"amount"`
-	Phone      string `json:"phone"`
-	Email      string `json:"email"`
-	RequestID  string `json:"request_id"`
-	Name       string
-	UserID     string
+	DiscoType    string `json:"disco_type"` // Name of service to buy
+	Meter_No     string `json:"meter_no"`   // meter number
+	Meter_Type   string `json:"meter_type"` // meter type
+	Amount       int    `json:"amount"`
+	Phone        string `json:"phone"`
+	Email        string `json:"email"`
+	VerifiedName string `json:"verified_name"` // Name on the meter
+	RequestID    string `json:"request_id"`
+	FullName     string
+	UserID       string
 }
 
 type ElectricAPI struct {
@@ -85,20 +86,22 @@ type CommissionDetails struct {
 }
 
 type ElectricResult struct {
-	UserID         string    `json:"user_id" bson:"user_id"`
-	Amount         string    `json:"amount" bson:"amount"`
-	DiscoType      string    `json:"disco_type" bson:"DiscoType"`
-	MeterType      string    `json:"meter_type" bson:"meter_type"` // Prepaid
-	Name           string    `json:"name" bson:"name"`
-	MeterNumber    string    `json:"meter_number" bson:"meter_number"`
-	Phone          string    `json:"phone" bson:"phone"`
-	Email          string    `json:"email" bson:"email"`
-	Product        string    `json:"product" bson:"product"`
-	Description    string    `json:"description" bson:"description"` // append serviceID and variation code.
-	BillGenerated  string    `json:"bill_generated" bson:"bill_generated"`
-	OrderID        int       `json:"order_id" bson:"order_id"`
-	TransactionID  string    `json:"transaction_id" bson:"transaction_id"`
-	ReferenceNuber string    `json:"reference_number" bson:"reference_number"`
-	RequestID      string    `json:"request_id" bson:"request_ID"`
-	CreatedAt      time.Time `json:"created_at" bson:"created_at"`
+	UserID                 string    `json:"user_id" bson:"user_id"`
+	Status                 string    `json:"status" bson:"status"`
+	DiscoType              string    `json:"disco_type" bson:"DiscoType"`
+	MeterType              string    `json:"meter_type" bson:"meter_type"` // Prepaid
+	VerifiedName           string    `json:"verified_name" bson:"name"`
+	MeterNumber            string    `json:"meter_number" bson:"meter_number"`
+	Phone                  string    `json:"phone" bson:"phone"`
+	Email                  string    `json:"email" bson:"email"`
+	Amount                 string    `json:"amount" bson:"amount"`
+	FullName               string    `json:"full_name" bson:"full_name"`
+	TransactionProduct     string    `json:"transaction_product" bson:"transaction_product"`
+	TransactionDescription string    `json:"transaction_description" bson:"transaction_description"` // append serviceID and variation code.
+	BillGenerated          string    `json:"bill_generated" bson:"bill_generated"`
+	OrderID                int       `json:"order_id" bson:"order_id"`
+	TransactionID          string    `json:"transaction_id" bson:"transaction_id"`
+	ReferenceNuber         string    `json:"reference_number" bson:"reference_number"`
+	RequestID              string    `bson:"request_ID"`
+	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
 }

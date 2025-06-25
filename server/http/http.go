@@ -98,7 +98,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 	// Routes
 	// Health check
-	router.Get("/", healthCheck)
+	router.Head("/", healthCheck)
 	router.Post("/webhook", handlers.WebhookHandler)
 
 	router.Route("/api/v1", func(router chi.Router) {

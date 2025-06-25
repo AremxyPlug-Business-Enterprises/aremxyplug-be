@@ -190,15 +190,16 @@ func (c *Config) TransferToBank(info models.TransferInfo) (models.TransferRespon
 	}
 
 	result := models.TransferResponse{
-		UserID:         info.UserID,
-		Bank_Name:      counterparty.BankName,
-		Account_Name:   counterparty.AccountName,
-		Account_No:     counterparty.AccountNumber,
-		Product:        "Money Transfer",
-		Description:    "",
-		Reason:         info.Reason,
-		Order_ID:       orderID,
-		Transaction_ID: transactionID,
+		UserID:                 info.UserID,
+		Bank_Name:              counterparty.BankName,
+		Account_Name:           counterparty.AccountName,
+		Account_No:             counterparty.AccountNumber,
+		FullName:               info.FullName,
+		TransactionProduct:     "Money Transfer",
+		TransactionDescription: "From NGN Wallet",
+		Reason:                 info.Reason,
+		Order_ID:               orderID,
+		Transaction_ID:         transactionID,
 		// sessionID is gotten from the webhook
 	}
 

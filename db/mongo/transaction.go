@@ -45,7 +45,7 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 	}
 
 	projectStage := bson.D{{Key: "$project", Value: bson.D{
-		{Key: "product", Value: 1}, {Key: "description", Value: 1},
+		{Key: "transaction_product", Value: 1}, {Key: "transaction_description", Value: 1},
 		{Key: "order_id", Value: 1}, {Key: "created_at", Value: 1}, {Key: "status", Value: 1},
 	}}}
 
@@ -58,7 +58,7 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 	pipeline := make(mongo.Pipeline, len(basePipeline))
 	copy(pipeline, basePipeline)
 
-	collections := []string{"airtime", "data", "transfer", "edu", "tv-sub", "electric-sub"}
+	collections := []string{"airtime", "data", "transfer", "edu", "tv-sub", "electric-sub", "deposit-transaction", "points"}
 	for _, coll := range collections[1:] {
 		unionStages := bson.A{}
 		for _, stage := range basePipeline {

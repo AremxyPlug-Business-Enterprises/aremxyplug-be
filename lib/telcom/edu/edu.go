@@ -120,18 +120,21 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 
 	// associate the responses for the api
 	result := &models.EduResponse{
-		UserID:          eduInfo.UserID,
-		Amount:          apiResponse.Amount,
-		Phone:           eduInfo.Phone_Number,
-		ReferenceNumber: apiResponse.Reference,
-		Email:           eduInfo.Email,
-		Product:         eduInfo.Exam_Type,
-		Status:          apiResponse.Status,
-		Description:     apiResponse.Message,
-		OrderID:         id,
-		Pin_Generated:   pinGenerated,
-		CreatedAt:       time.Now().UTC(),
-		TransactionID:   transactionID,
+		UserID:                 eduInfo.UserID,
+		Amount:                 apiResponse.Amount,
+		Exam_Type:              eduInfo.Exam_Type,
+		Quantity:               eduInfo.Quantity,
+		PhoneNumber:            eduInfo.Phone_Number,
+		ReferenceNumber:        apiResponse.Reference,
+		FullName:               eduInfo.Name,
+		Email:                  eduInfo.Email,
+		TransactionProduct:     eduInfo.Exam_Type,
+		Status:                 apiResponse.Status,
+		TransactionDescription: apiResponse.Message,
+		OrderID:                id,
+		Pin_Generated:          pinGenerated,
+		CreatedAt:              time.Now().UTC(),
+		TransactionID:          transactionID,
 	}
 
 	log.Printf("%+v", result)

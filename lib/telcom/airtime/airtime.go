@@ -88,22 +88,24 @@ func (a *AirtimeConn) BuyAirtime(airtime telcom.AirtimeInfo) (*telcom.AirtimeRes
 	transactionID := randomgen.GenerateTransactionID("vtu")
 	amount := apiResponse.Data.Amount
 	product := network + " " + "VTU"
-	Description := "Airtime purchase completed successfully"
+	description := product
+	transactionProduct := "Airtime Top-up"
 
 	result := &telcom.AirtimeResponse{
-		UserID:          airtime.UserID,
-		OrderID:         id,
-		Amount:          amount,
-		Network:         network,
-		Description:     Description,
-		Phone_no:        airtime.Phone_no,
-		Product:         product,
-		Name:            airtime.FullName,
-		Recipient:       airtime.Recipient,
-		ReferenceNumber: strconv.Itoa(apiResponse.Data.RechargeID),
-		Status:          apiResponse.TextStatus,
-		TransactionID:   transactionID,
-		CreatedAt:       time.Now().UTC(),
+		UserID:                 airtime.UserID,
+		OrderID:                id,
+		Amount:                 amount,
+		Network:                network,
+		TransactionProduct:     transactionProduct,
+		TransactionDescription: description,
+		Phone_no:               airtime.Phone_no,
+		Product:                product,
+		FullName:               airtime.FullName,
+		RecipientName:          airtime.Recipient,
+		ReferenceNumber:        strconv.Itoa(apiResponse.Data.RechargeID),
+		Status:                 apiResponse.TextStatus,
+		TransactionID:          transactionID,
+		CreatedAt:              time.Now().UTC(),
 	}
 
 	// save transaction

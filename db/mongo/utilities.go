@@ -7,7 +7,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func (m *mongoStore) SaveTVSubcriptionTransaction(details *models.BillResult) error {
+func (m *mongoStore) SaveTVSubcriptionTransaction(details *models.TV_Result) error {
 	err := m.saveToDB(tvColl, details)
 	if err != nil {
 		return err
@@ -16,8 +16,8 @@ func (m *mongoStore) SaveTVSubcriptionTransaction(details *models.BillResult) er
 	return nil
 }
 
-func (m *mongoStore) GetTvSubscriptionDetails(id string) (models.BillResult, error) {
-	res := models.BillResult{}
+func (m *mongoStore) GetTvSubscriptionDetails(id string) (models.TV_Result, error) {
+	res := models.TV_Result{}
 
 	result := m.getRecord(id, tvColl)
 
@@ -25,26 +25,26 @@ func (m *mongoStore) GetTvSubscriptionDetails(id string) (models.BillResult, err
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return models.BillResult{}, nil
+			return models.TV_Result{}, nil
 		}
 		// return error
-		return models.BillResult{}, err
+		return models.TV_Result{}, err
 	}
 
 	return res, nil
 }
 
-func (m *mongoStore) GetAllTvSubTransactions(userID string) ([]models.BillResult, error) {
+func (m *mongoStore) GetAllTvSubTransactions(userID string) ([]models.TV_Result, error) {
 	ctx := context.Background()
-	res := []models.BillResult{}
+	res := []models.TV_Result{}
 
 	cur, err := m.getAllRecords(tvColl, userID)
 	if err != nil {
-		return []models.BillResult{}, err
+		return []models.TV_Result{}, err
 	}
 
 	for cur.Next(ctx) {
-		resp := models.BillResult{}
+		resp := models.TV_Result{}
 		if err := cur.Decode(&resp); err != nil {
 			return nil, err
 		}

@@ -74,22 +74,25 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 		billGenerated = token_generated
 	}
 
+	transctionProd := "Electricity Bills"
+
 	result := &models.ElectricResult{
-		UserID:        data.UserID,
-		Amount:        strconv.FormatFloat(apiResponse.Amount, 'f', 2, 64),
-		DiscoType:     data.DiscoType,
-		MeterType:     data.Meter_Type,
-		MeterNumber:   transDetails.Transactions.UniqueElement,
-		Phone:         data.Phone,
-		Name:          data.Name,
-		BillGenerated: billGenerated,
-		Email:         data.Email,
-		Product:       transDetails.Transactions.ProductName,
-		Description:   description,
-		OrderID:       orderID,
-		TransactionID: transactionID,
-		RequestID:     apiResponse.RequestID,
-		CreatedAt:     time.Now().UTC(),
+		UserID:                 data.UserID,
+		Amount:                 strconv.FormatFloat(apiResponse.Amount, 'f', 2, 64),
+		DiscoType:              data.DiscoType,
+		MeterType:              data.Meter_Type,
+		MeterNumber:            transDetails.Transactions.UniqueElement,
+		Phone:                  data.Phone,
+		VerifiedName:           data.VerifiedName,
+		FullName:               data.FullName,
+		BillGenerated:          billGenerated,
+		Email:                  data.Email,
+		TransactionProduct:     transctionProd,
+		TransactionDescription: description,
+		OrderID:                orderID,
+		TransactionID:          transactionID,
+		RequestID:              apiResponse.RequestID,
+		CreatedAt:              time.Now().UTC(),
 	}
 
 	if err := e.saveTransaction(result); err != nil {
