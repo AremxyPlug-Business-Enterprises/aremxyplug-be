@@ -2,6 +2,8 @@ package mongo
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"time"
 
 	"github.com/aremxyplug-be/db/models"
@@ -11,9 +13,17 @@ import (
 )
 
 func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSize int) (models.TransactionResponse, error) {
-	ctx := context.Background()
+	// Validate pagination
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 500 {
+		pageSize = 50
+	}
 
+	ctx := context.Background()
 	matchConditions := bson.D{}
+
 	if userID, ok := filter["user_id"].(string); ok && userID != "" {
 		matchConditions = append(matchConditions, bson.E{Key: "user_id", Value: userID})
 	}
@@ -38,97 +48,133 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		matchConditions = append(matchConditions, bson.E{Key: "created_at", Value: dateRange})
 	}
 
+	// Collection setup
 	inflowCollections := []string{"deposit-transaction", "point-redeem"}
 	outflowCollections := []string{"airtime", "data", "transfer", "edu", "tv-sub", "electric-sub"}
-
 	collectionsToQuery := append(outflowCollections, inflowCollections...)
 	baseCollection := collectionsToQuery[0]
 	remainingCollections := collectionsToQuery[1:]
 
+	// Validate collections
+	for _, coll := range collectionsToQuery {
+		if m.col(coll) == nil {
+			return models.TransactionResponse{},
+				errors.New("collection " + coll + " does not exist")
+		}
+	}
+
+	// Projection
 	projectStage := bson.D{{Key: "$project", Value: bson.M{
-		"product":     1,
-		"description": 1,
-		"order_id":    1,
-		"created_at":  1,
-		"status":      1,
-		"amount":      1,
+		"transaction_product": 1, "transaction_description": 1, "order_id": 1,
+		"created_at": 1, "status": 1, "amount": 1,
 	}}}
 
+	// Base flow type
+	baseFlowType := "outflow"
+	if slices.Contains(inflowCollections, baseCollection) {
+		baseFlowType = "inflow"
+	}
+
+	// Base pipeline
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: matchConditions}},
 		projectStage,
-		{{Key: "$addFields", Value: bson.M{"flowType": "outflow"}}},
+		{{Key: "$addFields", Value: bson.M{"flowType": baseFlowType}}},
 	}
 
+	// Union with other collections
 	for _, coll := range remainingCollections {
 		flowType := "outflow"
-		for _, inflow := range inflowCollections {
-			if coll == inflow {
-				flowType = "inflow"
-				break
-			}
+		if slices.Contains(inflowCollections, coll) {
+			flowType = "inflow"
 		}
 		unionStages := bson.A{
 			bson.D{{Key: "$match", Value: matchConditions}},
+			projectStage,
 			bson.D{{Key: "$addFields", Value: bson.M{"flowType": flowType}}},
 		}
-		pipeline = append(pipeline, bson.D{{Key: "$unionWith", Value: bson.M{"coll": coll, "pipeline": unionStages}}})
+		pipeline = append(pipeline, bson.D{{
+			Key:   "$unionWith",
+			Value: bson.M{"coll": coll, "pipeline": unionStages},
+		}})
 	}
 
-	pipeline = append(pipeline,
-		bson.D{{Key: "$addFields", Value: bson.M{
-			"amountDecimal": bson.M{
-				"$convert": bson.M{"input": "$amount", "to": "double", "onError": 0, "onNull": 0},
+	// Safe amount conversion
+	pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+		"amountDecimal": bson.M{
+			"$cond": bson.A{
+				bson.M{"$eq": bson.A{bson.M{"$type": "$amount"}, "double"}},
+				"$amount",
+				bson.M{"$convert": bson.M{
+					"input": "$amount", "to": "double",
+					"onError": 0, "onNull": 0,
+				}},
 			},
-		}}},
-		bson.D{{Key: "$facet", Value: bson.M{
-			"transactions": bson.A{
-				bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
-				bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
-				bson.D{{Key: "$limit", Value: int64(pageSize)}},
-			},
-			"totals": bson.A{
-				bson.D{{Key: "$group", Value: bson.M{
-					"_id":          nil,
-					"totalCount":   bson.M{"$sum": 1},
-					"totalInflow":  bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$flowType", "inflow"}}, "$amountDecimal", 0}}},
-					"totalOutflow": bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$flowType", "outflow"}}, "$amountDecimal", 0}}},
-				}}},
-			},
-		}}},
+		},
+	}}})
+
+	// Get data
+	dataPipeline := append(pipeline,
+		bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
+		bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
+		bson.D{{Key: "$limit", Value: int64(pageSize)}},
 	)
 
-	cursor, err := m.col(baseCollection).Aggregate(ctx, pipeline)
+	cursor, err := m.col(baseCollection).Aggregate(ctx, dataPipeline)
 	if err != nil {
-		m.logger.Error("Aggregation error:", zap.Error(err))
+		m.logger.Error("Data aggregation failed", zap.Error(err))
 		return models.TransactionResponse{}, err
 	}
 	defer cursor.Close(ctx)
 
-	var aggResult []struct {
-		Transactions []models.TransactionItem   `bson:"transactions"`
-		Totals       []models.TotalsAggregation `bson:"totals"`
-	}
-	if err := cursor.All(ctx, &aggResult); err != nil || len(aggResult) == 0 {
+	var transactions []models.TransactionItem
+	if err := cursor.All(ctx, &transactions); err != nil {
 		return models.TransactionResponse{}, err
 	}
 
-	res := models.TransactionResponse{
-		Transactions: aggResult[0].Transactions,
-		TotalCount:   0,
-		TotalInflow:  0,
-		TotalOutflow: 0,
+	// Get totals
+	totalsPipeline := append(pipeline,
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":        nil,
+			"totalCount": bson.M{"$sum": 1},
+			"totalInflow": bson.M{"$sum": bson.M{"$cond": bson.A{
+				bson.M{"$eq": bson.A{"$flowType", "inflow"}},
+				"$amountDecimal", 0,
+			}}},
+			"totalOutflow": bson.M{"$sum": bson.M{"$cond": bson.A{
+				bson.M{"$eq": bson.A{"$flowType", "outflow"}},
+				"$amountDecimal", 0,
+			}}},
+		}}},
+	)
+
+	totalsCursor, err := m.col(baseCollection).Aggregate(ctx, totalsPipeline)
+	if err != nil {
+		m.logger.Error("Totals aggregation failed", zap.Error(err))
+		return models.TransactionResponse{}, err
 	}
-	if len(aggResult[0].Totals) > 0 {
-		res.TotalCount = aggResult[0].Totals[0].TotalCount
-		res.TotalInflow = aggResult[0].Totals[0].TotalInflow
-		res.TotalOutflow = aggResult[0].Totals[0].TotalOutflow
+	defer totalsCursor.Close(ctx)
+
+	var totals []models.TotalsAggregation
+	if err := totalsCursor.All(ctx, &totals); err != nil {
+		return models.TransactionResponse{}, err
 	}
 
-	m.logger.Info(" Fetched transactions successfully",
-		zap.Int("total_count", res.TotalCount),
-		zap.Float64("total_inflow", res.TotalInflow),
-		zap.Float64("total_outflow", res.TotalOutflow),
+	// Prepare response
+	res := models.TransactionResponse{
+		Transactions: transactions,
+	}
+	if len(totals) > 0 {
+		res.TotalCount = totals[0].TotalCount
+		res.TotalInflow = totals[0].TotalInflow
+		res.TotalOutflow = totals[0].TotalOutflow
+	}
+
+	m.logger.Info("Transactions fetched successfully",
+		zap.Int("total", res.TotalCount),
+		zap.Int("page", page),
+		zap.Int("pageSize", pageSize),
+		zap.Any("filter", filter),
 	)
 
 	return res, nil
