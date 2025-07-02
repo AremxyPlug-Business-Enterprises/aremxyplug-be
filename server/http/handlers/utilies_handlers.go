@@ -106,7 +106,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := handler.updateBalance(id, newBal); err != nil {
-			w.WriteHeader(http.StatusInternalServerError) // Changed from 304 to 500
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Balance update failed after purchase", zap.Error(err))
 			response := responseFormat.CustomResponse{
 				Status:  http.StatusInternalServerError,
@@ -117,7 +117,21 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		json.NewEncoder(w).Encode(res)
+		pointsEarned := 2
+
+		if err := handler.addPoints(w, id, pointsEarned); err != nil {
+			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
+		}
+
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data: map[string]interface{}{
+				"data": res,
+			},
+		}
+		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {
@@ -298,6 +312,12 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
+		pointsEarned := 2
+
+		if err := handler.addPoints(w, id, pointsEarned); err != nil {
+			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
+		}
+
 		w.WriteHeader(http.StatusOK)
 		handler.logger.Info("TV subscription processed successfully", zap.Any("response", res))
 		response := responseFormat.CustomResponse{
@@ -468,6 +488,12 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			}
 			json.NewEncoder(w).Encode(response)
 			return
+		}
+
+		pointsEarned := 2
+
+		if err := handler.addPoints(w, id, pointsEarned); err != nil {
+			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
 		w.WriteHeader(http.StatusOK)

@@ -10,11 +10,18 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 )
 
 var (
 	ErrMatchedCount = errors.New("failed to update user's referral count")
+	ErrPointCount   = errors.New("not enough point to redeem")
+)
+
+var (
+	pointColl       = "points"
+	pointRedeemColl = "point-redeem"
 )
 
 func (m *mongoStore) updateReferralCount(referrersCode string) error {
@@ -122,21 +129,6 @@ func (m *mongoStore) GetReferredUsers(referrerID string) ([]models.ReferredUserI
 	return results, nil
 }
 
-func (m *mongoStore) UpdatePoint(userID string, points int) error {
-	// TODO: update the point doucument using the userID as the filter and adding the points to the previous point balance
-	ctx := context.Background()
-
-	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
-	updateFilter := bson.D{}
-
-	updateResult, err := m.col("").UpdateOne(ctx, filter, updateFilter)
-	if err != nil || updateResult.MatchedCount == 0 {
-		return errors.New("failed to update user's point balance")
-	}
-
-	return nil
-}
-
 func (m *mongoStore) GetPoint(userID string) (models.Points, error) {
 
 	ctx := context.Background()
@@ -157,11 +149,12 @@ func (m *mongoStore) CreatePointDoc(userID string) error {
 	ctx := context.Background()
 
 	point := models.Points{
-		UserID:  userID,
-		Balance: 0,
+		UserID:    userID,
+		Balance:   0,
+		CreatedAt: time.Now().UTC(),
 	}
 
-	_, err := m.col("").InsertOne(ctx, point)
+	_, err := m.col(pointColl).InsertOne(ctx, point)
 	if err != nil {
 		return err
 	}
@@ -169,17 +162,93 @@ func (m *mongoStore) CreatePointDoc(userID string) error {
 	return nil
 }
 
-func (m *mongoStore) CanRedeemPoints(userID string, points int) bool {
-	// TODO: first get the user point from the database and then compare with the points to redeem
+func (m *mongoStore) RedeemPoints(userID string, pointsToRedeem int, redeemRate int) (amountRedeemed int, e error) {
 	ctx := context.Background()
 
-	pointDoc := models.Points{}
+	filter := bson.M{"user_id": userID}
+	points := models.Points{}
 
-	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
-
-	result := m.col("").FindOne(ctx, filter)
-	if err := result.Decode(&pointDoc); err != nil {
-		return false
+	// Get user's point balance
+	err := m.col(pointColl).FindOne(ctx, filter).Decode(&points)
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch points: %v", err)
 	}
-	return true
+
+	// Check if the user has enough points
+	if pointsToRedeem > points.Balance {
+		return 0, ErrPointCount
+	}
+
+	// Calculate amount redeemed (assuming 1 point = redeemRate Naira)
+	amountRedeemed = pointsToRedeem * redeemRate
+
+	// Deduct points from user's points document
+	_, err = m.col(pointColl).UpdateOne(ctx, filter, bson.M{
+		"$inc": bson.M{"balance": -pointsToRedeem},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to update points: %v", err)
+	}
+
+	// Convert amountRedeemed to Decimal128
+	amountDecimal, err := primitive.ParseDecimal128(fmt.Sprintf("%d", amountRedeemed))
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert amount to Decimal128: %v", err)
+	}
+
+	// Update user's balance
+	_, err = m.col(balColl).UpdateOne(ctx, filter, bson.M{
+		"$inc": bson.M{"balance": amountDecimal},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to update user balance: %v", err)
+	}
+
+	return amountRedeemed, nil
+}
+
+func (m *mongoStore) CreatePointRedeemDoc(redeem models.PointRedeem) error {
+	ctx := context.Background()
+
+	// Create a new point redeem document
+	redeem.CreatedAt = time.Now().UTC()
+
+	// Insert the redeem document into the point-redeem collection
+	_, err := m.col(pointRedeemColl).InsertOne(ctx, redeem)
+	if err != nil {
+		return fmt.Errorf("failed to create point redeem document: %v", err)
+	}
+
+	return nil
+}
+
+// Update user's point balance after transaction
+func (m *mongoStore) UpdatePointAndTransactionTime(userID string, pointsEarned int) error {
+
+	ctx := context.Background()
+	// Update Points Document
+	filter := bson.M{"user_id": userID}
+	update := bson.D{
+		{Key: "$inc", Value: bson.D{{Key: "balance", Value: pointsEarned}}},
+		{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: time.Now()}}},
+	}
+	opts := options.Update().SetUpsert(true)
+	_, err := m.col(pointColl).UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		return fmt.Errorf("failed to update points: %v", err)
+	}
+
+	// Update User's last_transaction field
+	userColl, err := m.userColl()
+	if err != nil {
+
+	}
+	_, err = userColl.UpdateOne(ctx, bson.M{"id": userID}, bson.D{
+		{Key: "$set", Value: bson.D{{Key: "last_transaction", Value: time.Now()}}},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update user last_transaction: %v", err)
+	}
+
+	return nil
 }

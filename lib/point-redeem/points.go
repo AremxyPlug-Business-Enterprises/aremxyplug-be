@@ -1,8 +1,12 @@
 package pointredeem
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/lib/randomgen"
 )
 
 type PointConfig struct {
@@ -15,24 +19,40 @@ func NewPointConfig(store db.Extras) *PointConfig {
 	}
 }
 
-func (p *PointConfig) RedeemPoints(userID string, points int) bool {
+func (p *PointConfig) RedeemPoints(userID string, points int) (models.PointRedeem, error) {
 
-	yes := p.db.CanRedeemPoints(userID, points)
-	if !yes {
-		return false
-	}
+	redeemRate := 1
 
-	return yes
-}
+	// write the as a complete string
+	redeemRateStr := fmt.Sprintf("%d", redeemRate)
 
-func (p *PointConfig) UpdatePoints(userID string, points int) error {
+	transactionID := randomgen.GenerateTransactionID("pnt")
+	orderID, _ := randomgen.GenerateOrderID()
 
-	err := p.db.UpdatePoint(userID, points)
+	redeemedAmount, err := p.db.RedeemPoints(userID, points, redeemRate)
 	if err != nil {
-		return err
+		// depending on the error returned
+		return models.PointRedeem{}, err
 	}
 
-	return nil
+	redeemDoc := models.PointRedeem{
+		UserID:                 userID,
+		Points_Redeemed:        points,
+		Amount_Redeemed:        float64(redeemedAmount),
+		Redeemed_Rate:          redeemRateStr,
+		TransactionProduct:     "",
+		TransactionDescription: "",
+		TransactionID:          transactionID,
+		OrderID:                orderID,
+		CreatedAt:              time.Now().UTC(),
+	}
+
+	if err := p.db.CreatePointRedeemDoc(redeemDoc); err != nil {
+		return models.PointRedeem{}, nil
+	}
+
+	return redeemDoc, nil
+
 }
 
 func (p *PointConfig) GetPoints(userID string) (models.Points, error) {

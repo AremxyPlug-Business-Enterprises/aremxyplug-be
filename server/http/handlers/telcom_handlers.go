@@ -136,6 +136,12 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		pointsEarned := 2
+
+		if err := handler.addPoints(w, id, pointsEarned); err != nil {
+			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
+		}
+
 		w.WriteHeader(http.StatusOK)
 		response := responseFormat.CustomResponse{
 			Status:  http.StatusOK,
@@ -432,6 +438,12 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		pointsEarned := 2
+
+		if err := handler.addPoints(w, id, pointsEarned); err != nil {
+			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
+		}
+
 		w.WriteHeader(http.StatusOK)
 		response := responseFormat.CustomResponse{
 			Status:  http.StatusOK,
@@ -610,6 +622,12 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
+		pointsEarned := 2
+
+		if err := handler.addPoints(w, id, pointsEarned); err != nil {
+			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
+		}
+
 		w.WriteHeader(http.StatusOK)
 		response := responseFormat.CustomResponse{
 			Status:  http.StatusOK,
@@ -704,7 +722,7 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	// id := userDetails.ID
+	id := userDetails.ID
 	username := userDetails.Username
 
 	if r.Method == "POST" {
@@ -794,6 +812,12 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 			}
 			json.NewEncoder(w).Encode(response)
 			return
+		}
+
+		pointsEarned := 2
+
+		if err := handler.addPoints(w, id, pointsEarned); err != nil {
+			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
 		response := responseFormat.CustomResponse{

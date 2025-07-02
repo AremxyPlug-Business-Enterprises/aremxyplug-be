@@ -109,7 +109,7 @@ func (handler *HttpHandler) GetTransactions(w http.ResponseWriter, r *http.Reque
 		}
 
 		// --- Query Transactions ---
-		transactions, total, err := handler.store.GetTransactions(filter, page, pageSize)
+		transactions, err := handler.store.GetTransactions(filter, page, pageSize)
 		if err != nil {
 			handler.logger.Error("Error fetching transactions", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -123,18 +123,18 @@ func (handler *HttpHandler) GetTransactions(w http.ResponseWriter, r *http.Reque
 		}
 
 		// --- Count total for pagination ---
-		totalPages := int(math.Ceil(float64(total) / float64(pageSize)))
+		totalPages := int(math.Ceil(float64(transactions.TotalCount) / float64(pageSize)))
 
 		// --- Response ---
 		result := map[string]interface{}{
 			"page":        page,
 			"page_size":   pageSize,
-			"total":       total,
+			"total":       transactions.TotalCount,
 			"total_pages": totalPages,
 			"data":        transactions,
 		}
 
-		handler.logger.Info("Transactions fetched successfully", zap.Int("total", total), zap.Int("page", page), zap.Int("pageSize", pageSize))
+		handler.logger.Info("Transactions fetched successfully", zap.Int("total", transactions.TotalCount), zap.Int("page", page), zap.Int("pageSize", pageSize))
 		response := responseFormat.CustomResponse{
 			Status:  http.StatusOK,
 			Message: "success",
