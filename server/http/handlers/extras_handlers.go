@@ -100,43 +100,43 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 	// TODO: implement logic for point balance usage for POST requests
 
 	if r.Method == "POST" {
-		// TODO: first check if the user can redeem point. If user can redeem point then return true and allow user to carry out transaction
-		var pointsToRedeem int
-		canRedeem := handler.point.RedeemPoints(user.ID, pointsToRedeem)
-		if !canRedeem {
-			handler.logger.Warn("User cannot redeem points", zap.Int("points_to_redeem", pointsToRedeem))
-			w.WriteHeader(http.StatusBadRequest)
+
+		pointsToRedeem := struct {
+			Point int `json:"points"`
+		}{}
+
+		if err := json.NewDecoder(r.Body).Decode(&pointsToRedeem); err != nil {
+
 		}
 
-		w.WriteHeader(http.StatusOK)
+		receipt, err := handler.point.RedeemPoints(user.ID, pointsToRedeem.Point)
+		if err != nil {
+			handler.logger.Error("Failed to redeem points", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		handler.logger.Info("Points redeemed successfully", zap.Any("receipt", receipt))
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": receipt}}
+		json.NewEncoder(w).Encode(response)
 	}
 
 }
 
-// should write a function for redeem point...
+func (handler *HttpHandler) addPoints(w http.ResponseWriter, userID string, points int) error {
 
-func (handler *HttpHandler) addPoints(w http.ResponseWriter, r *http.Request) {
-
-	// TODO: implement the point based on the required module
-	// TODO: call the addPoints method after the necessary conditions have been met
-	user, err := handler.GetUserDetails(r)
-	if err != nil {
-		handler.logger.Error("Failed to get user details", zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
-	var points int
-	if err := handler.point.UpdatePoints(user.ID, points); err != nil {
+	if err := handler.store.UpdatePointAndTransactionTime(userID, points); err != nil {
 		handler.logger.Error("Failed to update points", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
-		return
+		return err
 	}
-	handler.logger.Info("Points updated successfully", zap.Int("points", points))
+
+	handler.logger.Info("User points and transaction time updated successfully", zap.Int("points", points))
+	return nil
 }
 
 func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {

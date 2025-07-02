@@ -338,6 +338,8 @@ func (m *mongoStore) CreateInitialBalance(userID, virtualNuban string) error {
 		VirtualNuban: virtualNuban,
 		UserID:       userID,
 		Balance:      balance,
+		CreatedAt:    time.Now().UTC(),
+		UpdateAt:     time.Now().UTC(),
 	}
 
 	_, err = m.col(balColl).InsertOne(context.Background(), initialBalance)
@@ -433,6 +435,7 @@ func (m *mongoStore) UpdateBalance(userID string, balance decimal.Decimal) error
 
 	updateFilter := bson.D{{Key: "$set", Value: bson.D{
 		{Key: "balance", Value: bal},
+		{Key: "updated_at", Value: time.Now().UTC()},
 	}}}
 
 	_, err = m.col(balColl).UpdateOne(ctx, filter, updateFilter)
