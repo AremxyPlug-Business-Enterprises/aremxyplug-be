@@ -274,7 +274,7 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 		Balance string `json:"balance"`
 		UserID  string `json:"user_id"`
 	}{
-		Balance: userBal.String(),
+		Balance: userBal.StringFixed(2),
 		UserID:  bal.UserID,
 	}
 
