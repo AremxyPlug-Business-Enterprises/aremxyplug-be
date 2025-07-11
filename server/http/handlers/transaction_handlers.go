@@ -197,6 +197,142 @@ func (handler *HttpHandler) GetTransactions(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+func (handler *HttpHandler) GetWalletSummary(w http.ResponseWriter, r *http.Request) {
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	id := userDetails.ID
+
+	query := r.URL.Query()
+	page := 1
+	pageSize := 50
+
+	if val := query.Get("page"); val != "" {
+		if p, err := strconv.Atoi(val); err == nil && p > 0 {
+			page = p
+		} else {
+			handler.logger.Error("Invalid page parameter", zap.Error(err))
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Invalid page parameter"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+	}
+
+	filter := map[string]interface{}{
+		"user_id": id,
+	}
+
+	summary, err := handler.store.GetWalletSummary(filter, page)
+	if err != nil {
+		handler.logger.Error("Error fetching wallet summary", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error fetching wallet summary"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	totalPages := int(math.Ceil(float64(summary.TotalCount) / float64(pageSize)))
+
+	result := map[string]interface{}{
+		"page":        page,
+		"page_size":   pageSize,
+		"total":       summary.TotalCount,
+		"total_pages": totalPages,
+		"data":        summary,
+	}
+
+	handler.logger.Info("Wallet summary fetched successfully", zap.Int("total", summary.TotalCount), zap.Int("page", page), zap.Int("pageSize", pageSize))
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": result},
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+
+}
+
+func (handler *HttpHandler) GetSalesSummary(w http.ResponseWriter, r *http.Request) {
+
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	id := userDetails.ID
+
+	query := r.URL.Query()
+	category := query.Get("category")
+	page := 1
+
+	if val := query.Get("page"); val != "" {
+		if p, err := strconv.Atoi(val); err == nil && p > 0 {
+			page = p
+		} else {
+			handler.logger.Error("Invalid page parameter", zap.Error(err))
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Invalid page parameter"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+	}
+
+	filter := map[string]interface{}{
+		"user_id": id,
+	}
+
+	summary, err := handler.store.GetSalesSummary(category, filter, page)
+	if err != nil {
+		handler.logger.Error("Error fetching sales summary", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error fetching sales summary"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	totalPages := int(math.Ceil(float64(summary.TotalCount) / float64(50)))
+
+	result := map[string]interface{}{
+		"page":        page,
+		"page_size":   50,
+		"total":       summary.TotalCount,
+		"total_pages": totalPages,
+		"data":        summary.Summary,
+	}
+
+	handler.logger.Info("Sales summary fetched successfully", zap.Int("total", summary.TotalCount), zap.Int("page", page))
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": result},
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
 func (handler *HttpHandler) fetchTransactionByProduct(orderID, product string) (interface{}, error) {
 	store := handler.store
 

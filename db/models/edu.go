@@ -3,14 +3,13 @@ package models
 import "time"
 
 type EduInfo struct {
-	UserID       string `json:"user_id"`
+	UserID       string
 	Exam_Type    string `json:"exam_type"`
 	Phone_Number string `json:"phone_no"`
 	Amount       string `json:"amount"`
 	Email        string `json:"email"`
 	Quantity     int    `json:"quantity"`
-	Wallet_Type  string `json:"wallet_type"`
-	Name         string `json:"name"`
+	Name         string
 }
 
 type EduApiResponse struct {

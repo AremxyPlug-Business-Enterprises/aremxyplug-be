@@ -20,8 +20,10 @@ var (
 )
 
 var (
-	pointColl       = "points"
-	pointRedeemColl = "point-redeem"
+	pointColl            = "points-balance"
+	pointRedeemColl      = "point-redeem"
+	pointTransactionColl = "point-transaction"
+	referralColl         = "referrals"
 )
 
 func (m *mongoStore) updateReferralCount(referrersCode string) error {
@@ -46,6 +48,27 @@ func (m *mongoStore) updateReferralCount(referrersCode string) error {
 	return nil
 }
 
+func (m *mongoStore) updateReferrersPoint(referrerID string) error {
+	ctx := context.Background()
+
+	// Increment the referrer's point balance by 100 points
+	update := bson.M{"$inc": bson.M{"balance": 100}}
+
+	// Update the points collection for the referrer
+	result, err := m.col(pointColl).UpdateOne(ctx, bson.M{"username": referrerID}, update)
+	if err != nil {
+		m.logger.Error("failed to update referrer's points", zap.Error(err))
+		return fmt.Errorf("failed to update referrer's points: %w", err)
+	}
+
+	if result.MatchedCount == 0 {
+		m.logger.Warn("no matching user found for referral points update", zap.String("referrerID", referrerID))
+		return ErrMatchedCount
+	}
+
+	return nil
+}
+
 func (m *mongoStore) CreateUserReferral(newUserID, referralCode string) error {
 	ctx := context.Background()
 
@@ -58,7 +81,7 @@ func (m *mongoStore) CreateUserReferral(newUserID, referralCode string) error {
 	// If a referral code is provided, resolve the actual user ID
 	if referralCode != "" {
 		var referrer models.User
-		err := m.col("user").FindOne(ctx, bson.M{"invitation_code": referralCode}).Decode(&referrer)
+		err := m.col("user").FindOne(ctx, bson.M{"username": referralCode}).Decode(&referrer)
 		if err != nil {
 			m.logger.Warn("referral code not found or invalid", zap.String("code", referralCode), zap.Error(err))
 		} else {
@@ -76,7 +99,7 @@ func (m *mongoStore) CreateUserReferral(newUserID, referralCode string) error {
 	}
 
 	// Save the referral record
-	if _, err := m.col("referrals").InsertOne(ctx, referral); err != nil {
+	if _, err := m.col(referralColl).InsertOne(ctx, referral); err != nil {
 		return fmt.Errorf("failed to create referral record: %w", err)
 	}
 
@@ -115,7 +138,7 @@ func (m *mongoStore) GetReferredUsers(referrerID string) ([]models.ReferredUserI
 		}},
 	}
 
-	cursor, err := m.col("referrals").Aggregate(ctx, pipeline)
+	cursor, err := m.col(referralColl).Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, fmt.Errorf("aggregation error: %w", err)
 	}
@@ -129,19 +152,64 @@ func (m *mongoStore) GetReferredUsers(referrerID string) ([]models.ReferredUserI
 	return results, nil
 }
 
-func (m *mongoStore) GetPoint(userID string) (models.Points, error) {
-
+func (m *mongoStore) GetPoint(userID string) (models.PointSummary, error) {
 	ctx := context.Background()
+	var summary models.PointSummary
 
-	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
-	points := models.Points{}
+	// 1. Get total point balance from pointColl
+	var points models.Points
+	filter := bson.M{"user_id": userID}
+	err := m.col(pointColl).FindOne(ctx, filter).Decode(&points)
+	if err != nil && err != mongo.ErrNoDocuments {
+		return summary, fmt.Errorf("failed to fetch total points: %v", err)
+	}
+	summary.TotalPoints = points.Balance
 
-	result := m.col("").FindOne(ctx, filter)
-	if err := result.Decode(&points); err != nil {
-		return models.Points{}, nil
+	// 2. Single aggregation for both transaction and referral points
+	agg := bson.A{
+		bson.M{"$match": bson.M{
+			"user_id": userID,
+			"source":  bson.M{"$in": []string{"transaction", "referral"}},
+		}},
+		bson.M{"$group": bson.M{
+			"_id":   "$source",
+			"total": bson.M{"$sum": "$point_earned"},
+		}},
 	}
 
-	return points, nil
+	cursor, err := m.col(pointTransactionColl).Aggregate(ctx, agg)
+	if err != nil {
+		return summary, fmt.Errorf("error aggregating points: %v", err)
+	}
+	defer cursor.Close(ctx)
+
+	// Initialize points
+	summary.TransactionPoints = 0
+	summary.ReferralPoints = 0
+
+	// Process aggregated results
+	for cursor.Next(ctx) {
+		var result struct {
+			ID    string `bson:"_id"`
+			Total int    `bson:"total"`
+		}
+		if err := cursor.Decode(&result); err != nil {
+			continue // Skip invalid entries
+		}
+
+		switch result.ID {
+		case "transaction":
+			summary.TransactionPoints = result.Total
+		case "referral":
+			summary.ReferralPoints = result.Total
+		}
+	}
+
+	if err := cursor.Err(); err != nil {
+		return summary, fmt.Errorf("cursor iteration error: %v", err)
+	}
+
+	return summary, nil
 }
 
 func (m *mongoStore) CreatePointDoc(userID string) error {
@@ -151,7 +219,7 @@ func (m *mongoStore) CreatePointDoc(userID string) error {
 	point := models.Points{
 		UserID:    userID,
 		Balance:   0,
-		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	}
 
 	_, err := m.col(pointColl).InsertOne(ctx, point)
@@ -160,6 +228,45 @@ func (m *mongoStore) CreatePointDoc(userID string) error {
 	}
 
 	return nil
+}
+
+func (m *mongoStore) LogPointTransaction(transaction models.PointTransaction) error {
+	ctx := context.Background()
+
+	// Create a new point transaction document
+	transaction.CreatedAt = time.Now().UTC()
+
+	// Insert the transaction document into the point-transaction collection
+	_, err := m.col(pointTransactionColl).InsertOne(ctx, transaction)
+	if err != nil {
+		return fmt.Errorf("failed to create point transaction document: %v", err)
+	}
+
+	return nil
+}
+
+func (m *mongoStore) GetPointTransactions(userID string, page int) ([]models.PointTransaction, error) {
+	ctx := context.Background()
+
+	// Set the page size and calculate the skip value
+	pageSize := 10
+	skip := (page - 1) * pageSize
+
+	filter := bson.M{"user_id": userID}
+	opts := options.Find().SetSkip(int64(skip)).SetLimit(int64(pageSize)).SetSort(bson.D{{Key: "created_at", Value: -1}})
+
+	cursor, err := m.col(pointTransactionColl).Find(ctx, filter, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch point transactions: %v", err)
+	}
+	defer cursor.Close(ctx)
+
+	var transactions []models.PointTransaction
+	if err := cursor.All(ctx, &transactions); err != nil {
+		return nil, fmt.Errorf("failed to decode point transactions: %v", err)
+	}
+
+	return transactions, nil
 }
 
 func (m *mongoStore) RedeemPoints(userID string, pointsToRedeem int, redeemRate int) (amountRedeemed int, e error) {
@@ -251,4 +358,99 @@ func (m *mongoStore) UpdatePointAndTransactionTime(userID string, pointsEarned i
 	}
 
 	return nil
+}
+
+func (m *mongoStore) UpdatePointAfterVerify(userID string) error {
+
+	ctx := context.Background()
+	session, err := m.mongoClient.StartSession()
+	if err != nil {
+		return fmt.Errorf("failed to start session: %v", err)
+	}
+	defer session.EndSession(ctx)
+
+	_, err = session.WithTransaction(ctx, func(sc mongo.SessionContext) (interface{}, error) {
+		// 1. Fetch referral + referrer in single aggregation
+		pipeline := mongo.Pipeline{
+			{{Key: "$match", Value: bson.D{{Key: "user_id", Value: userID}}}},
+			{{Key: "$lookup", Value: bson.D{
+				{Key: "from", Value: "user"},
+				{Key: "localField", Value: "referrer_id"},
+				{Key: "foreignField", Value: "username"},
+				{Key: "as", Value: "referrer_user"},
+			}}},
+			{{Key: "$unwind", Value: bson.D{{Key: "path", Value: "$referrer_user"}, {Key: "preserveNullAndEmptyArrays", Value: true}}}},
+		}
+		cursor, err := m.col(referralColl).Aggregate(sc, pipeline)
+		if err != nil {
+			return nil, err
+		}
+		defer cursor.Close(sc)
+
+		var referral struct {
+			ReferrerUser *models.User `bson:"referrer_user"`
+		}
+		if cursor.Next(sc) {
+			if err := cursor.Decode(&referral); err != nil {
+				return nil, err
+			}
+		}
+
+		// 2. Prepare bulk operations
+		var pointWrites []mongo.WriteModel
+		var txnWrites []mongo.WriteModel
+
+		// User point update
+		userPointUpdate := mongo.NewUpdateOneModel().
+			SetFilter(bson.M{"user_id": userID}).
+			SetUpdate(bson.D{
+				{Key: "$inc", Value: bson.D{{Key: "balance", Value: 100}}},
+				{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: time.Now()}}},
+			}).
+			SetUpsert(true)
+		pointWrites = append(pointWrites, userPointUpdate)
+
+		// User transaction
+		userTxn := models.PointTransaction{
+			UserID:          userID,
+			TransactionType: "Referral Verification",
+			PointEarned:     100,
+			Source:          "referral",
+			CreatedAt:       time.Now().UTC(),
+		}
+		txnWrites = append(txnWrites, mongo.NewInsertOneModel().SetDocument(userTxn))
+
+		// Referrer operations (if exists)
+		if referral.ReferrerUser != nil {
+			// Referrer point update
+			referrerPointUpdate := mongo.NewUpdateOneModel().
+				SetFilter(bson.M{"user_id": referral.ReferrerUser.ID}).
+				SetUpdate(bson.M{"$inc": bson.M{"balance": 100}})
+			pointWrites = append(pointWrites, referrerPointUpdate)
+
+			// Referrer transaction
+			referrerTxn := models.PointTransaction{
+				UserID:          referral.ReferrerUser.ID,
+				TransactionType: "Referral Verification",
+				PointEarned:     100,
+				Source:          "referral",
+				CreatedAt:       time.Now().UTC(),
+			}
+			txnWrites = append(txnWrites, mongo.NewInsertOneModel().SetDocument(referrerTxn))
+		}
+
+		// 3. Execute bulk writes
+		if len(pointWrites) > 0 {
+			if _, err := m.col(pointColl).BulkWrite(sc, pointWrites); err != nil {
+				return nil, err
+			}
+		}
+		if len(txnWrites) > 0 {
+			if _, err := m.col(pointTransactionColl).BulkWrite(sc, txnWrites); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil
+	})
+	return err
 }

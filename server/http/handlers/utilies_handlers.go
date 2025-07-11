@@ -92,6 +92,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 		}
 
 		data.UserID = id
+		data.Name = userDetails.FullName
 		res, err := handler.eduClient.BuyEduPin(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -119,7 +120,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 
 		pointsEarned := 2
 
-		if err := handler.addPoints(w, id, pointsEarned); err != nil {
+		if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
@@ -314,7 +315,7 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 
 		pointsEarned := 2
 
-		if err := handler.addPoints(w, id, pointsEarned); err != nil {
+		if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
@@ -492,7 +493,7 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 
 		pointsEarned := 2
 
-		if err := handler.addPoints(w, id, pointsEarned); err != nil {
+		if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 

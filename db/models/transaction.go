@@ -24,3 +24,17 @@ type TotalsAggregation struct {
 	TotalInflow  float64 `bson:"totalInflow"`
 	TotalOutflow float64 `bson:"totalOutflow"`
 }
+
+type SalesSummary struct {
+	Summary      []SalesSummaryItem `json:"summary"`
+	TotalCount   int                `json:"total"`
+	TotalInflow  float64            `json:"total_inflow"`
+	TotalOutflow float64            `json:"total_outflow"`
+}
+
+type SalesSummaryItem struct {
+	Product     string    `bson:"product" json:"product"`
+	CreatedAt   time.Time `bson:"created_at" json:"created_at"`
+	Quantity    int       `bson:"quantity" json:"quantity"`
+	TotalAmount float64   `bson:"totalAmount" json:"total_amount"`
+}

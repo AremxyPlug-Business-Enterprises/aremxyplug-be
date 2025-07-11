@@ -110,7 +110,7 @@ func (d *DataConn) BuyData(data telcom.DataInfo) (*telcom.DataResult, error) {
 			RecipientName:          data.Name,
 			ApiID:                  apiResponse.Id,
 		}
-		if err := d.saveTransacation(result); err != nil {
+		if err := d.saveTransaction(result); err != nil {
 			d.logger.Error("Database error try again...", zap.Error(err))
 			return nil, errors.New("Database Insert Error...")
 		}
@@ -153,22 +153,22 @@ func (d *DataConn) BuySpecData(data telcom.SpectranetInfo) (*telcom.SpectranetRe
 
 	trans_content := apiResponse.Content.Transcations
 	result := &telcom.SpectranetResult{
-		UserID:          data.UserID,
-		Network:         data.Network,
-		Product:         data.Product,
-		Plan:            data.Plan,
-		Phone_Number:    trans_content.Phone_Number,
-		No_of_Pins:      trans_content.Quantity,
-		Amount:          trans_content.Amount,
-		ProductDesc:     trans_content.Type,
-		Description:     data.Product,
-		TranscationID:   transactionID,
-		OrderID:         orderid,
-		ReferenceNumber: trans_content.TransactionID,
-		RequestID:       apiResponse.RequestID,
+		UserID:                 data.UserID,
+		Network:                data.Network,
+		Product:                data.Product,
+		Plan:                   data.Plan,
+		Phone_Number:           trans_content.Phone_Number,
+		No_of_Pins:             trans_content.Quantity,
+		Amount:                 trans_content.Amount,
+		TransactionProduct:     trans_content.Type,
+		TransactionDescription: data.Product,
+		TransactionID:          transactionID,
+		OrderID:                orderid,
+		ReferenceNumber:        trans_content.TransactionID,
+		RequestID:              apiResponse.RequestID,
 	}
 
-	if err := d.saveTransacation(result); err != nil {
+	if err := d.saveTransaction(result); err != nil {
 		return nil, d.logAndReturnError("error while saving to database", err)
 	}
 
@@ -204,22 +204,22 @@ func (d *DataConn) BuySmileData(data telcom.SmileInfo) (*telcom.SmileResult, err
 
 	trans_content := apiResponse.Content.Transcations
 	result := &telcom.SmileResult{
-		UserID:          data.UserID,
-		Network:         data.Network,
-		ProductPlan:     trans_content.Product_Desc,
-		Email:           data.Email,
-		AccountID:       data.AccountID,
-		Phone_Number:    data.AccountID,
-		Amount:          trans_content.Amount,
-		Product:         trans_content.Type,
-		Description:     trans_content.Product_Desc,
-		TranscationID:   transactionID,
-		OrderID:         orderid,
-		ReferenceNumber: trans_content.TransactionID,
-		RequestID:       apiResponse.RequestID,
+		UserID:                 data.UserID,
+		Network:                data.Network,
+		ProductPlan:            trans_content.Product_Desc,
+		Email:                  data.Email,
+		AccountID:              data.AccountID,
+		Phone_Number:           data.AccountID,
+		Amount:                 trans_content.Amount,
+		TransactionProduct:     trans_content.Type,
+		TransactionDescription: trans_content.Product_Desc,
+		TransactionID:          transactionID,
+		OrderID:                orderid,
+		ReferenceNumber:        trans_content.TransactionID,
+		RequestID:              apiResponse.RequestID,
 	}
 
-	if err := d.saveTransacation(result); err != nil {
+	if err := d.saveTransaction(result); err != nil {
 		return nil, d.logAndReturnError("error while saving to database", err)
 	}
 
@@ -449,7 +449,7 @@ func (d *DataConn) buySpecData(data telcom.SpectranetInfo) (*http.Response, erro
 }
 
 // saveTransaction saves the details of a transaction to the database
-func (d *DataConn) saveTransacation(details interface{}) error {
+func (d *DataConn) saveTransaction(details interface{}) error {
 	err := d.dbConn.SaveDataTransaction(details)
 	if err != nil {
 		d.logger.Error("Error saving transaction to database", zap.Any("details", details), zap.Error(err))
