@@ -376,5 +376,7 @@ func getTransactions(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/transactions", func(router chi.Router) {
 		router.Get("/", httpHandler.GetTransactions)
 		router.Get("/{orderID}", httpHandler.GetTransactions)
+		router.Get("/sales-summary", httpHandler.GetSalesSummary)
+		router.Get("/wallet-summary", httpHandler.GetWalletSummary)
 	})
 }

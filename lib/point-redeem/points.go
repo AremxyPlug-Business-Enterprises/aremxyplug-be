@@ -40,26 +40,26 @@ func (p *PointConfig) RedeemPoints(userID string, points int) (models.PointRedee
 		Points_Redeemed:        points,
 		Amount_Redeemed:        float64(redeemedAmount),
 		Redeemed_Rate:          redeemRateStr,
-		TransactionProduct:     "",
-		TransactionDescription: "",
+		TransactionProduct:     "Point Redeem",
+		TransactionDescription: "Points redeemed for rewards",
 		TransactionID:          transactionID,
 		OrderID:                orderID,
 		CreatedAt:              time.Now().UTC(),
 	}
 
 	if err := p.db.CreatePointRedeemDoc(redeemDoc); err != nil {
-		return models.PointRedeem{}, nil
+		return models.PointRedeem{}, err
 	}
 
 	return redeemDoc, nil
 
 }
 
-func (p *PointConfig) GetPoints(userID string) (models.Points, error) {
+func (p *PointConfig) GetPoints(userID string) (models.PointSummary, error) {
 
 	point, err := p.db.GetPoint(userID)
 	if err != nil {
-		return models.Points{}, err
+		return models.PointSummary{}, err
 	}
 
 	return point, nil
@@ -70,6 +70,18 @@ func (p *PointConfig) UserPoints(userID string) error {
 	err := p.db.CreatePointDoc(userID)
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (p *PointConfig) CreatePointTransaction(txn models.PointTransaction) error {
+	txn.CreatedAt = time.Now().UTC()
+	txn.TransactionID = randomgen.GenerateTransactionID("pnt")
+
+	err := p.db.LogPointTransaction(txn)
+	if err != nil {
+		return fmt.Errorf("failed to create point transaction: %v", err)
 	}
 
 	return nil

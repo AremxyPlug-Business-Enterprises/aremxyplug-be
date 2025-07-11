@@ -77,6 +77,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 
 	to := cases.Title(language.English)
 	full_name := to.String(user.FullName)
+	username := to.String(user.Username)
 
 	validUser, field, err := handler.isValidNewUser(user)
 	if err != nil {
@@ -97,7 +98,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		ID:              userId,
 		FullName:        full_name,
 		Email:           user.Email,
-		Username:        user.Username,
+		Username:        username,
 		Password:        string(hashedPassword),
 		PhoneNumber:     user.PhoneNumber,
 		Country:         user.Country,

@@ -30,10 +30,13 @@ type Extras interface {
 	GetReferredUsers(referrerID string) ([]models.ReferredUserInfo, error)
 	CreatePointDoc(userID string) error
 	RedeemPoints(userID string, pointsToRedeem int, redeemRate int) (amountRedeemed int, e error)
-	GetPoint(userID string) (models.Points, error)
+	GetPoint(userID string) (models.PointSummary, error)
 	GetChart(userID string, rangeType string, fromTime time.Time, toTime time.Time) (models.StatsResponse, error)
 	UpdatePointAndTransactionTime(userID string, pointsEarned int) error
 	CreatePointRedeemDoc(redeem models.PointRedeem) error
+	LogPointTransaction(transaction models.PointTransaction) error
+	GetPointTransactions(userID string, page int) ([]models.PointTransaction, error)
+	UpdatePointAfterVerify(userID string) error
 }
 
 type BankStore interface {
@@ -105,4 +108,6 @@ type UtilitiesStore interface {
 
 type TransactionStore interface {
 	GetTransactions(filter map[string]interface{}, page, pageSize int) (models.TransactionResponse, error)
+	GetSalesSummary(category string, filter map[string]interface{}, page int) (models.SalesSummary, error)
+	GetWalletSummary(filter map[string]interface{}, page int) (models.TransactionResponse, error)
 }

@@ -6,6 +6,7 @@ type Referral struct {
 	UserID     string    `json:"user_id" bson:"user_id"`
 	ReferrerID string    `json:"referrerID" bson:"referrerID"`
 	ReferredAt time.Time `json:"referred_at" bson:"referred_at"`
+	IsVerified bool      `json:"is_verified" bson:"is_verified"`
 	IsActive   bool      `json:"is_active" bson:"is_active"`
 }
 
@@ -20,29 +21,23 @@ type ReferredUserInfo struct {
 type Points struct {
 	UserID    string    `json:"user_id" bson:"user_id"`
 	Balance   int       `json:"balance" bson:"balance"`
-	CreatedAt time.Time `json:"created_at" bson:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" bson:"updated_at"`
 }
 
-type HourlyStat struct {
-	Hour   int     `json:"hour"`
-	Amount float64 `json:"amount"`
-	Count  int     `json:"count"`
+type PointTransaction struct {
+	UserID              string    `json:"user_id" bson:"user_id"`
+	TransactionType     string    `json:"transaction_type" bson:"transaction_type"`         // e.g., "earn", "redeem"
+	PointEarned         int       `json:"point_earned" bson:"point_earned"`                 // Can be negative for redemption
+	OriginalTransaction string    `json:"original_transaction" bson:"original_transaction"` // Reference to original txn, like txn ID
+	Source              string    `json:"source" bson:"source"`                             // e.g., "referral", "airtime_purchase"
+	TransactionID       string    `json:"transaction_id" bson:"transaction_id"`             // Unique ID for this point transaction
+	CreatedAt           time.Time `json:"created_at" bson:"created_at"`
 }
 
-type TransactionPoint struct {
-	CreatedAt time.Time `bson:"created_at" json:"created_at"`
-	Amount    float64   `bson:"amount" json:"amount"`
-}
-
-type StatsResponse struct {
-	TotalInflowCount    int                `json:"totalInflowCount"`
-	TotalInflowAmount   float64            `json:"totalInflowAmount"`
-	TotalOutflowCount   int                `json:"totalOutflowCount"`
-	TotalOutflowAmount  float64            `json:"totalOutflowAmount"`
-	InflowHourly        []HourlyStat       `json:"inflowHourly"`
-	OutflowHourly       []HourlyStat       `json:"outflowHourly"`
-	InflowTransactions  []TransactionPoint `json:"inflowTransactions"`
-	OutflowTransactions []TransactionPoint `json:"outflowTransactions"`
+type PointSummary struct {
+	TotalPoints       int `json:"total_points"`
+	TransactionPoints int `json:"transaction_points"`
+	ReferralPoints    int `json:"referral_points"`
 }
 
 type PointRedeem struct {

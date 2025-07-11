@@ -90,12 +90,18 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 			handler.logger.Error("Failed to get points", zap.Error(err))
 		}
 
-		json.NewEncoder(w).Encode(points)
+		if err := json.NewEncoder(w).Encode(points); err != nil {
+			handler.logger.Error("Failed to encode points response", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
 
-		dummy_points := 30
-		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"available_points": dummy_points}}
+		handler.logger.Info("Points retrieved successfully", zap.Int("points", points.TotalPoints))
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": points}}
 		json.NewEncoder(w).Encode(response)
-		handler.logger.Info("Points retrieved successfully", zap.Int("available_points", dummy_points))
 	}
 	// TODO: implement logic for point balance usage for POST requests
 
@@ -125,10 +131,26 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (handler *HttpHandler) addPoints(w http.ResponseWriter, userID string, points int) error {
+func (handler *HttpHandler) addPoints(w http.ResponseWriter, userID string, points int, transactiontype string, originalTxnID string, source string) error {
 
 	if err := handler.store.UpdatePointAndTransactionTime(userID, points); err != nil {
 		handler.logger.Error("Failed to update points", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return err
+	}
+
+	transaction := models.PointTransaction{
+		UserID:              userID,
+		TransactionType:     transactiontype,
+		PointEarned:         points,
+		OriginalTransaction: originalTxnID,
+		Source:              source,
+	}
+
+	if err := handler.point.CreatePointTransaction(transaction); err != nil {
+		handler.logger.Error("Failed to create point transaction", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
@@ -149,6 +171,7 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	id := user.ID
 
 	if r.Method == "POST" {
 		type newPinInput struct {
@@ -183,6 +206,12 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
+		}
+
+		pointsEarned := 100
+
+		if err := handler.addPoints(w, id, pointsEarned, "Sign-Up Points", "", "referrals"); err != nil {
+			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
 		w.WriteHeader(http.StatusCreated)
@@ -454,6 +483,10 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
+		if err := handler.store.UpdatePointAfterVerify(user.ID); err != nil {
+			handler.logger.Warn("Failed to update points after BVN verification", zap.Error(err))
+		}
+
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": result}}
 		json.NewEncoder(w).Encode(response)
 		handler.logger.Info("BVN verified successfully", zap.String("bvn", req.BVN))
@@ -493,6 +526,10 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
+		}
+
+		if err := handler.store.UpdatePointAfterVerify(user.ID); err != nil {
+			handler.logger.Warn("Failed to update points after NIN verification", zap.Error(err))
 		}
 
 		// Before we send back the response, we have to update the status of the user in the database
