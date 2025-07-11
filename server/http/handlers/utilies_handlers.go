@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
@@ -93,17 +94,45 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 
 		data.UserID = id
 		data.Name = userDetails.FullName
-		res, err := handler.eduClient.BuyEduPin(data)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Failed to buy EduPin", zap.Error(err))
-			response := responseFormat.CustomResponse{
-				Status:  http.StatusInternalServerError,
-				Message: "error",
-				Data:    map[string]interface{}{"data": "Failed to purchase education pin"},
-			}
-			json.NewEncoder(w).Encode(response)
-			return
+		// res, err := handler.eduClient.BuyEduPin(data)
+		// if err != nil {
+		// 	w.WriteHeader(http.StatusInternalServerError)
+		// 	handler.logger.Error("Failed to buy EduPin", zap.Error(err))
+		// 	response := responseFormat.CustomResponse{
+		// 		Status:  http.StatusInternalServerError,
+		// 		Message: "error",
+		// 		Data:    map[string]interface{}{"data": "Failed to purchase education pin"},
+		// 	}
+		// 	json.NewEncoder(w).Encode(response)
+		// 	return
+		// }
+
+		receiptAmount, _ := strconv.ParseFloat(data.Amount, 64)
+		reference := "ID93717490080"
+		transactionID := "AP-EDU-UMTIQ"
+		status := "success"
+		txnDesc := ""
+		orderID := 7888346081
+		pinGenerated := []string{
+			"430402339547<=>NRCP10455329",
+		}
+
+		result := &models.EduResponse{
+			UserID:                 data.UserID,
+			Amount:                 receiptAmount,
+			Exam_Type:              data.Exam_Type,
+			Quantity:               data.Quantity,
+			PhoneNumber:            data.Phone_Number,
+			ReferenceNumber:        reference,
+			FullName:               data.Name,
+			Email:                  data.Email,
+			TransactionProduct:     data.Exam_Type,
+			Status:                 status,
+			TransactionDescription: txnDesc,
+			OrderID:                orderID,
+			Pin_Generated:          pinGenerated,
+			CreatedAt:              time.Now().UTC(),
+			TransactionID:          transactionID,
 		}
 
 		if err := handler.updateBalance(id, newBal); err != nil {
@@ -120,7 +149,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 
 		pointsEarned := 2
 
-		if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
+		if err := handler.addPoints(w, id, pointsEarned, result.TransactionProduct, result.TransactionID, "transaction"); err != nil {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
@@ -129,7 +158,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			Status:  http.StatusOK,
 			Message: "success",
 			Data: map[string]interface{}{
-				"data": res,
+				"data": result,
 			},
 		}
 		json.NewEncoder(w).Encode(response)
