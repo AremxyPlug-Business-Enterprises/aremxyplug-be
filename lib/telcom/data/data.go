@@ -20,11 +20,11 @@ import (
 )
 
 var (
-	api   = os.Getenv("DONTECH")
-	token = "Token " + os.Getenv("DONTECH_AUTH")
-	vtapi = os.Getenv("VTPASS_SANDBOX")
-	pk    = os.Getenv("APIKey")
-	sk    = os.Getenv("SK")
+	dontechapi = os.Getenv("DONTECH")
+	token      = "Token " + os.Getenv("DONTECH_AUTH")
+	vtapi      = os.Getenv("VTPASS_SANDBOX")
+	pk         = os.Getenv("APIKey")
+	sk         = os.Getenv("SK")
 )
 
 type DataConn struct {
@@ -41,10 +41,36 @@ func NewData(dbConn db.TelcomStore, logger *zap.Logger) *DataConn {
 
 // BuyData makes a call to the api to initiate a purchase
 func (d *DataConn) BuyData(data telcom.DataInfo) (*telcom.DataResult, error) {
-	data.Ported_number = true
+
+	switch data.ProviderID {
+	case 1: // Dontech
+		return d.buyDontechData(data)
+	case 2: // Easyaccessapi
+		return nil, errors.New("Easyaccessapi is not supported yet")
+	case 3: // 247api
+		return nil, errors.New("247api is not supported yet")
+	default:
+		return nil, errors.New("Invalid Provider ID")
+	}
+
+}
+
+func (d *DataConn) buyDontechData(data telcom.DataInfo) (*telcom.DataResult, error) {
+
+	reqData := struct {
+		Network      int    `json:"network"`
+		Plan         int    `json:"plan"`
+		MobileNumber string `json:"mobile_number"`
+		PortedNumber bool   `json:"Ported_number"`
+	}{
+		Network:      data.Network,
+		Plan:         data.PlanID,
+		MobileNumber: data.Mobile_Num,
+		PortedNumber: true,
+	}
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(&data); err != nil {
+	if err := json.NewEncoder(&buf).Encode(&reqData); err != nil {
 		return nil, d.logAndReturnError("unable to encode data", err)
 	}
 	id, err := randomgen.GenerateOrderID()
@@ -53,7 +79,7 @@ func (d *DataConn) BuyData(data telcom.DataInfo) (*telcom.DataResult, error) {
 		return nil, d.logAndReturnError("Could not generate orderID", err)
 	}
 
-	req, err := http.NewRequest("POST", api+"/data/", &buf)
+	req, err := http.NewRequest("POST", dontechapi+"/data/", &buf)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +186,7 @@ func (d *DataConn) BuySpecData(data telcom.SpectranetInfo) (*telcom.SpectranetRe
 		Phone_Number:           trans_content.Phone_Number,
 		No_of_Pins:             trans_content.Quantity,
 		Amount:                 trans_content.Amount,
-		TransactionProduct:     trans_content.Type,
+		TransactionProduct:     "Data Top-up",
 		TransactionDescription: data.Product,
 		TransactionID:          transactionID,
 		OrderID:                orderid,
@@ -211,7 +237,7 @@ func (d *DataConn) BuySmileData(data telcom.SmileInfo) (*telcom.SmileResult, err
 		AccountID:              data.AccountID,
 		Phone_Number:           data.AccountID,
 		Amount:                 trans_content.Amount,
-		TransactionProduct:     trans_content.Type,
+		TransactionProduct:     "Data Top-up",
 		TransactionDescription: trans_content.Product_Desc,
 		TransactionID:          transactionID,
 		OrderID:                orderid,
@@ -251,7 +277,7 @@ func (d *DataConn) GetUserTransactions(username string) ([]telcom.DataResult, er
 // PingUser is a test function to ping the api
 func (d *DataConn) PingUser(w http.ResponseWriter) (*http.Response, error) {
 
-	req, err := http.NewRequest("GET", api+"/user/", nil)
+	req, err := http.NewRequest("GET", dontechapi+"/user/", nil)
 	req.Header.Set("Access-Control-Allow-Origin", "*")
 	req.Header.Set("Authorization", "Token "+token)
 	if err != nil {
@@ -267,7 +293,7 @@ func (d *DataConn) PingUser(w http.ResponseWriter) (*http.Response, error) {
 
 	statusCode := res.StatusCode
 
-	log.Println(api)
+	log.Println(dontechapi)
 
 	log.Println("StatusCode: ", statusCode)
 
@@ -357,7 +383,7 @@ func (d *DataConn) QueryTransaction(id int) error {
 
 	pid := strconv.Itoa(id)
 
-	req, err := http.NewRequest("POST", api+"/data/"+pid, nil)
+	req, err := http.NewRequest("POST", dontechapi+"/data/"+pid, nil)
 	req.Header.Set("Access-Control-Allow-Origin", "*")
 	req.Header.Add("Authorization", "Token "+token)
 	req.Header.Add("Content-Type", "application/json")
