@@ -3,13 +3,14 @@ package telcom
 import "time"
 
 type DataInfo struct {
-	UserID        string
-	Network       int    `json:"network"`
-	Plan          int    `json:"plan"`
-	Mobile_Num    string `json:"mobile_number"`
-	Name          string `json:"name"`
-	Ported_number bool   `json:"Ported_number"`
-	FullName      string
+	UserID     string
+	Network    int    `json:"network"`
+	Plan       int    `json:"plan"`
+	Mobile_Num string `json:"mobile_number"`
+	Name       string `json:"name"`
+	FullName   string
+	ProviderID int
+	PlanID     int
 }
 
 type DataResult struct {

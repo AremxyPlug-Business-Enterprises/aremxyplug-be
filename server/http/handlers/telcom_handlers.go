@@ -413,6 +413,8 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 
 		data.FullName = fullName
 		data.UserID = id
+		data.ProviderID = plan.ProviderID
+		data.PlanID = int(plan.PlanID.Int64)
 		res, err := handler.dataClient.BuyData(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)

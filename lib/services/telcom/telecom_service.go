@@ -12,7 +12,7 @@ type TelecomProducts interface {
 	UpdatePlan(id int, data models.PlanUpdate) error
 	DeletePlan(id int) error
 	GetPlans(id int) ([]models.Plan, error)
-	GetPlanByID(id int) (*models.Plan, error)
+	GetPlanByID(planID int) (*models.Plan, error)
 }
 
 type TelecomServiceImpl struct {
@@ -82,13 +82,13 @@ func (s *TelecomServiceImpl) GetPlans(id int) ([]models.Plan, error) {
 	return plans, nil
 }
 
-func (s *TelecomServiceImpl) GetPlanByID(id int) (*models.Plan, error) {
-	s.logger.Info("Fetching plan by ID", zap.Int("id", id))
-	plan, err := s.store.GetPlanByID(id)
+func (s *TelecomServiceImpl) GetPlanByID(planID int) (*models.Plan, error) {
+	s.logger.Info("Fetching plan by ID", zap.Int("id", planID))
+	plan, err := s.store.GetPlanByID(planID)
 	if err != nil {
 		s.logger.Error("Error fetching plan by ID", zap.Error(err))
 		return nil, err
 	}
-	s.logger.Info("Fetched plan by ID successfully", zap.Int("id", id))
+	s.logger.Info("Fetched plan by ID successfully", zap.Int("id", planID))
 	return plan, nil
 }

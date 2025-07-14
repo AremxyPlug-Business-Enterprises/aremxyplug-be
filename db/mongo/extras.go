@@ -48,27 +48,6 @@ func (m *mongoStore) updateReferralCount(referrersCode string) error {
 	return nil
 }
 
-func (m *mongoStore) updateReferrersPoint(referrerID string) error {
-	ctx := context.Background()
-
-	// Increment the referrer's point balance by 100 points
-	update := bson.M{"$inc": bson.M{"balance": 100}}
-
-	// Update the points collection for the referrer
-	result, err := m.col(pointColl).UpdateOne(ctx, bson.M{"username": referrerID}, update)
-	if err != nil {
-		m.logger.Error("failed to update referrer's points", zap.Error(err))
-		return fmt.Errorf("failed to update referrer's points: %w", err)
-	}
-
-	if result.MatchedCount == 0 {
-		m.logger.Warn("no matching user found for referral points update", zap.String("referrerID", referrerID))
-		return ErrMatchedCount
-	}
-
-	return nil
-}
-
 func (m *mongoStore) CreateUserReferral(newUserID, referralCode string) error {
 	ctx := context.Background()
 
