@@ -79,6 +79,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	to := cases.Title(language.English)
 	full_name := to.String(user.FullName)
 	username := to.String(user.Username)
+	email := cases.Lower(language.English).String(user.Email)
 
 	validUser, field, err := handler.isValidNewUser(user)
 	if err != nil {
@@ -98,7 +99,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	newUser := models.User{
 		ID:              userId,
 		FullName:        full_name,
-		Email:           user.Email,
+		Email:           email,
 		Username:        username,
 		Password:        string(hashedPassword),
 		PhoneNumber:     user.PhoneNumber,
@@ -158,7 +159,12 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	user, err := handler.store.GetUserByUsernameOrEmail(userlogin.Email, userlogin.Username)
+
+	to := cases.Title(language.English)
+	username := to.String(userlogin.Username)
+	email := cases.Lower(language.English).String(userlogin.Email)
+
+	user, err := handler.store.GetUserByUsernameOrEmail(email, username)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		response := responseFormat.CustomResponse{Status: http.StatusNotFound, Message: "user not found", Data: map[string]interface{}{"data": "user not found"}}
