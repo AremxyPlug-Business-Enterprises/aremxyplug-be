@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"go.uber.org/zap"
@@ -37,9 +38,25 @@ func NewSQLConn(sshClient *ssh.Client, logger *zap.Logger) (*SqlStore, error) {
 		return nil, fmt.Errorf("mysql open: %w", err)
 	}
 
+	// Connection pool settings
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(10)
+
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("mysql ping: %w", err)
 	}
+
+	// Start MySQL keep-alive goroutine
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := db.Ping(); err != nil {
+				logger.Warn("MySQL keep-alive ping failed", zap.Error(err))
+			}
+		}
+	}()
 
 	log.Println("Connected to MySQL via SSH tunnel")
 	return &SqlStore{
