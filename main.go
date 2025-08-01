@@ -132,5 +132,18 @@ func createSSHClient() (*ssh.Client, error) {
 		return nil, fmt.Errorf("SSH connection failed: %w", err)
 	}
 
+	// Start SSH keep-alive goroutine
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			_, _, err := sshClient.SendRequest("keepalive@openssh.com", true, nil)
+			if err != nil {
+				fmt.Printf("SSH keep-alive failed: %v", err)
+				return
+			}
+		}
+	}()
+
 	return sshClient, nil
 }
