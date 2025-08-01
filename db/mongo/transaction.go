@@ -285,19 +285,39 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 				}}})
 
 				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+					"parts": bson.M{"$split": bson.A{"$product", " "}},
+				}}})
+
+				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
 					"normalizedProduct": bson.M{
-						"$trim": bson.M{
+						"$reduce": bson.M{
 							"input": bson.M{
-								"$regexReplace": bson.M{
-									"input":       "$product",
-									"regex":       `\s*[\d.]+\s*(GB|MB)\s*`,
-									"replacement": "",
-									"options":     "i",
+								"$cond": bson.A{
+									bson.M{
+										"$regexMatch": bson.M{
+											"input":   bson.M{"$arrayElemAt": bson.A{"$parts", 0}},
+											"regex":   "^[0-9.]+(MB|GB)?$",
+											"options": "i",
+										},
+									},
+									bson.M{"$slice": bson.A{"$parts", 1, bson.M{"$size": "$parts"}}},
+									"$parts",
 								},
 							},
-							"chars": " ",
+							"initialValue": "",
+							"in": bson.M{
+								"$cond": bson.A{
+									bson.M{"$eq": bson.A{"$$value", ""}},
+									"$$this",
+									bson.M{"$concat": bson.A{"$$value", " ", "$$this"}},
+								},
+							},
 						},
 					},
+				}}})
+
+				pipeline = append(pipeline, bson.D{{Key: "$project", Value: bson.M{
+					"parts": 0,
 				}}})
 
 			case collection == "edu":

@@ -291,6 +291,33 @@ func (m *mongoStore) UpdateNINField(user models.User) error {
 	return nil
 }
 
+func (m *mongoStore) UpdateEmail(id, email string) error {
+	ctx := context.Background()
+	filter := bson.M{"id": id}
+	update := bson.M{"$set": bson.M{"email": email}}
+	coll, _ := m.userColl()
+	_, err := coll.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+func (m *mongoStore) UpdatePhone(id, phone string) error {
+	ctx := context.Background()
+	filter := bson.M{"id": id}
+	update := bson.M{"$set": bson.M{"phone_number": phone}}
+	coll, _ := m.userColl()
+	_, err := coll.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m *mongoStore) VerifyUser(identifier string) (*models.User, error) {
 	userColl := m.col(models.UserCollectionName)
 	ctx := context.Background()

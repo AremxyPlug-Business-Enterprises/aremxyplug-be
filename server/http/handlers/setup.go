@@ -44,6 +44,7 @@ const (
 	resetPinAlias      = "reset-pin"
 	signInVerification = "signin-verification"
 	welcomeMessage     = "verify-email"
+	changeEmail        = "email-change"
 )
 
 var validate = validator.New()

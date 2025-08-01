@@ -157,6 +157,8 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		getTransactions(authRouter, httpHandler)
 
+		updateRoutes(authRouter, httpHandler)
+
 		authRouter.Get("/chart", httpHandler.Chart)
 
 	})
@@ -174,6 +176,19 @@ func setJSONContentType(next http.Handler) http.Handler {
 func healthCheck(w http.ResponseWriter, r *http.Request) {
 	render.Status(r, http.StatusOK)
 	render.Data(w, r, []byte("Ok"))
+}
+
+func updateRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/change-email", func(router chi.Router) {
+		router.Post("/", httpHandler.ChangeEmail)
+		router.Post("/update", httpHandler.UpdateEmail)
+	})
+
+	r.Route("/change-phone", func(router chi.Router) {
+		router.Post("/", httpHandler.ChangePhoneNumber)
+		router.Post("/update", httpHandler.UpdatePhoneNumber)
+	})
+
 }
 
 func dataRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {

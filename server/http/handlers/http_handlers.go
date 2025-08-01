@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -367,6 +368,185 @@ func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusCreated)
 	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"data": "Password updated successfully"}}
 	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) ChangeEmail(w http.ResponseWriter, r *http.Request) {
+
+	user, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	payload := struct {
+		NewEmail string `json:"new_email"`
+	}{}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		handler.logger.Error("error decoding request body", zap.Error(err))
+		respondWithError(w, http.StatusBadRequest, "error", errors.New("error decoding request payload"))
+		return
+	}
+
+	user.Email = payload.NewEmail
+	if err := handler.sendOTP(user, "Email Change", changeEmail); err != nil {
+		handler.logger.Error("failed to send OTP", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data: map[string]interface{}{
+			"message": "an email with otp has been sent, input to update your email",
+		},
+	}
+	json.NewEncoder(w).Encode(response)
+
+}
+
+func (handler *HttpHandler) UpdateEmail(w http.ResponseWriter, r *http.Request) {
+
+	user, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	payload := struct {
+		New_Email string `json:"new_phone"`
+		OTP       string `json:"otp"`
+	}{}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		handler.logger.Error("error decoding request body", zap.Error(err))
+		respondWithError(w, http.StatusBadRequest, "error", errors.New("error decoding request payload"))
+		return
+	}
+
+	valid, err := handler.otp.ValidateOTP(payload.OTP, payload.New_Email)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if !valid {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Println("otp verification failed at validation")
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "otp verification failed"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if err := handler.store.UpdateEmail(user.ID, payload.New_Email); err != nil {
+		handler.logger.Error("failed to update phone number", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data: map[string]interface{}{
+			"message": "email successfully updated",
+		},
+	}
+	json.NewEncoder(w).Encode(response)
+
+}
+
+func (handler *HttpHandler) ChangePhoneNumber(w http.ResponseWriter, r *http.Request) {
+
+	payload := struct {
+		New_Phone string `json:"new_phone"`
+	}{}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		handler.logger.Error("error decoding request body", zap.Error(err))
+		respondWithError(w, http.StatusBadRequest, "error", errors.New("error decoding request payload"))
+		return
+	}
+
+	err := handler.smsClient.SendSMS(payload.New_Phone)
+	if err != nil {
+		handler.logger.Error("Failed to send OTP", zap.String("phone", payload.New_Phone), zap.Error(err))
+		respondWithError(w, http.StatusInternalServerError, "failed to send otp", err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data: map[string]interface{}{
+			"message": "phone change otp sent",
+		},
+	}
+	json.NewEncoder(w).Encode(response)
+
+}
+
+func (handler *HttpHandler) UpdatePhoneNumber(w http.ResponseWriter, r *http.Request) {
+
+	user, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	payload := struct {
+		New_Phone string `json:"new_phone"`
+		OTP       string `json:"otp"`
+	}{}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		handler.logger.Error("error decoding request body", zap.Error(err))
+		respondWithError(w, http.StatusBadRequest, "error", errors.New("error decoding request payload"))
+		return
+	}
+
+	err = handler.smsClient.VerifyToken(payload.OTP, payload.New_Phone)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error", err)
+		return
+	}
+
+	if err := handler.store.UpdatePhone(user.ID, payload.New_Phone); err != nil {
+		handler.logger.Error("failed to update phone number", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data: map[string]interface{}{
+			"message": "phone number successfully updated",
+		},
+	}
+	json.NewEncoder(w).Encode(response)
+
 }
 
 func (handler *HttpHandler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
