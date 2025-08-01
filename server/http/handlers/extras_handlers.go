@@ -100,7 +100,7 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 
 		handler.logger.Info("Points retrieved successfully", zap.Int("points", points.TotalPoints))
 		w.WriteHeader(http.StatusOK)
-		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": points}}
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"point": points}}
 		json.NewEncoder(w).Encode(response)
 	}
 	// TODO: implement logic for point balance usage for POST requests

@@ -165,6 +165,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	email := cases.Lower(language.English).String(userlogin.Email)
 
 	user, err := handler.store.GetUserByUsernameOrEmail(email, username)
+	log.Printf("%+v", user)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		response := responseFormat.CustomResponse{Status: http.StatusNotFound, Message: "user not found", Data: map[string]interface{}{"data": "user not found"}}
