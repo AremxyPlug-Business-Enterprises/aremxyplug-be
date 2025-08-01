@@ -20,11 +20,15 @@ import (
 )
 
 var (
-	dontechapi = os.Getenv("DONTECH")
-	token      = "Token " + os.Getenv("DONTECH_AUTH")
-	vtapi      = os.Getenv("VTPASS_SANDBOX")
-	pk         = os.Getenv("APIKey")
-	sk         = os.Getenv("SK")
+	dontechapi      = os.Getenv("DONTECH")
+	dontechToken    = "Token " + os.Getenv("DONTECH_AUTH")
+	easyaccessapi   = os.Getenv("EASYACCESS")
+	easyaccessToken = os.Getenv("EASYACCESS_AUTH")
+	api247          = os.Getenv("247API_BASE_URL")
+	apiKey247       = "Token " + os.Getenv("247API_API_KEY")
+	vtapi           = os.Getenv("VTPASS_SANDBOX")
+	pk              = os.Getenv("APIKey")
+	sk              = os.Getenv("SK")
 )
 
 type DataConn struct {
@@ -40,22 +44,22 @@ func NewData(dbConn db.TelcomStore, logger *zap.Logger) *DataConn {
 }
 
 // BuyData makes a call to the api to initiate a purchase
-func (d *DataConn) BuyData(data telcom.DataInfo) (*telcom.DataResult, error) {
+func (d *DataConn) BuyData(data DataInfo) (*telcom.DataResult, error) {
 
 	switch data.ProviderID {
 	case 1: // Dontech
 		return d.buyDontechData(data)
 	case 2: // Easyaccessapi
-		return nil, errors.New("Easyaccessapi is not supported yet")
+		return d.buyEasyaccessData(data)
 	case 3: // 247api
-		return nil, errors.New("247api is not supported yet")
+		return d.buy247Data(data)
 	default:
 		return nil, errors.New("Invalid Provider ID")
 	}
 
 }
 
-func (d *DataConn) buyDontechData(data telcom.DataInfo) (*telcom.DataResult, error) {
+func (d *DataConn) buyDontechData(data DataInfo) (*telcom.DataResult, error) {
 
 	reqData := struct {
 		Network      int    `json:"network"`
@@ -84,7 +88,7 @@ func (d *DataConn) buyDontechData(data telcom.DataInfo) (*telcom.DataResult, err
 		return nil, err
 	}
 	//req.Header.Set("Access-Control-Allow-Origin", "*")
-	req.Header.Add("Authorization", token)
+	req.Header.Add("Authorization", dontechToken)
 	req.Header.Add("Content-Type", "application/json")
 
 	client := &http.Client{}
@@ -94,7 +98,7 @@ func (d *DataConn) buyDontechData(data telcom.DataInfo) (*telcom.DataResult, err
 	}
 	defer resp.Body.Close()
 
-	apiResponse := telcom.APIResponse{}
+	apiResponse := dontechAPIResponse{}
 
 	log.Println(resp.StatusCode)
 	if resp.StatusCode == http.StatusCreated {
@@ -151,6 +155,197 @@ func (d *DataConn) buyDontechData(data telcom.DataInfo) (*telcom.DataResult, err
 		log.Print(string(body))
 		return nil, fmt.Errorf("%v", resp.Status)
 	}
+
+}
+
+func (d *DataConn) buyEasyaccessData(data DataInfo) (*telcom.DataResult, error) {
+	// 	01 for MTN
+	// 02 for GLO
+	// 03 for AIRTEL
+	// 04 for 9MOBILE
+	requestID := randomgen.GenerateRequestID()
+
+	var network string
+	var networkStr string
+	switch data.Network {
+	case 1:
+		network = "01" //
+		networkStr = "MTN"
+	case 2:
+		network = "02" // GLO
+		networkStr = "GLO"
+	case 3:
+		network = "04" // 9MOBILE
+		networkStr = "9MOBILE"
+	case 4:
+		network = "03" // AIRTEL
+		networkStr = "AIRTEL"
+	default:
+		return nil, errors.New("Invalid Network ID")
+	}
+
+	planID := strconv.Itoa(data.PlanID)
+
+	formdata := url.Values{
+		"network":          {network},
+		"mobileno":         {data.Mobile_Num},
+		"dataplan":         {planID},
+		"client_reference": {requestID},
+	}
+
+	body := bytes.NewBufferString(formdata.Encode())
+
+	url := fmt.Sprintf("%s/%s.php", easyaccessapi, "data")
+
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("AuthorizationToken", easyaccessToken)
+	req.Header.Set("cache-control", "no-cache")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	apiResponse := easyaccessResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+		if err == io.EOF {
+			return nil, d.logAndReturnError("Empty response body retured from server", err)
+		}
+		return nil, d.logAndReturnError("error while decoding json", err)
+	}
+	if apiResponse.Status != "success" {
+		d.logger.Error("server response error", zap.Any("apiresponse", apiResponse))
+		return nil, d.logAndReturnError("failed to purchase data", errors.New(apiResponse.Status))
+	}
+	transactionID := randomgen.GenerateTransactionID("dat")
+	id, err := randomgen.GenerateOrderID()
+	if err != nil {
+		d.logger.Error("Could not generate orderID...", zap.Error(err))
+		return nil, d.logAndReturnError("Could not generate orderID", err)
+	}
+
+	transactionDesc := data.Plan_Name + " " + data.PlanSize
+
+	result := &telcom.DataResult{
+		UserID:                 data.UserID,
+		Status:                 apiResponse.Status,
+		Network:                networkStr,
+		NetworkProduct:         data.Plan_Name,
+		PhoneNumber:            data.Mobile_Num,
+		ReferenceNumber:        requestID,
+		Plan_Amount:            data.Amount,
+		PlanName:               data.Plan_Name,
+		CreatedAt:              time.Now().UTC(),
+		OrderID:                id,
+		FullName:               data.FullName,
+		TransactionProduct:     "Data Top-up",
+		TransactionDescription: transactionDesc,
+		TransactionID:          transactionID,
+		RecipientName:          data.Name,
+		// ApiID:                  apiID,
+	}
+
+	return result, nil
+}
+
+func (d *DataConn) buy247Data(data DataInfo) (*telcom.DataResult, error) {
+	// "1": {"id": 1, "network": "MTN"},
+	// "2": {"id": 2, "network": "Airtel"},
+	// "3": {"id": 3, "network": "Glo"},
+	// "4": {"id": 4, "network": "9mobile"}
+
+	var network string
+	networkStr := ""
+	switch data.Network {
+	case 1:
+		network = "1" // MTN
+		networkStr = "MTN"
+	case 2:
+		network = "3" // GLO
+		networkStr = "GLO"
+	case 3:
+		network = "4" // 9MOBILE
+		networkStr = "9MOBILE"
+	case 4:
+		network = "2" // AIRTEL
+		networkStr = "AIRTEL"
+	default:
+		return nil, errors.New("Invalid Network ID")
+	}
+
+	requestID := randomgen.GenerateRequestID()
+	planID := strconv.Itoa(data.PlanID)
+
+	query := url.Values{
+		"network":    {network},
+		"phone":      {data.Mobile_Num},
+		"bypass":     {"false"},
+		"request-id": {requestID},
+		"data_plan":  {planID},
+	}
+
+	url := fmt.Sprintf("%s/%s?%s", api247, "data", query.Encode())
+
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", apiKey247)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	apiResponse := api247Response{}
+	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+		if err == io.EOF {
+			return nil, d.logAndReturnError("Empty response body retured from server", err)
+		}
+		return nil, d.logAndReturnError("error while decoding json", err)
+	}
+	if apiResponse.Status != "success" {
+		d.logger.Error("server response error", zap.Any("apiresponse", apiResponse))
+		return nil, d.logAndReturnError("failed to purchase data", errors.New(apiResponse.Status))
+	}
+	transactionID := randomgen.GenerateTransactionID("dat")
+	id, err := randomgen.GenerateOrderID()
+	if err != nil {
+		d.logger.Error("Could not generate orderID...", zap.Error(err))
+		return nil, d.logAndReturnError("Could not generate orderID", err)
+	}
+
+	transactionDesc := data.Plan_Name + " " + data.PlanSize
+
+	result := &telcom.DataResult{
+		UserID:                 data.UserID,
+		Status:                 apiResponse.Status,
+		Network:                networkStr,
+		NetworkProduct:         data.Plan_Name,
+		PhoneNumber:            data.Mobile_Num,
+		ReferenceNumber:        requestID,
+		Plan_Amount:            data.Amount,
+		PlanName:               data.Plan_Name,
+		CreatedAt:              time.Now().UTC(),
+		OrderID:                id,
+		FullName:               data.FullName,
+		TransactionProduct:     "Data Top-up",
+		TransactionDescription: transactionDesc,
+		TransactionID:          transactionID,
+		RecipientName:          data.Name,
+		// ApiID:                  apiID,
+	}
+
+	return result, nil
 
 }
 
@@ -279,7 +474,7 @@ func (d *DataConn) PingUser(w http.ResponseWriter) (*http.Response, error) {
 
 	req, err := http.NewRequest("GET", dontechapi+"/user/", nil)
 	req.Header.Set("Access-Control-Allow-Origin", "*")
-	req.Header.Set("Authorization", "Token "+token)
+	req.Header.Set("Authorization", dontechToken)
 	if err != nil {
 		return nil, err
 	}
@@ -377,35 +572,6 @@ func (d *DataConn) GetAllSmileTransactions() ([]telcom.SmileResult, error) {
 	}
 
 	return result, nil
-}
-
-func (d *DataConn) QueryTransaction(id int) error {
-
-	pid := strconv.Itoa(id)
-
-	req, err := http.NewRequest("POST", dontechapi+"/data/"+pid, nil)
-	req.Header.Set("Access-Control-Allow-Origin", "*")
-	req.Header.Add("Authorization", "Token "+token)
-	req.Header.Add("Content-Type", "application/json")
-	if err != nil {
-		// return err
-		return err
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		d.logger.Error("Error querying API...", zap.Error(err))
-		return errors.New("Invalid Id...")
-	}
-
-	return nil
-
 }
 
 func (d *DataConn) buySmileData(data telcom.SmileInfo) (*http.Response, error) {

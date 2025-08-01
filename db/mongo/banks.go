@@ -497,7 +497,6 @@ func (m *mongoStore) GetPin(userID string) (string, error) {
 	return resp.Pin, nil
 }
 
-// code to update the pin in the database
 func (m *mongoStore) UpdatePin(data models.UserPin) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

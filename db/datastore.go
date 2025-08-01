@@ -74,6 +74,8 @@ type UserStore interface {
 	UpdateBVNField(user models.User) error
 	UpdateNINField(user models.User) error
 	VerifyUser(identifier string) (*models.User, error)
+	UpdatePhone(id, phone string) error
+	UpdateEmail(id, email string) error
 	GetUserByUsernameOrEmailOrPhone(username, email, phone string) (*models.User, error)
 }
 

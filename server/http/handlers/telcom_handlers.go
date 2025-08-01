@@ -9,6 +9,7 @@ import (
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/aremxyplug-be/lib/responseFormat"
+	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
@@ -346,7 +347,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 	fullName := userDetails.FullName
 
 	if r.Method == "POST" {
-		data := telcom.DataInfo{}
+		data := data.DataInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Failed to decode DATA request", zap.Error(err))
@@ -415,6 +416,9 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		data.UserID = id
 		data.ProviderID = plan.ProviderID
 		data.PlanID = int(plan.PlanID.Int64)
+		data.Amount = fmt.Sprintf("%.f", plan.Amount)
+		data.Plan_Name = plan.PlanType
+		data.PlanSize = plan.Size
 		res, err := handler.dataClient.BuyData(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
