@@ -182,12 +182,20 @@ func (m *mongoStore) GetUserByID(id string) (*models.User, error) {
 }
 
 func (m *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*models.User, error) {
-	filter := bson.M{
-		"$or": []bson.M{
-			{"email": email},
-			{"username": username},
-		},
+
+	filter := bson.M{}
+
+	if email != "" {
+		filter["email"] = email
 	}
+	if username != "" {
+		filter["username"] = username
+	}
+
+	if email == "" && username == "" {
+		return nil, errors.New("email or username must be provided")
+	}
+
 	user := &models.User{}
 	err := m.mongoClient.
 		Database(m.databaseName).
