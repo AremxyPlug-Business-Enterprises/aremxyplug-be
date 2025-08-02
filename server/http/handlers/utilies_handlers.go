@@ -901,11 +901,11 @@ func (handler *HttpHandler) VerifyBill(w http.ResponseWriter, r *http.Request) {
 		result, err := handler.electClient.VerifyMeterNo(data.DiscoType, data.Meter_No, data.Meter_Type)
 		if err != nil {
 			handler.logger.Error("electricity bill verification failed", zap.Error(err))
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{
-				Status:  http.StatusInternalServerError,
+				Status:  http.StatusBadRequest,
 				Message: "error",
-				Data:    map[string]interface{}{"error": "electricity verification failed: " + err.Error()},
+				Data:    map[string]interface{}{"error": "invalid meter number or type: " + err.Error()},
 			}
 			json.NewEncoder(w).Encode(response)
 			return
