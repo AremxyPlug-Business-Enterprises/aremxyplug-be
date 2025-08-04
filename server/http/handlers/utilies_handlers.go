@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/go-chi/chi/v5"
@@ -252,7 +253,7 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 	id := userDetails.ID
 
 	if r.Method == "POST" {
-		data := models.TvInfo{}
+		data := tvsub.TvInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Failed to decode TV request", zap.Error(err))
@@ -442,7 +443,7 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 	id := userDetails.ID
 
 	if r.Method == "POST" {
-		data := models.ElectricInfo{}
+		data := electricity.ElectricInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Failed to decode ElectricBill request", zap.Error(err))

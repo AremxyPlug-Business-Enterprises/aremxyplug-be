@@ -126,7 +126,7 @@ func (c *Config) Deposit(virtualaccountid string, userID string) error {
 			return DBConnectionError(err)
 		}
 
-		createdAt, err := time.Parse(time.RFC3339, data.Attributes.CreatedAt)
+		createdAt, err := time.Parse("2006-01-02T15:04:05", data.Attributes.CreatedAt)
 		if err != nil {
 			c.logger.Error("Deposit failed: unable to parse createdAt", zap.Error(err))
 			return err

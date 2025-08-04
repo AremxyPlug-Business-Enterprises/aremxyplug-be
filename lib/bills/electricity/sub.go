@@ -38,7 +38,7 @@ func NewElectricConn(db db.UtilitiesStore, logger *zap.Logger) *ElectricConn {
 }
 
 // pay electricity bill
-func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult, error) {
+func (e *ElectricConn) PayBill(data ElectricInfo) (*models.ElectricResult, error) {
 
 	data.RequestID = randomgen.GenerateRequestID()
 	orderID, err := randomgen.GenerateOrderID()
@@ -53,7 +53,7 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 	}
 	defer resp.Body.Close()
 
-	apiResponse := models.ElectricAPI{}
+	apiResponse := electricAPI{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		return nil, e.logAndReturnError("error decoding response body", err)
 	}
@@ -75,10 +75,11 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 	}
 
 	transctionProd := "Electricity Bills"
+	amount := strconv.Itoa(data.Amount)
 
 	result := &models.ElectricResult{
 		UserID:                 data.UserID,
-		Amount:                 strconv.FormatFloat(apiResponse.Amount, 'f', 2, 64),
+		Amount:                 amount,
 		DiscoType:              data.DiscoType,
 		MeterType:              data.Meter_Type,
 		MeterNumber:            transDetails.Transactions.UniqueElement,
@@ -92,6 +93,7 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 		OrderID:                orderID,
 		TransactionID:          transactionID,
 		RequestID:              apiResponse.RequestID,
+		ReferenceNumber:        transDetails.Transactions.TransactionID,
 		CreatedAt:              time.Now().UTC(),
 	}
 
@@ -111,7 +113,7 @@ func (e *ElectricConn) QueryTransaction(id string) (models.ElectricResult, error
 	}
 	defer resp.Body.Close()
 
-	apiResponse := models.ElectricAPI{}
+	apiResponse := electricAPI{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		return models.ElectricResult{}, e.logAndReturnError("error decoding response body", err)
 	}
@@ -159,7 +161,7 @@ func (e *ElectricConn) GetAllTransactions() ([]models.ElectricResult, error) {
 
 }
 
-func (e *ElectricConn) payBill(data models.ElectricInfo) (*http.Response, error) {
+func (e *ElectricConn) payBill(data ElectricInfo) (*http.Response, error) {
 
 	amount := strconv.Itoa(data.Amount)
 	phone := data.Phone
