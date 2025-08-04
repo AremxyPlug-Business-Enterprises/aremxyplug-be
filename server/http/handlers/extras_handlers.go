@@ -90,20 +90,11 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 			handler.logger.Error("Failed to get points", zap.Error(err))
 		}
 
-		if err := json.NewEncoder(w).Encode(points); err != nil {
-			handler.logger.Error("Failed to encode points response", zap.Error(err))
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-
 		handler.logger.Info("Points retrieved successfully", zap.Int("points", points.TotalPoints))
 		w.WriteHeader(http.StatusOK)
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"point": points}}
 		json.NewEncoder(w).Encode(response)
 	}
-	// TODO: implement logic for point balance usage for POST requests
 
 	if r.Method == "POST" {
 

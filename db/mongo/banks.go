@@ -23,7 +23,7 @@ var (
 	bankColl     = "bank"
 	virtualColl  = "virtualAccount"
 	counterColl  = "counterParty"
-	deptColl     = "deposit"
+	deptColl     = "deposit_IDs"
 )
 
 var (
