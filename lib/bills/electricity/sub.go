@@ -75,10 +75,11 @@ func (e *ElectricConn) PayBill(data ElectricInfo) (*models.ElectricResult, error
 	}
 
 	transctionProd := "Electricity Bills"
+	amount := strconv.Itoa(data.Amount)
 
 	result := &models.ElectricResult{
 		UserID:                 data.UserID,
-		Amount:                 strconv.FormatFloat(apiResponse.Amount, 'f', 2, 64),
+		Amount:                 amount,
 		DiscoType:              data.DiscoType,
 		MeterType:              data.Meter_Type,
 		MeterNumber:            transDetails.Transactions.UniqueElement,
@@ -92,6 +93,7 @@ func (e *ElectricConn) PayBill(data ElectricInfo) (*models.ElectricResult, error
 		OrderID:                orderID,
 		TransactionID:          transactionID,
 		RequestID:              apiResponse.RequestID,
+		ReferenceNumber:        transDetails.Transactions.TransactionID,
 		CreatedAt:              time.Now().UTC(),
 	}
 

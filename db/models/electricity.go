@@ -18,7 +18,7 @@ type ElectricResult struct {
 	BillGenerated          string    `json:"bill_generated" bson:"bill_generated"`
 	OrderID                int       `json:"order_id" bson:"order_id"`
 	TransactionID          string    `json:"transaction_id" bson:"transaction_id"`
-	ReferenceNuber         string    `json:"reference_number" bson:"reference_number"`
+	ReferenceNumber        string    `json:"reference_number" bson:"reference_number"`
 	RequestID              string    `bson:"request_ID"`
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
 }
