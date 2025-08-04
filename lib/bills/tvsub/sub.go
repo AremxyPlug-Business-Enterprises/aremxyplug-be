@@ -42,7 +42,7 @@ func NewTvConn(db db.UtilitiesStore, Logger *zap.Logger) *TvConn {
 
 // buy tvsubscription
 // first verifiy the smartcard number
-func (t *TvConn) BuySub(data models.TvInfo) (*models.TV_Result, error) {
+func (t *TvConn) BuySub(data TvInfo) (*models.TV_Result, error) {
 
 	data.RequestID = randomgen.GenerateRequestID()
 	data.SubType = "change"
@@ -59,7 +59,7 @@ func (t *TvConn) BuySub(data models.TvInfo) (*models.TV_Result, error) {
 	}
 	defer resp.Body.Close()
 
-	apiResponse := models.TvAPI{}
+	apiResponse := tvAPI{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		return nil, t.logAndReturnError("error decoding response body", err)
 	}
@@ -84,7 +84,8 @@ func (t *TvConn) BuySub(data models.TvInfo) (*models.TV_Result, error) {
 		OrderID:                orderID,
 		TransactionID:          transactionID,
 		RequestID:              apiResponse.RequestID,
-		Amount:                 int(apiResponse.Content.Transactions.Amount),
+		ReferenceNumber:        apiResponse.Content.Transactions.TransactionID,
+		Amount:                 data.Amount,
 		CreatedAt:              time.Now().UTC(),
 	}
 
@@ -104,7 +105,7 @@ func (t *TvConn) QueryTransaction(requestID string) (models.TV_Result, error) {
 	}
 	defer resp.Body.Close()
 
-	apiResponse := &models.TvAPI{}
+	apiResponse := &tvAPI{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		return models.TV_Result{}, t.logAndReturnError("error decoding response body", err)
 	}
@@ -199,7 +200,7 @@ func (t *TvConn) VerifyCard(service, iucNumber string) (verifyResponse, error) {
 	}, nil
 }
 
-func (t *TvConn) buySub(data models.TvInfo) (*http.Response, error) {
+func (t *TvConn) buySub(data TvInfo) (*http.Response, error) {
 
 	amount := strconv.Itoa(data.Amount)
 

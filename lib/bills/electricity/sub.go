@@ -38,7 +38,7 @@ func NewElectricConn(db db.UtilitiesStore, logger *zap.Logger) *ElectricConn {
 }
 
 // pay electricity bill
-func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult, error) {
+func (e *ElectricConn) PayBill(data ElectricInfo) (*models.ElectricResult, error) {
 
 	data.RequestID = randomgen.GenerateRequestID()
 	orderID, err := randomgen.GenerateOrderID()
@@ -53,7 +53,7 @@ func (e *ElectricConn) PayBill(data models.ElectricInfo) (*models.ElectricResult
 	}
 	defer resp.Body.Close()
 
-	apiResponse := models.ElectricAPI{}
+	apiResponse := electricAPI{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		return nil, e.logAndReturnError("error decoding response body", err)
 	}
@@ -111,7 +111,7 @@ func (e *ElectricConn) QueryTransaction(id string) (models.ElectricResult, error
 	}
 	defer resp.Body.Close()
 
-	apiResponse := models.ElectricAPI{}
+	apiResponse := electricAPI{}
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		return models.ElectricResult{}, e.logAndReturnError("error decoding response body", err)
 	}
@@ -159,7 +159,7 @@ func (e *ElectricConn) GetAllTransactions() ([]models.ElectricResult, error) {
 
 }
 
-func (e *ElectricConn) payBill(data models.ElectricInfo) (*http.Response, error) {
+func (e *ElectricConn) payBill(data ElectricInfo) (*http.Response, error) {
 
 	amount := strconv.Itoa(data.Amount)
 	phone := data.Phone
