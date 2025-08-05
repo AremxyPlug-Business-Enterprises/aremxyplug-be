@@ -25,11 +25,6 @@ type User struct {
 	ExpireAt        time.Time `bson:"expireAt"`
 	ReferralCount   int       `json:"referral_count" bson:"referral_count"`
 	LastTransaction time.Time `json:"last_transaction" bson:"last_transaction"`
-	Address         Address   `json:"address" bson:"address"`
-}
-
-type Address struct {
-	House_Address string `json:"house_address" bson:"house_address"`
-	City          string `json:"city" bson:"city"`
-	State         string `json:"state" bson:"state"`
+	Address         string    `json:"address" bson:"address"`
+	Gender          string    `json:"gender" bson:"gender"`
 }
