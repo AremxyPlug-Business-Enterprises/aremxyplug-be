@@ -370,6 +370,31 @@ func (m *mongoStore) VerifyUser(identifier string) (*models.User, error) {
 	return user, nil
 }
 
+func (m *mongoStore) UpdateUserAddress(userID string, gender string, dob string, address string) error {
+
+	ctx := context.Background()
+
+	birth_date, err := time.Parse("2006-01-02", dob)
+	if err != nil {
+		return fmt.Errorf("failed to parse date of birth: %w", err)
+
+	}
+
+	filter := bson.M{"id": userID}
+	update := bson.M{
+		"$set": bson.M{
+			"birth_date": birth_date,
+			"gender":     gender,
+			"address":    address,
+		}}
+	_, err = m.col(models.UserCollectionName).
+		UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (m *mongoStore) getRecord(id, collectionName string) *mongo.SingleResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

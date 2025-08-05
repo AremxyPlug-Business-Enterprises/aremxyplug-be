@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/responseFormat"
@@ -136,6 +137,21 @@ func (handler *HttpHandler) CheckVerification(w http.ResponseWriter, r *http.Req
 	if user.HasNIN {
 		data["nin"] = user.NIN
 	}
+
+	if user.Gender != "" {
+		data["gender"] = user.Gender
+	}
+
+	if user.Address != "" {
+		data["address"] = user.Address
+	}
+
+	if user.DOB != (time.Time{}) {
+		data["dob"] = user.DOB.Format("2006-01-02")
+	}
+
+	data["phone"] = user.PhoneNumber
+	data["email"] = user.Email
 
 	w.WriteHeader(http.StatusOK)
 	response := responseFormat.CustomResponse{

@@ -9,6 +9,8 @@ import (
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"go.uber.org/zap"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 func (handler *HttpHandler) ReferralCode(w http.ResponseWriter, r *http.Request) {
@@ -366,8 +368,11 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 	}
 
 	type identityRequest struct {
-		BVN string `json:"bvn,omitempty"`
-		NIN string `json:"nin,omitempty"`
+		BVN     string `json:"bvn,omitempty"`
+		NIN     string `json:"nin,omitempty"`
+		Dob     string `json:"dob,omitempty"`
+		Address string `json:"address,omitempty"`
+		Gender  string `json:"gender,omitempty"`
 	}
 
 	var req identityRequest
@@ -379,6 +384,9 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	to := cases.Title(language.English)
+	req.Gender = to.String(req.Gender)
+	req.Address = to.String(req.Address)
 	hasBVN := req.BVN != ""
 	hasNIN := req.NIN != ""
 
@@ -478,7 +486,22 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			handler.logger.Warn("Failed to update points after BVN verification", zap.Error(err))
 		}
 
-		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": result}}
+		if err := handler.store.UpdateUserAddress(user.ID, req.Gender, req.Dob, req.Address); err != nil {
+			handler.logger.Warn("Failed to update user address", zap.Error(err))
+		}
+
+		data := map[string]interface{}{
+			"BVN":     req.BVN,
+			"Dob":     req.Dob,
+			"Address": req.Address,
+			"Gender":  req.Gender,
+		}
+
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{
+			"data":    result,
+			"details": data,
+		}}
+
 		json.NewEncoder(w).Encode(response)
 		handler.logger.Info("BVN verified successfully", zap.String("bvn", req.BVN))
 		return
@@ -523,8 +546,21 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			handler.logger.Warn("Failed to update points after NIN verification", zap.Error(err))
 		}
 
-		// Before we send back the response, we have to update the status of the user in the database
-		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": result}}
+		if err := handler.store.UpdateUserAddress(user.ID, req.Gender, req.Dob, req.Address); err != nil {
+			handler.logger.Warn("Failed to update user address", zap.Error(err))
+		}
+
+		data := map[string]interface{}{
+			"NIN":     req.NIN,
+			"Dob":     req.Dob,
+			"Address": req.Address,
+			"Gender":  req.Gender,
+		}
+
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{
+			"data":    result,
+			"details": data,
+		}}
 		json.NewEncoder(w).Encode(response)
 		handler.logger.Info("NIN verified successfully", zap.String("nin", req.NIN))
 		return
