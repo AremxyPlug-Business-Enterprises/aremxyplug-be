@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
@@ -91,7 +93,46 @@ func (c *Config) ListBanks() error {
 	return nil
 }
 
-func (c *Config) TransferToBank(info models.TransferInfo) (models.TransferResponse, error) {
+func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferResponse, error) {
+
+	user, err := c.db.GetUserByUsernameOrEmail(data.Email, data.Username)
+	if err != nil {
+		c.logger.Error(err.Error())
+		return models.TransferResponse{}, err
+	}
+
+	// now retrieve the virtual account details of the user
+	virtualAccount, err := c.db.GetVirtualNuban(user.ID)
+	if err != nil {
+		c.logger.Error(err.Error())
+		return models.TransferResponse{}, err
+	}
+
+	// now initiate the transfer to the AremxyPlug account
+	transferResponse, err := c.TransferToBank(TransferInfo{
+		UserID:         user.ID,
+		Account_Name:   virtualAccount.Account_Name, // assuming virtualAccount has AccountName field
+		Account_Number: virtualAccount.Account_No,   // assuming virtualAccount has AccountNumber field
+		Bank_name:      virtualAccount.Bank_Name,    // assuming virtualAccount has BankName field
+		Reason:         data.Reason,
+		FullName:       data.FullName,
+		Amount:         data.Amount, // assuming data has Amount field
+		Email:          data.Email,
+		Phone:          data.Phone,
+		Username:       data.Username,
+		Source:         "aremxyplug",
+	})
+	if err != nil {
+		c.logger.Error(err.Error())
+		return models.TransferResponse{}, err
+	}
+
+	c.logger.Info("Transfer processed successfully", zap.Any("response", transferResponse))
+
+	return transferResponse, nil
+}
+
+func (c *Config) TransferToBank(info TransferInfo) (models.TransferResponse, error) {
 
 	// first check if the details is already in the database. if it is just procced to the point of transfer
 	counterparty, err := c.getCounterParty(info.Account_Number, info.Bank_name)
@@ -189,11 +230,13 @@ func (c *Config) TransferToBank(info models.TransferInfo) (models.TransferRespon
 		return models.TransferResponse{}, JSONError(err)
 	}
 
+	amt := strconv.Itoa(int(info.Amount))
+
 	result := models.TransferResponse{
+
+		Status:                 "success",
+		Amount:                 amt,
 		UserID:                 info.UserID,
-		Bank_Name:              counterparty.BankName,
-		Account_Name:           counterparty.AccountName,
-		Account_No:             counterparty.AccountNumber,
 		FullName:               info.FullName,
 		TransactionProduct:     "Money Transfer",
 		TransactionDescription: "From NGN Wallet",
@@ -201,6 +244,21 @@ func (c *Config) TransferToBank(info models.TransferInfo) (models.TransferRespon
 		Order_ID:               orderID,
 		Transaction_ID:         transactionID,
 		// sessionID is gotten from the webhook
+		CreatedAt: time.Now().UTC(),
+	}
+
+	switch info.Source {
+	case "direct":
+		result.Bank_Name = &counterparty.BankName
+		result.Account_Name = &counterparty.AccountName
+		result.Account_Number = &counterparty.AccountNumber
+
+	case "aremxyplug":
+		result.Username = &info.Username
+		result.Email = &info.Email
+		result.Phone = &info.Phone
+		result.CustomerName = &info.FullName
+
 	}
 
 	if err := c.saveTransaction(result); err != nil {

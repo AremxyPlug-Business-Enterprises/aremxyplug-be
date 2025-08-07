@@ -470,6 +470,7 @@ func (handler *HttpHandler) UpdateEmail(w http.ResponseWriter, r *http.Request) 
 		Message: "success",
 		Data: map[string]interface{}{
 			"message": "email successfully updated",
+			"email":   payload.New_Email,
 		},
 	}
 	json.NewEncoder(w).Encode(response)
@@ -549,6 +550,7 @@ func (handler *HttpHandler) UpdatePhoneNumber(w http.ResponseWriter, r *http.Req
 		Message: "success",
 		Data: map[string]interface{}{
 			"message": "phone number successfully updated",
+			"phone":   payload.New_Phone,
 		},
 	}
 	json.NewEncoder(w).Encode(response)
@@ -878,6 +880,49 @@ func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 	}
 
+}
+
+func (handler *HttpHandler) GetUserInfo(w http.ResponseWriter, r *http.Request) {
+
+	handler.logger.Info("getting user info")
+	email := r.URL.Query().Get("email")
+	username := r.URL.Query().Get("username")
+
+	if email == "" && username == "" {
+		handler.logger.Error("email and username cannot be empty")
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "email and username cannot be empty"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	user, err := handler.store.GetUserByUsernameOrEmail(email, username)
+	if err != nil {
+		handler.logger.Error("error retrieving user info", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	userResponse := struct {
+		UserID   string `json:"user_id"`
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Phone    string `json:"phone"`
+		FullName string `json:"full_name"`
+	}{
+		UserID:   user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+		Phone:    user.PhoneNumber,
+		FullName: user.FullName,
+	}
+
+	handler.logger.Info("user info retrieved successfully", zap.String("email", user.ID))
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"userDetails": userResponse}}
+	json.NewEncoder(w).Encode(response)
 }
 
 func (handler *HttpHandler) validateToken(token string) (isValid bool, response *dto.Claims) {

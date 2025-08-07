@@ -512,3 +512,97 @@ func (m *mongoStore) UpdatePin(data models.UserPin) error {
 
 	return nil
 }
+
+func (m *mongoStore) SaveTransferRecipient(userID, username, email, phone, fullName string) error {
+	ctx := context.Background()
+	col := m.col("transfer_recipients")
+
+	filter := bson.M{"user_id": userID}
+
+	var existing models.TransferRecipient
+	err := col.FindOne(ctx, filter).Decode(&existing)
+
+	newRecipient := models.TransferRecipientDetails{
+		Username: username,
+		Email:    email,
+		Phone:    phone,
+		FullName: fullName,
+	}
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			// New user, create document
+			newDoc := models.TransferRecipient{
+				UserID:    userID,
+				Recipient: []models.TransferRecipientDetails{newRecipient},
+				CreatedAt: time.Now(),
+			}
+			_, err := col.InsertOne(ctx, newDoc)
+			if err != nil {
+				return fmt.Errorf("failed to insert new recipient document: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to check existing recipient document: %w", err)
+	}
+
+	// Check if recipient already exists for the user
+	for _, r := range existing.Recipient {
+		if r.Email == email {
+			return fmt.Errorf("recipient already saved")
+		}
+	}
+
+	// Add new recipient to slice
+	update := bson.M{
+		"$push": bson.M{
+			"recipient": newRecipient,
+		},
+	}
+	_, err = col.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("failed to update recipient list: %w", err)
+	}
+
+	return nil
+}
+
+var NoRecipientFound = errors.New("no recipient found for user")
+
+func (m *mongoStore) GetTransferRecipients(userID string) ([]models.TransferRecipientDetails, error) {
+	ctx := context.Background()
+	col := m.col("transfer_recipients")
+
+	var existing models.TransferRecipient
+	err := col.FindOne(ctx, bson.M{"user_id": userID}).Decode(&existing)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, NoRecipientFound
+		}
+		return nil, fmt.Errorf("failed to retrieve recipients: %w", err)
+	}
+
+	return existing.Recipient, nil
+}
+
+func (m *mongoStore) DeleteTransferRecipient(userID, email string) error {
+	ctx := context.Background()
+	col := m.col("transfer_recipients")
+
+	filter := bson.M{"user_id": userID}
+	update := bson.M{
+		"$pull": bson.M{
+			"recipient": bson.M{"email": email},
+		},
+	}
+
+	result, err := col.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("failed to delete recipient: %w", err)
+	}
+	if result.ModifiedCount == 0 {
+		return fmt.Errorf("recipient not found or already deleted")
+	}
+
+	return nil
+}

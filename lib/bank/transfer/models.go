@@ -136,3 +136,28 @@ type bankData struct {
 	Type       string         `json:"type"`
 	Atrributes bankAttributes `json:"attributes"`
 }
+
+type AremxyPlugTransfer struct {
+	UserID   string
+	Username string  `json:"username,omitempty"`
+	Email    string  `json:"email,omitempty"`
+	Amount   float64 `json:"amount"`
+	Phone    string  `json:"phone"`
+	Name     string  `json:"name"`
+	Reason   string  `json:"reason,omitempty"`
+	FullName string
+}
+
+type TransferInfo struct {
+	UserID         string
+	Bank_name      string  `json:"bank_name"`
+	Account_Number string  `json:"account_number"`
+	Account_Name   string  `json:"account_name"`
+	Amount         float64 `json:"amount"`
+	Reason         string  `json:"message"`
+	FullName       string
+	Source         string
+	Email          string
+	Phone          string
+	Username       string
+}
