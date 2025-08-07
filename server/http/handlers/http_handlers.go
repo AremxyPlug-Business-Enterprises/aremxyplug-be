@@ -886,8 +886,9 @@ func (handler *HttpHandler) GetUserInfo(w http.ResponseWriter, r *http.Request) 
 
 	handler.logger.Info("getting user info")
 	email := r.URL.Query().Get("email")
-	username := r.URL.Query().Get("username")
+	u_name := r.URL.Query().Get("username")
 
+	username := cases.Title(language.English).String(u_name)
 	if email == "" && username == "" {
 		handler.logger.Error("email and username cannot be empty")
 		w.WriteHeader(http.StatusBadRequest)
