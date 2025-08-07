@@ -159,6 +159,10 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		updateRoutes(authRouter, httpHandler)
 
+		bankRecipientRoutes(authRouter, httpHandler)
+
+		getUsersInfo(authRouter, httpHandler)
+
 		authRouter.Get("/chart", httpHandler.Chart)
 
 	})
@@ -276,6 +280,10 @@ func bankRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 			router.Get("/", httpHandler.Transfer)
 			router.Get("/{id}", httpHandler.GetTransferDetails)
 		})
+		router.Route("/trf-aremxy", func(router chi.Router) {
+			router.Post("/", httpHandler.TransferToAremxyPlug)
+			router.Get("/", httpHandler.TransferToAremxyPlug)
+		})
 		router.Route("/deposit", func(router chi.Router) {
 			router.Get("/", httpHandler.GetDepositHistory)
 			router.Get("/{id}", httpHandler.GetDepositDetail)
@@ -356,6 +364,20 @@ func getBalance(r chi.Router, httpHandler *handlers.HttpHandler) {
 func checkVerification(router chi.Router, httpHandler *handlers.HttpHandler) {
 	router.Route("/check-verification", func(r chi.Router) {
 		r.Get("/", httpHandler.CheckVerification)
+	})
+}
+
+func bankRecipientRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/bank-recipient", func(router chi.Router) {
+		router.Post("/", httpHandler.TransferRecipient)
+		router.Get("/", httpHandler.TransferRecipient)
+		router.Delete("/", httpHandler.TransferRecipient)
+	})
+}
+
+func getUsersInfo(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/search", func(router chi.Router) {
+		router.Get("/", httpHandler.GetUserInfo)
 	})
 }
 

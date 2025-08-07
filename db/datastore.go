@@ -60,6 +60,9 @@ type BankStore interface {
 	UpdateBalance(userID string, balance decimal.Decimal) error
 	GetBalanceDetails(id string) (models.Balance, error)
 	CreateInitialBalance(userID, virtualNuban string) error
+	SaveTransferRecipient(userID, username, email, phone, fullName string) error
+	GetTransferRecipients(userID string) ([]models.TransferRecipientDetails, error)
+	DeleteTransferRecipient(userID, email string) error
 }
 
 type UserStore interface {

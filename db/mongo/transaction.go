@@ -531,7 +531,7 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 		}}},
 	)
 
-	totalsCursor, err := m.col("deposit-transaction").Aggregate(ctx, totalsPipeline)
+	totalsCursor, err := m.col(depositColl).Aggregate(ctx, totalsPipeline)
 	if err != nil {
 		m.logger.Error("Wallet inflow totals aggregation failed", zap.Error(err))
 		return models.TransactionResponse{}, err

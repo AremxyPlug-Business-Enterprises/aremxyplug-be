@@ -8,10 +8,13 @@ import (
 	"strconv"
 
 	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/db/mongo"
 	"github.com/aremxyplug-be/lib/balance"
+	"github.com/aremxyplug-be/lib/bank/transfer"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
+	"go.uber.org/zap"
 )
 
 func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +30,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 
 		// first decode the request body
-		info := models.TransferInfo{}
+		info := transfer.TransferInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -60,6 +63,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		}
 
 		info.UserID = userBalance.UserID
+		info.Source = "direct"
 
 		resp, err := handler.bankTrf.TransferToBank(info)
 		if err != nil {
@@ -96,6 +100,136 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
 		json.NewEncoder(w).Encode(response)
 	}
+
+}
+
+func (handler *HttpHandler) TransferRecipient(w http.ResponseWriter, r *http.Request) {
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user's details: %s", err.Error())}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if r.Method == "GET" {
+
+		handler.logger.Info("Fetching user transfer recipient details", zap.String("userID", userDetails.ID))
+		recipients, err := handler.store.GetTransferRecipients(userDetails.ID)
+		if err != nil {
+			if err == mongo.NoRecipientFound {
+				handler.logger.Info("No transfer recipients found for user", zap.String("userID", userDetails.ID))
+				w.WriteHeader(http.StatusOK)
+				response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "No transfer recipients found"}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+			handler.logger.Error("Failed to fetch transfer recipients", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": recipients}}
+		json.NewEncoder(w).Encode(response)
+	}
+
+	if r.Method == "POST" {
+
+		req := struct {
+			Username string `json:"username,omitempty"`
+			Email    string `json:"email,omitempty"`
+			Phone    string `json:"phone"`
+			FullName string `json:"fullname,omitempty"`
+		}{}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		if err := handler.store.SaveTransferRecipient(userDetails.ID, req.Username, req.Email, req.Phone, req.FullName); err != nil {
+			handler.logger.Error("Failed to save transfer recipient", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to save transfer recipient")}}
+			json.NewEncoder(w).Encode(response)
+		}
+
+		handler.logger.Info("Transfer recipient saved successfully")
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "Transfer recipient saved successfully"}}
+		json.NewEncoder(w).Encode(response)
+	}
+
+	if r.Method == "DELETE" {
+
+		req := struct {
+			Email string `json:"email"`
+		}{}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		if err := handler.store.DeleteTransferRecipient(userDetails.ID, req.Email); err != nil {
+			if err == mongo.NoRecipientFound {
+				handler.logger.Info("No transfer recipient found for deletion", zap.String("email", req.Email))
+				w.WriteHeader(http.StatusNotFound)
+				response := responseFormat.CustomResponse{Status: http.StatusNotFound, Message: "error", Data: map[string]interface{}{"data": "No transfer recipient found"}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+			handler.logger.Error("Failed to delete transfer recipient", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		handler.logger.Info("Transfer recipient deleted successfully", zap.String("email", req.Email))
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "Transfer recipient deleted successfully"}}
+		json.NewEncoder(w).Encode(response)
+
+	}
+}
+
+func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.Request) {
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user's details: %s", err.Error())}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	info := transfer.AremxyPlugTransfer{}
+	if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	info.UserID = userDetails.ID
+
+	resp, err := handler.bankTrf.TransferToAremxyPlug(info)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	handler.logger.Info("Transfer to AremxyPlug account successful", zap.String("userID", userDetails.ID), zap.String("response", resp.Status))
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
+	json.NewEncoder(w).Encode(response)
 
 }
 

@@ -7,32 +7,41 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-type TransferInfo struct {
-	UserID         string
-	Bank_name      string  `json:"bank_name"`
-	Account_Number string  `json:"account_number"`
-	Account_Name   string  `json:"account_name"`
-	Amount         float64 `json:"amount"`
-	Reason         string  `json:"message"`
-	FullName       string
-}
-
 type TransferResponse struct {
-	UserID                 string    `json:"user_id" bson:"user_id"`
-	Status                 string    `json:"status" bson:"status"` // "success" or "failed"
-	Bank_Name              string    `json:"bank_name" bson:"bank_name"`
-	Account_Number         string    `json:"account_number" bson:"account_number"`
-	Account_Name           string    `json:"account_name" bson:"account_name"`
-	Account_No             string    `json:"account_no" bson:"account_no"`
+	UserID string `json:"user_id" bson:"user_id"`
+	Status string `json:"status" bson:"status"` // "success" or "failed"
+
+	// Optional fields
+	Email          *string `json:"email,omitempty" bson:"email,omitempty"`
+	Username       *string `json:"username,omitempty" bson:"username,omitempty"`
+	Phone          *string `json:"phone,omitempty" bson:"phone,omitempty"`
+	CustomerName   *string `json:"customer_name,omitempty" bson:"customer_name,omitempty"`
+	Bank_Name      *string `json:"bank_name,omitempty" bson:"bank_name,omitempty"`
+	Account_Number *string `json:"account_number,omitempty" bson:"account_number,omitempty"`
+	Account_Name   *string `json:"account_name,omitempty" bson:"account_name,omitempty"`
+
 	FullName               string    `json:"full_name" bson:"full_name"`
-	Amount                 string    `json:"amount" bson:"amount"` // amount sent
+	Amount                 string    `json:"amount" bson:"amount"`
 	TransactionProduct     string    `json:"transaction_product" bson:"transaction_product"`
 	TransactionDescription string    `json:"transaction_description" bson:"transaction_description"`
 	Reason                 string    `json:"message" bson:"message"`
 	Order_ID               int       `json:"order_id" bson:"order_id"`
 	Transaction_ID         string    `json:"transaction_id" bson:"transaction_id"`
 	Session_ID             string    `json:"session_id" bson:"session_id"`
-	CreatedAt              time.Time `json:"created_at" bson:"created_at"` // ISO datetime string
+	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
+}
+
+type TransferRecipient struct {
+	UserID    string                     `json:"user_id" bson:"user_id"`
+	Recipient []TransferRecipientDetails `json:"recipient" bson:"recipient"`
+	CreatedAt time.Time                  `json:"created_at" bson:"created_at"`
+}
+
+type TransferRecipientDetails struct {
+	Username string `json:"username" bson:"username"`
+	Email    string `json:"email" bson:"email"`
+	Phone    string `json:"phone" bson:"phone"`
+	FullName string `json:"full_name" bson:"full_name"`
 }
 
 type AccountDetails struct {
