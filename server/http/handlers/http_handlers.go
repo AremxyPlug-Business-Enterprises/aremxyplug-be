@@ -438,7 +438,7 @@ func (handler *HttpHandler) UpdateEmail(w http.ResponseWriter, r *http.Request) 
 	}
 
 	payload := struct {
-		New_Email string `json:"new_phone"`
+		New_Email string `json:"new_email"`
 		OTP       string `json:"otp"`
 	}{}
 
