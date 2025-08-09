@@ -70,6 +70,13 @@ func (t *TvConn) BuySub(data TvInfo) (*models.TV_Result, error) {
 	}
 	fmt.Printf("%+v\n", apiResponse)
 
+	var token *string
+	if data.DecoderType == "showmax" {
+		token = &apiResponse.PurchasedCode
+	} else {
+		token = nil
+	}
+
 	result := &models.TV_Result{
 		UserID:                 data.UserID,
 		Status:                 apiResponse.Content.Transactions.Status,
@@ -85,6 +92,7 @@ func (t *TvConn) BuySub(data TvInfo) (*models.TV_Result, error) {
 		TransactionID:          transactionID,
 		RequestID:              apiResponse.RequestID,
 		ReferenceNumber:        apiResponse.Content.Transactions.TransactionID,
+		Token:                  token,
 		Amount:                 data.Amount,
 		CreatedAt:              time.Now().UTC(),
 	}
