@@ -15,6 +15,7 @@ import (
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/errorvalues"
 	"github.com/aremxyplug-be/lib/responseFormat"
+	"github.com/aremxyplug-be/lib/smsclient/termii"
 	"github.com/aremxyplug-be/types/dto"
 	"github.com/go-chi/render"
 	"golang.org/x/text/cases"
@@ -397,6 +398,13 @@ func (handler *HttpHandler) ChangeEmail(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if payload.NewEmail == user.Email {
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "new email cannot be the same as the current email"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
 	user.Email = payload.NewEmail
 	if err := handler.sendOTP(user, "Email Change", changeEmail); err != nil {
 		handler.logger.Error("failed to send OTP", zap.Error(err))
@@ -479,6 +487,15 @@ func (handler *HttpHandler) UpdateEmail(w http.ResponseWriter, r *http.Request) 
 
 func (handler *HttpHandler) ChangePhoneNumber(w http.ResponseWriter, r *http.Request) {
 
+	user, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
 	payload := struct {
 		New_Phone string `json:"new_phone"`
 	}{}
@@ -489,8 +506,21 @@ func (handler *HttpHandler) ChangePhoneNumber(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	err := handler.smsClient.SendSMS(payload.New_Phone)
-	if err != nil {
+	if payload.New_Phone == user.PhoneNumber {
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "new phone number cannot be the same as the current phone number"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if err := handler.smsClient.SendSMS(payload.New_Phone); err != nil {
+		if err == termii.ErrSMSFailed {
+			handler.logger.Error("SMS sending failed", zap.String("phone", payload.New_Phone), zap.Error(err))
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "failed to send OTP, please try again"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
 		handler.logger.Error("Failed to send OTP", zap.String("phone", payload.New_Phone), zap.Error(err))
 		respondWithError(w, http.StatusInternalServerError, "failed to send otp", err)
 		return
@@ -812,6 +842,13 @@ func (handler *HttpHandler) SendSMSOTP(w http.ResponseWriter, r *http.Request) {
 
 	err = handler.smsClient.SendSMS(data.Phone)
 	if err != nil {
+		if err == termii.ErrSMSFailed {
+			handler.logger.Error("SMS sending failed", zap.String("phone", data.Phone), zap.Error(err))
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "failed to send OTP, please try again"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
 		handler.logger.Error("Failed to send OTP", zap.String("phone", data.Phone), zap.Error(err))
 		respondWithError(w, http.StatusInternalServerError, "failed to send otp", err)
 		return

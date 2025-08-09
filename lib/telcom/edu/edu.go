@@ -17,6 +17,8 @@ import (
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/randomgen"
 	"go.uber.org/zap"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var (
@@ -118,19 +120,23 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 		}
 	}
 
+	examType = cases.Title(language.English).String(eduInfo.Exam_Type)
+	txnDesc := fmt.Sprintf("%s E-PINs", examType)
+	txnProduct := "Education Pins"
+
 	// associate the responses for the api
 	result := &models.EduResponse{
 		UserID:                 eduInfo.UserID,
 		Amount:                 apiResponse.Amount,
-		Exam_Type:              eduInfo.Exam_Type,
+		Exam_Type:              examType,
 		Quantity:               eduInfo.Quantity,
 		PhoneNumber:            eduInfo.Phone_Number,
 		ReferenceNumber:        apiResponse.Reference,
 		FullName:               eduInfo.Name,
 		Email:                  eduInfo.Email,
-		TransactionProduct:     eduInfo.Exam_Type,
+		TransactionProduct:     txnProduct,
 		Status:                 apiResponse.Status,
-		TransactionDescription: apiResponse.Message,
+		TransactionDescription: txnDesc,
 		OrderID:                id,
 		Pin_Generated:          pinGenerated,
 		CreatedAt:              time.Now().UTC(),

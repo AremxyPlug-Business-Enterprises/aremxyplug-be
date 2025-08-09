@@ -20,9 +20,10 @@ type smsRequest struct {
 }
 
 type smsClientResponse struct {
-	PinID     string `json:"pinId"`
-	To        string `json:"to"`
-	SmsStatus string `json:"smsStatus"`
+	PinID      string `json:"pinId"`
+	To         string `json:"to"`
+	SmsStatus  string `json:"smsStatus"`
+	StatusCode string `json:"status"`
 }
 
 type verifyTokenRequest struct {

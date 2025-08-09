@@ -39,11 +39,12 @@ type TvInfo struct {
 	Name             string
 }
 type tvAPI struct {
-	Code      string     `json:"code"`
-	Content   tv_Content `json:"content"`
-	Date      string     `json:"transaction_date"` // Direct string match for ISO datetime
-	RequestID string     `json:"requestId"`
-	Response  string     `json:"response_description"`
+	Code          string     `json:"code"`
+	Content       tv_Content `json:"content"`
+	Date          string     `json:"transaction_date"` // Direct string match for ISO datetime
+	RequestID     string     `json:"requestId"`
+	Response      string     `json:"response_description"`
+	PurchasedCode string     `json:"purchased_code"`
 }
 
 type tv_Content struct {

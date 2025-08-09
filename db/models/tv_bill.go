@@ -15,6 +15,7 @@ type TV_Result struct {
 	TransactionProduct     string    `json:"transaction_product" bson:"transactionproduct"`
 	TransactionDescription string    `json:"transaction_description" bson:"transaction_description"`
 	OrderID                int       `json:"order_id" bson:"order_id"`
+	Token                  *string   `json:"token,omitempty" bson:"token,omitempty"`
 	TransactionID          string    `json:"transaction_id" bson:"transaction_id"`
 	RequestID              string    `json:"request_id" bson:"request_id"`
 	ReferenceNumber        string    `json:"reference_number" bson:"reference_number"`

@@ -31,6 +31,8 @@ func NewSMSConn(store db.DataStore, logger *zap.Logger) *SMSConn {
 	}
 }
 
+var ErrSMSFailed = errors.New("SMS sending failed")
+
 func (s *SMSConn) SendSMS(phoneNo string) error {
 	s.logger.Info("Sending SMS", zap.String("phoneNo", phoneNo))
 
@@ -103,6 +105,11 @@ func (s *SMSConn) SendSMS(phoneNo string) error {
 			return err
 		}
 	*/
+
+	if apiResponse.StatusCode != "200" {
+		s.logger.Error("API call returned non-200 status", zap.String("statusCode", apiResponse.StatusCode))
+		return ErrSMSFailed
+	}
 
 	otpDetails := models.SMSOTP{
 		PinID: apiResponse.PinID,
