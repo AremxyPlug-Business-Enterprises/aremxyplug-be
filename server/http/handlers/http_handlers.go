@@ -943,6 +943,14 @@ func (handler *HttpHandler) GetUserInfo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if !user.HasVirtualNuban {
+		handler.logger.Warn("user has no virtual nuban account", zap.String("userID", user.ID))
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "user hasn't generated a virtual nuban account yet"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
 	userResponse := struct {
 		UserID   string `json:"user_id"`
 		Username string `json:"username"`
