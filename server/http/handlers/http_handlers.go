@@ -129,10 +129,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	if user.InvitationCode != "" {
 		err := handler.store.CreateUserReferral(userId, user.InvitationCode)
 		if err != nil {
-			handler.logger.Error("error updating referral count", zap.Error(err))
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
+			handler.logger.Warn("error updating referral count", zap.Error(err))
 		}
 	}
 
