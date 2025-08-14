@@ -9,6 +9,7 @@ import (
 
 	"github.com/aremxyplug-be/config"
 	"github.com/aremxyplug-be/db/mongo"
+	"github.com/aremxyplug-be/db/redis"
 	"github.com/aremxyplug-be/db/sqlstore"
 	"github.com/aremxyplug-be/lib/auth"
 	auth_pin "github.com/aremxyplug-be/lib/auth/pin"
@@ -79,6 +80,7 @@ func main() {
 	point := pointredeem.NewPointConfig(store)
 	pin := auth_pin.NewPinConfig(logger, store)
 	sms := termii.NewSMSConn(store, logger)
+	redisClient := redis.NewRedisConn(logger)
 
 	config := httpSrv.ServerConfig{
 		Store:        store,
@@ -101,6 +103,7 @@ func main() {
 		Pin:          pin,
 		SmsClient:    sms,
 		VerifyClient: verifyClient,
+		RedisClient:  redisClient,
 	}
 
 	httpRouter := httpSrv.MountServer(config)
@@ -137,11 +140,14 @@ func createSSHClient() (*ssh.Client, error) {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			_, _, err := sshClient.SendRequest("keepalive@openssh.com", true, nil)
+			session, err := sshClient.NewSession()
 			if err != nil {
-				fmt.Printf("SSH keep-alive failed: %v", err)
-				return
+				fmt.Printf("SSH keep-alive session failed: %v\n", err)
+				return // break out if the connection is gone
 			}
+			// Run a harmless command that doesn’t produce output
+			_ = session.Run("true")
+			session.Close()
 		}
 	}()
 
