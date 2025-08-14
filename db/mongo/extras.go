@@ -30,7 +30,7 @@ func (m *mongoStore) updateReferralCount(referrersCode string) error {
 	// TODO: using the referral code as the filter, update the count field on the user document
 	ctx := context.Background()
 
-	filter := bson.D{primitive.E{Key: "username", Value: referrersCode}}
+	filter := bson.D{primitive.E{Key: "id", Value: referrersCode}}
 	updateFilter := bson.D{
 		{Key: "$inc", Value: bson.D{{Key: "count", Value: 1}}},
 	}

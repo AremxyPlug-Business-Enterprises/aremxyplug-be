@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/aremxyplug-be/db/models"
+	auth_pin "github.com/aremxyplug-be/lib/auth/pin"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"go.uber.org/zap"
 	"golang.org/x/text/cases"
@@ -51,7 +52,7 @@ func (handler *HttpHandler) Referral(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	referrals, err := handler.store.GetReferredUsers(user.Username)
+	referrals, err := handler.store.GetReferredUsers(user.ID)
 	if err != nil {
 		handler.logger.Error("Failed to get referred users", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -232,30 +233,20 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		valid, err := handler.pin.VerifyPin(user.ID, updatePin.OldPin)
+		err := handler.pin.VerifyPin(user.ID, updatePin.OldPin)
 		if err != nil {
-			handler.logger.Error("Failed to verify pin", zap.Error(err))
-			if !valid {
-				w.WriteHeader(http.StatusInternalServerError)
-				response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
+			if err == auth_pin.ErrIncorrectPin {
+				handler.logger.Warn("Incorrect pin", zap.String("user_id", user.ID))
+				writeError(w, http.StatusBadRequest, "incorrect pin")
 			}
-		}
-
-		if !valid {
-			handler.logger.Warn("Incorrect pin", zap.String("user_id", user.ID))
-			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "incorrect pin"}}
-			json.NewEncoder(w).Encode(response)
+			handler.logger.Error("Failed to verify pin", zap.Error(err))
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
 		if err := handler.pin.UpdatePin(user.ID, updatePin.NewPin); err != nil {
 			handler.logger.Error("Failed to update pin", zap.Error(err))
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -290,30 +281,86 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	attemptsKey := fmt.Sprintf("pin_attempts:%s", user.ID)
+	blockKey := fmt.Sprintf("pin_blocked:%s", user.ID)
 
-	valid, err := handler.pin.VerifyPin(user.ID, pin.Pin)
-	if err != nil {
-		handler.logger.Error("Failed to verify pin", zap.Error(err))
-		if !valid {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-	}
+	maxAttempts := 5
+	blockDuration := 30 * time.Minute
+	attemptsTTL := 10 * time.Minute
 
-	if !valid {
-		handler.logger.Warn("Incorrect pin", zap.String("user_id", user.ID))
-		w.WriteHeader(http.StatusBadRequest)
-		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "incorrect pin"}}
-		json.NewEncoder(w).Encode(response)
+	// Check if blocked - FIXED: Properly check and return
+	if blockedUntil, err := handler.redisClient.Get(blockKey); err == nil && blockedUntil != nil {
+		msg := fmt.Sprintf("PIN blocked until %s", blockedUntil.(string))
+		handler.logger.Warn(msg, zap.String("user_id", user.ID))
+		writeError(w, http.StatusForbidden, msg)
 		return
 	}
 
+	// Verify PIN - CRITICAL FIX: Success case outside error block
+	err = handler.pin.VerifyPin(user.ID, pin.Pin)
+	if err != nil {
+		if err == auth_pin.ErrIncorrectPin {
+			// FIX: Handle Redis errors properly
+			attempts, incrErr := handler.redisClient.IncrWithTTL(attemptsKey, attemptsTTL)
+			if incrErr != nil {
+				handler.logger.Error("Failed to increment attempts", zap.Error(incrErr))
+				writeError(w, http.StatusInternalServerError, "internal server error")
+				return
+			}
+
+			if attempts >= int64(maxAttempts) {
+				unblockTime := time.Now().Add(blockDuration)
+				// FIX: Handle potential Redis error
+				if err := handler.redisClient.SetWithTTL(blockKey, unblockTime.Format(time.RFC3339), blockDuration); err != nil {
+					handler.logger.Error("Failed to set block key", zap.Error(err))
+				}
+				handler.redisClient.Del(attemptsKey)
+
+				handler.logger.Warn("Too many incorrect PIN attempts - account blocked",
+					zap.String("user_id", user.ID),
+					zap.Time("unblock_time", unblockTime),
+				)
+				writeError(w, http.StatusForbidden, "account blocked due to too many incorrect attempts")
+				return
+			}
+
+			// FIX: Return proper error for incorrect PIN
+			handler.logger.Warn("Incorrect PIN attempt",
+				zap.String("user_id", user.ID),
+				zap.Int64("attempt", attempts),
+				zap.Int("max_attempts", maxAttempts),
+			)
+			writeError(w, http.StatusUnauthorized, "incorrect pin")
+			return
+		}
+
+		// Handle other errors
+		handler.logger.Error("PIN verification failed", zap.Error(err))
+		writeError(w, http.StatusInternalServerError, "pin verification error")
+		return
+	}
+
+	handler.redisClient.Del(attemptsKey)
+
+	handler.logger.Info("PIN verified successfully", zap.String("user_id", user.ID))
+
 	w.WriteHeader(http.StatusOK)
-	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "pin OK"}}
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"message": "PIN verification successful"},
+	}
 	json.NewEncoder(w).Encode(response)
-	handler.logger.Info("Pin verified successfully", zap.String("user_id", user.ID))
+}
+
+func writeError(w http.ResponseWriter, status int, message string) {
+	w.WriteHeader(status)
+	response := responseFormat.CustomResponse{
+		Status:  status,
+		Message: "error",
+		Data:    map[string]interface{}{"data": message},
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func (handler *HttpHandler) ResetPin(w http.ResponseWriter, r *http.Request) {
