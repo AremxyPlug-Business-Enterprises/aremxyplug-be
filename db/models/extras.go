@@ -11,9 +11,9 @@ type Referral struct {
 }
 
 type ReferredUserInfo struct {
-	UserID     string    `json:"user_id" bson:"user_id"`
+	UserID     string    `json:"referred_id" bson:"referred_id"`
 	FullName   string    `json:"full_name" bson:"full_name"`
-	Email      string    `json:"email" bson:"email"`
+	Username   string    `json:"username" bson:"username"`
 	IsActive   bool      `json:"is_active" bson:"is_active"`
 	ReferredAt time.Time `json:"referred_at" bson:"referred_at"`
 }

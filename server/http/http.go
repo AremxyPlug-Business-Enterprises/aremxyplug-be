@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 
+	"github.com/aremxyplug-be/db/redis"
 	"github.com/aremxyplug-be/db/sqlstore"
 	"github.com/aremxyplug-be/lib/auth"
 	auth_pin "github.com/aremxyplug-be/lib/auth/pin"
@@ -52,6 +53,7 @@ type ServerConfig struct {
 	Pin          *auth_pin.PinConfig
 	SmsClient    *termii.SMSConn
 	VerifyClient verification.VerificationClient
+	RedisClient  *redis.RedisConn
 }
 
 func MountServer(config ServerConfig) *chi.Mux {
@@ -94,14 +96,17 @@ func MountServer(config ServerConfig) *chi.Mux {
 		Pin:          config.Pin,
 		SMSClient:    config.SmsClient,
 		VerifyClient: config.VerifyClient,
+		RedisClient:  config.RedisClient,
 	})
 
 	// Routes
 	// Health check
 	router.Head("/", healthCheck)
-	router.Post("/webhook", handlers.WebhookHandler)
 
 	router.Route("/api/v1", func(router chi.Router) {
+
+		router.Post("/webhook", handlers.WebhookHandler)
+
 		// SignUp
 		router.Post("/signup", httpHandler.SignUp)
 		// Login

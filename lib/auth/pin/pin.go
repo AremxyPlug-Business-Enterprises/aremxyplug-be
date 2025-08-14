@@ -1,7 +1,7 @@
 package auth_pin
 
 import (
-	"log"
+	"errors"
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
@@ -36,18 +36,20 @@ func (p *PinConfig) SavePin(pin models.UserPin) error {
 	return nil
 }
 
-func (p *PinConfig) VerifyPin(userID, pin string) (bool, error) {
+var ErrIncorrectPin = errors.New("incorrect pin")
+
+func (p *PinConfig) VerifyPin(userID, pin string) error {
 
 	hashpin, err := p.dbConn.GetPin(userID)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	if valid := comparePin(hashpin, pin); !valid {
-		return false, err
+		return ErrIncorrectPin
 	}
 
-	return true, nil
+	return nil
 }
 
 func (p *PinConfig) UpdatePin(userID string, newPin string) error {
@@ -81,7 +83,6 @@ func generatePin(pin string) (string, error) {
 
 func comparePin(hashedPin, pin string) bool {
 
-	log.Println(hashedPin)
 	err := bcrypt.CompareHashAndPassword([]byte(hashedPin), []byte(pin))
 	return err == nil
 }

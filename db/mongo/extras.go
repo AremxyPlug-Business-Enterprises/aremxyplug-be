@@ -110,7 +110,7 @@ func (m *mongoStore) GetReferredUsers(referrerID string) ([]models.ReferredUserI
 			Key: "$project", Value: bson.M{
 				"user_id":     "$user_id",
 				"full_name":   "$user_info.fullname",
-				"email":       "$user_info.email",
+				"username":    "$user_info.username",
 				"is_active":   "$is_active",
 				"referred_at": "$referred_at",
 			},

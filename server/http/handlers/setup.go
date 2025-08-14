@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/aremxyplug-be/db"
+	"github.com/aremxyplug-be/db/redis"
 	"github.com/aremxyplug-be/db/sqlstore"
 	auth_pin "github.com/aremxyplug-be/lib/auth/pin"
 	bankacc "github.com/aremxyplug-be/lib/bank/bank_acc"
@@ -76,6 +77,7 @@ type HttpHandler struct {
 	smsClient            *termii.SMSConn
 	verifyClient         verification.VerificationClient
 	productClient        services.ProductService
+	redisClient          *redis.RedisConn
 }
 
 type HandlerOptions struct {
@@ -98,6 +100,7 @@ type HandlerOptions struct {
 	Pin          *auth_pin.PinConfig
 	SMSClient    *termii.SMSConn
 	VerifyClient verification.VerificationClient
+	RedisClient  *redis.RedisConn
 }
 
 func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
@@ -166,5 +169,6 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		smsClient:            opt.SMSClient,
 		verifyClient:         opt.VerifyClient,
 		productClient:        productService,
+		redisClient:          opt.RedisClient,
 	}
 }
