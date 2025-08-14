@@ -106,6 +106,13 @@ func main() {
 		RedisClient:  redisClient,
 	}
 
+	// Initialize bank list if needed
+	if err := bankTrf.ListBanks(); err != nil {
+		logger.Fatal("failed to initialize bank list", zap.Error(err))
+	}
+
+	go bankTrf.StartBankListScheduler(24 * time.Hour)
+
 	httpRouter := httpSrv.MountServer(config)
 	// Start HTTP server
 	httpAddr := fmt.Sprintf(":%s", secrets.AppPort)

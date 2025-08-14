@@ -63,6 +63,11 @@ type BankStore interface {
 	SaveTransferRecipient(userID, username, email, phone, fullName string) error
 	GetTransferRecipients(userID string) ([]models.TransferRecipientDetails, error)
 	DeleteTransferRecipient(userID, email string) error
+	UpdateBank(bank models.BankDetails) error
+	GetBankByNIPCode(nipCode string) (*models.BankDetails, error)
+	DeleteBankByNIPCode(nipCode string) error
+	GetAllBanks() ([]models.BankDetails, error)
+	UpsertBankByNIPCode(bank models.BankDetails) error
 }
 
 type UserStore interface {

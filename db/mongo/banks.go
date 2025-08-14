@@ -46,8 +46,95 @@ func (m *mongoStore) deptColl() (*mongo.Collection, error) {
 	return col, nil
 }
 
+func (m *mongoStore) bankColl() (*mongo.Collection, error) {
+	ctx := context.Background()
+	coll := m.mongoClient.Database(m.databaseName).Collection(bankColl)
+	// Unique index on nip_code
+	idxModel := mongo.IndexModel{
+		Keys:    bson.D{{Key: "nip_code", Value: 1}},
+		Options: options.Index().SetUnique(true),
+	}
+	_, err := coll.Indexes().CreateOne(ctx, idxModel)
+	if err != nil {
+		return nil, err
+	}
+	return coll, nil
+}
+
 func (m *mongoStore) SaveBankList(banklist models.BankDetails) error {
 	err := m.saveToDB(bankColl, banklist)
+	return err
+}
+
+func (m *mongoStore) GetAllBanks() ([]models.BankDetails, error) {
+	ctx := context.Background()
+	bankColl, err := m.bankColl()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get bank collection: %w", err)
+	}
+	cursor, err := bankColl.Find(ctx, bson.D{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var banks []models.BankDetails
+	for cursor.Next(ctx) {
+		var bank models.BankDetails
+		if err := cursor.Decode(&bank); err != nil {
+			return nil, err
+		}
+		banks = append(banks, bank)
+	}
+	return banks, nil
+}
+
+func (m *mongoStore) UpsertBankByNIPCode(bank models.BankDetails) error {
+	filter := bson.M{"nip_code": bank.NIPCode}
+	update := bson.M{"$set": bson.M{"name": bank.Name}}
+	bankColl, err := m.bankColl()
+	if err != nil {
+		return err
+	}
+	opts := options.Update().SetUpsert(true)
+	_, err = bankColl.UpdateOne(context.Background(), filter, update, opts)
+	return err
+}
+
+func (m *mongoStore) DeleteBankByNIPCode(nipCode string) error {
+	ctx := context.Background()
+	filter := bson.D{primitive.E{Key: "nip_code", Value: nipCode}}
+	bankColl, err := m.bankColl()
+	if err != nil {
+		return err
+	}
+	_, err = bankColl.DeleteOne(ctx, filter)
+	return err
+}
+
+func (m *mongoStore) GetBankByNIPCode(nipCode string) (*models.BankDetails, error) {
+	ctx := context.Background()
+	filter := bson.D{primitive.E{Key: "nip_code", Value: nipCode}}
+	var bank models.BankDetails
+	bankColl, err := m.bankColl()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get bank collection: %w", err)
+	}
+	if err := bankColl.FindOne(ctx, filter).Decode(&bank); err != nil {
+		return nil, err
+	}
+	return &bank, nil
+}
+
+func (m *mongoStore) UpdateBank(bank models.BankDetails) error {
+	ctx := context.Background()
+	filter := bson.D{primitive.E{Key: "nip_code", Value: bank.NIPCode}}
+	update := bson.D{primitive.E{Key: "$set", Value: bson.D{primitive.E{Key: "name", Value: bank.Name}}}}
+	bankColl, err := m.bankColl()
+	if err != nil {
+		return err
+	}
+	_, err = bankColl.UpdateOne(ctx, filter, update)
 	return err
 }
 
