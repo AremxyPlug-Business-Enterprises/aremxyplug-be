@@ -330,7 +330,7 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 				zap.Int64("attempt", attempts),
 				zap.Int("max_attempts", maxAttempts),
 			)
-			writeError(w, http.StatusUnauthorized, "incorrect pin")
+			writeError(w, http.StatusBadRequest, "incorrect pin")
 			return
 		}
 
