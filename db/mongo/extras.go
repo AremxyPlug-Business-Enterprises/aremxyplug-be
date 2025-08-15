@@ -325,10 +325,7 @@ func (m *mongoStore) UpdatePointAndTransactionTime(userID string, pointsEarned i
 	}
 
 	// Update User's last_transaction field
-	userColl, err := m.userColl()
-	if err != nil {
-
-	}
+	userColl := m.col(userColl)
 	_, err = userColl.UpdateOne(ctx, bson.M{"id": userID}, bson.D{
 		{Key: "$set", Value: bson.D{{Key: "last_transaction", Value: time.Now()}}},
 	})

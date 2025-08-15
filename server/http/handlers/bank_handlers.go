@@ -117,7 +117,7 @@ func (handler *HttpHandler) TransferRecipient(w http.ResponseWriter, r *http.Req
 		handler.logger.Info("Fetching user transfer recipient details", zap.String("userID", userDetails.ID))
 		recipients, err := handler.store.GetTransferRecipients(userDetails.ID)
 		if err != nil {
-			if err == mongo.NoRecipientFound {
+			if err == mongo.ErrNoRecipientFound {
 				handler.logger.Info("No transfer recipients found for user", zap.String("userID", userDetails.ID))
 				w.WriteHeader(http.StatusOK)
 				response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "No transfer recipients found"}}
@@ -154,7 +154,7 @@ func (handler *HttpHandler) TransferRecipient(w http.ResponseWriter, r *http.Req
 		if err := handler.store.SaveTransferRecipient(userDetails.ID, req.Username, req.Email, req.Phone, req.FullName); err != nil {
 			handler.logger.Error("Failed to save transfer recipient", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to save transfer recipient")}}
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "failed to save transfer recipient"}}
 			json.NewEncoder(w).Encode(response)
 		}
 
@@ -178,7 +178,7 @@ func (handler *HttpHandler) TransferRecipient(w http.ResponseWriter, r *http.Req
 		}
 
 		if err := handler.store.DeleteTransferRecipient(userDetails.ID, req.Email); err != nil {
-			if err == mongo.NoRecipientFound {
+			if err == mongo.ErrNoRecipientFound {
 				handler.logger.Info("No transfer recipient found for deletion", zap.String("email", req.Email))
 				w.WriteHeader(http.StatusNotFound)
 				response := responseFormat.CustomResponse{Status: http.StatusNotFound, Message: "error", Data: map[string]interface{}{"data": "No transfer recipient found"}}
