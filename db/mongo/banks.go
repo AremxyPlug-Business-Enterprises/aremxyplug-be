@@ -653,7 +653,7 @@ func (m *mongoStore) SaveTransferRecipient(userID, username, email, phone, fullN
 	return nil
 }
 
-var NoRecipientFound = errors.New("no recipient found for user")
+var ErrNoRecipientFound = errors.New("no recipient found for user")
 
 func (m *mongoStore) GetTransferRecipients(userID string) ([]models.TransferRecipientDetails, error) {
 	ctx := context.Background()
@@ -663,7 +663,7 @@ func (m *mongoStore) GetTransferRecipients(userID string) ([]models.TransferReci
 	err := col.FindOne(ctx, bson.M{"user_id": userID}).Decode(&existing)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, NoRecipientFound
+			return nil, ErrNoRecipientFound
 		}
 		return nil, fmt.Errorf("failed to retrieve recipients: %w", err)
 	}

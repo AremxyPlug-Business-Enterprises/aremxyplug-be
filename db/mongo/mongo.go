@@ -18,6 +18,17 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	dataColl     = "data"
+	eduColl      = "edu"
+	airColl      = "airtime"
+	tvColl       = "tv-sub"
+	electricColl = "elect-sub"
+	userColl     = "user"
+	messagesColl = "messages"
+	// verificationsColl = "verifications"
+)
+
 // New returns a new instance of DataStore and Client
 // response can contain error
 func New(connectURI, databaseName string, logger *zap.Logger) (db.DataStore, *mongo.Client, error) {
@@ -33,18 +44,20 @@ func New(connectURI, databaseName string, logger *zap.Logger) (db.DataStore, *mo
 		return nil, nil, err
 	}
 
-	return &mongoStore{mongoClient: client, databaseName: databaseName, logger: logger}, client, nil
+	store := &mongoStore{
+		mongoClient:  client,
+		databaseName: databaseName,
+		logger:       logger,
+	}
+
+	if err := store.InitIndexes(); err != nil {
+		return nil, nil, fmt.Errorf("failed to initialize indexes: %w", err)
+	}
+
+	return store, client, nil
 }
 
 var _ db.DataStore = &mongoStore{}
-
-var (
-	dataColl     = "data"
-	eduColl      = "edu"
-	airColl      = "airtime"
-	tvColl       = "tv-sub"
-	electricColl = "elect-sub"
-)
 
 type mongoStore struct {
 	mongoClient  *mongo.Client
@@ -56,53 +69,38 @@ func (m *mongoStore) col(collectionName string) *mongo.Collection {
 	return m.mongoClient.Database(m.databaseName).Collection(collectionName)
 }
 
-func (m *mongoStore) otpColl() (*mongo.Collection, error) {
-	col := m.mongoClient.Database(m.databaseName).Collection("OTP")
+func (m *mongoStore) InitIndexes() error {
 	ctx := context.Background()
-	expireAtIndexKey := primitive.E{Key: "expireAt", Value: 1}
-	indexModel := mongo.IndexModel{
-		Keys:    bson.D{expireAtIndexKey},
+	db := m.mongoClient.Database(m.databaseName)
+
+	// OTP index
+	otpIndex := mongo.IndexModel{
+		Keys:    bson.D{{Key: "expireAt", Value: 1}},
 		Options: options.Index().SetExpireAfterSeconds(0),
 	}
-
-	_, err := col.Indexes().CreateOne(ctx, indexModel)
-	if err != nil {
-		return nil, err
+	if _, err := db.Collection("OTP").Indexes().CreateOne(ctx, otpIndex); err != nil {
+		return fmt.Errorf("failed to create OTP index: %w", err)
 	}
 
-	return col, nil
-}
-
-func (m *mongoStore) smsColl() (*mongo.Collection, error) {
-	ctx := context.Background()
-	col := m.mongoClient.Database(m.databaseName).Collection("SMS")
-	expireAtIndexKey := primitive.E{Key: "expireAt", Value: 1}
-	indexModel := mongo.IndexModel{
-		Keys:    bson.D{expireAtIndexKey},
+	// SMS index
+	smsIndex := mongo.IndexModel{
+		Keys:    bson.D{{Key: "expireAt", Value: 1}},
 		Options: options.Index().SetExpireAfterSeconds(0),
 	}
-
-	_, err := col.Indexes().CreateOne(ctx, indexModel)
-	if err != nil {
-		return nil, err
+	if _, err := db.Collection("SMS").Indexes().CreateOne(ctx, smsIndex); err != nil {
+		return fmt.Errorf("failed to create SMS index: %w", err)
 	}
 
-	return col, nil
-}
-func (m *mongoStore) userColl() (*mongo.Collection, error) {
-	col := m.mongoClient.Database(m.databaseName).Collection(models.UserCollectionName)
-	ctx := context.Background()
-	indexModel := mongo.IndexModel{
-		Keys:    bson.D{primitive.E{Key: "expireAt", Value: 1}},
+	// User index (if you really need a TTL on user collection)
+	userIndex := mongo.IndexModel{
+		Keys:    bson.D{{Key: "expireAt", Value: 1}},
 		Options: options.Index().SetExpireAfterSeconds(0),
 	}
-
-	_, err := col.Indexes().CreateOne(ctx, indexModel)
-	if err != nil {
-		return nil, err
+	if _, err := db.Collection(userColl).Indexes().CreateOne(ctx, userIndex); err != nil {
+		return fmt.Errorf("failed to create user index: %w", err)
 	}
 
-	return col, nil
+	return nil
 }
 
 func (m *mongoStore) SaveUser(user models.User) error {
@@ -110,12 +108,9 @@ func (m *mongoStore) SaveUser(user models.User) error {
 	ctx := context.Background()
 	user.ExpireAt = time.Now().Add(time.Duration(15) * time.Minute)
 
-	col, err := m.userColl()
-	if err != nil {
-		return err
-	}
+	col := m.col(userColl)
 
-	_, err = col.InsertOne(ctx, user)
+	_, err := col.InsertOne(ctx, user)
 	if err != nil {
 		return errorvalues.Format(errorvalues.DatabaseError, err)
 	}
@@ -128,7 +123,7 @@ func (m *mongoStore) GetUserByEmail(email string) (*models.User, error) {
 		"email": email,
 	}
 	user := &models.User{}
-	err := m.col(models.UserCollectionName).FindOne(context.Background(), filter).Decode(user)
+	err := m.col(userColl).FindOne(context.Background(), filter).Decode(user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, err
@@ -143,7 +138,7 @@ func (m *mongoStore) GetUserByPhone(phone string) (*models.User, error) {
 		"phonenumber": phone,
 	}
 	user := &models.User{}
-	err := m.col(models.UserCollectionName).FindOne(context.Background(), filter).Decode(user)
+	err := m.col(userColl).FindOne(context.Background(), filter).Decode(user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, err
@@ -158,7 +153,7 @@ func (m *mongoStore) GetUserByUsername(username string) (*models.User, error) {
 		"username": username,
 	}
 	user := &models.User{}
-	err := m.col(models.UserCollectionName).FindOne(context.Background(), filter).Decode(user)
+	err := m.col(userColl).FindOne(context.Background(), filter).Decode(user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, err
@@ -174,7 +169,7 @@ func (m *mongoStore) GetUserByID(id string) (*models.User, error) {
 		"id": id,
 	}
 	user := &models.User{}
-	err := m.col(models.UserCollectionName).FindOne(context.Background(), filter).Decode(user)
+	err := m.col(userColl).FindOne(context.Background(), filter).Decode(user)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +194,7 @@ func (m *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*m
 	user := &models.User{}
 	err := m.mongoClient.
 		Database(m.databaseName).
-		Collection(models.UserCollectionName).
+		Collection(userColl).
 		FindOne(context.Background(), filter).
 		Decode(user)
 	if err != nil {
@@ -220,7 +215,7 @@ func (m *mongoStore) GetUserByUsernameOrEmailOrPhone(username, email, phone stri
 	user := &models.User{}
 	err := m.mongoClient.
 		Database(m.databaseName).
-		Collection(models.UserCollectionName).
+		Collection(userColl).
 		FindOne(context.Background(), filter).
 		Decode(user)
 	if err != nil {
@@ -232,9 +227,7 @@ func (m *mongoStore) GetUserByUsernameOrEmailOrPhone(username, email, phone stri
 func (m *mongoStore) CreateMessage(message *models.Message) error {
 	ctx := context.Background()
 	var modelInDB models.Message
-	err := m.mongoClient.
-		Database(m.databaseName).
-		Collection(models.MessagesCollectionName).
+	err := m.col(messagesColl).
 		FindOne(ctx, bson.M{"id": message.ID}).
 		Decode(&modelInDB)
 	if err != nil {
@@ -249,9 +242,7 @@ func (m *mongoStore) CreateMessage(message *models.Message) error {
 		return nil
 	}
 
-	_, err = m.mongoClient.
-		Database(m.databaseName).
-		Collection(models.MessagesCollectionName).
+	_, err = m.col(messagesColl).
 		InsertOne(ctx, message)
 	if err != nil {
 		return err
@@ -267,7 +258,7 @@ func (m *mongoStore) UpdateUserPassword(email string, password string) error {
 	update := bson.M{"$set": bson.M{"password": password}}
 	_, err := m.mongoClient.
 		Database(m.databaseName).
-		Collection(models.UserCollectionName).
+		Collection(userColl).
 		UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
@@ -279,7 +270,7 @@ func (m *mongoStore) UpdateBVNField(user models.User) error {
 	ctx := context.Background()
 	filter := bson.M{"id": user.ID}
 	update := bson.M{"$set": bson.M{"bvn": user.BVN, "has_bvn": true}}
-	_, err := m.col(models.UserCollectionName).
+	_, err := m.col(userColl).
 		UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
@@ -291,7 +282,7 @@ func (m *mongoStore) UpdateNINField(user models.User) error {
 	ctx := context.Background()
 	filter := bson.M{"id": user.ID}
 	update := bson.M{"$set": bson.M{"nin": user.NIN, "has_nin": true}}
-	_, err := m.col(models.UserCollectionName).
+	_, err := m.col(userColl).
 		UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
@@ -303,7 +294,7 @@ func (m *mongoStore) UpdateEmail(id, email string) error {
 	ctx := context.Background()
 	filter := bson.M{"id": id}
 	update := bson.M{"$set": bson.M{"email": email}}
-	coll, _ := m.userColl()
+	coll := m.col(userColl)
 	_, err := coll.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
@@ -317,7 +308,7 @@ func (m *mongoStore) UpdatePhone(id, phone string) error {
 	ctx := context.Background()
 	filter := bson.M{"id": id}
 	update := bson.M{"$set": bson.M{"phone_number": phone}}
-	coll, _ := m.userColl()
+	coll := m.col(userColl)
 	_, err := coll.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
@@ -327,7 +318,7 @@ func (m *mongoStore) UpdatePhone(id, phone string) error {
 }
 
 func (m *mongoStore) VerifyUser(identifier string) (*models.User, error) {
-	userColl := m.col(models.UserCollectionName)
+	userColl := m.col(userColl)
 	ctx := context.Background()
 
 	filter := bson.M{
@@ -388,7 +379,7 @@ func (m *mongoStore) UpdateUserAddress(userID string, gender string, dob string,
 			"address":     address,
 			"postal_code": postalCode,
 		}}
-	_, err = m.col(models.UserCollectionName).
+	_, err = m.col(userColl).
 		UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
 	if err != nil {
 		return err
@@ -441,12 +432,9 @@ func (m *mongoStore) SaveOTP(data models.OTP) error {
 	ctx := context.Background()
 	data.ExpireAt = time.Now().Add(time.Duration(5) * time.Minute)
 
-	col, err := m.otpColl()
-	if err != nil {
-		return err
-	}
+	col := m.col("OTP")
 
-	_, err = col.InsertOne(ctx, data)
+	_, err := col.InsertOne(ctx, data)
 	if err != nil {
 		return err
 	}
@@ -475,12 +463,9 @@ func (m *mongoStore) SaveSMS(data models.SMSOTP) error {
 	ctx := context.Background()
 	data.ExpireAt = time.Now().Add(time.Duration(5) * time.Minute)
 
-	col, err := m.smsColl()
-	if err != nil {
-		return err
-	}
+	col := m.col("SMS")
 
-	_, err = col.InsertOne(ctx, data)
+	_, err := col.InsertOne(ctx, data)
 	if err != nil {
 		return err
 	}
@@ -511,7 +496,7 @@ func (m *mongoStore) CheckID(id int) (int64, error) {
 	filter := bson.M{"id": id}
 	ctx := context.Background()
 
-	count, err := m.col(models.UserCollectionName).CountDocuments(ctx, filter)
+	count, err := m.col(userColl).CountDocuments(ctx, filter)
 	if err != nil {
 		return 0, err
 	}
