@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/aremxyplug-be/db/models"
@@ -142,8 +141,8 @@ func (m *mongoStore) GetBankDetail(name string) (models.BankDetails, error) {
 	ctx := context.Background()
 	bankDetail := models.BankDetails{}
 
-	bankName := strings.ToUpper(name)
-	filter := bson.D{primitive.E{Key: "name", Value: bankName}}
+	//bankName := strings.ToUpper(name)
+	filter := bson.D{primitive.E{Key: "name", Value: name}}
 	res := m.col(bankColl).FindOne(ctx, filter)
 
 	err := res.Decode(&bankDetail)
@@ -194,7 +193,7 @@ func (m *mongoStore) SaveVirtualAccount(account models.AccountDetails) error {
 
 func (m *mongoStore) GetVirtualNuban(id string) (models.AccountDetails, error) {
 	ctx := context.Background()
-	filter := bson.D{primitive.E{Key: "user_id", Value: id}}
+	filter := bson.M{"user_id": id}
 
 	acc_details := models.AccountDetails{}
 
@@ -223,10 +222,10 @@ func (m *mongoStore) SaveTransfer(transfer models.TransferResponse) error {
 func (m *mongoStore) GetCounterParty(accountNumber, bankname string) (models.CounterParty, error) {
 	ctx := context.Background()
 	counterparty := models.CounterParty{}
-	bankName := strings.ToUpper(bankname)
+	//bankName := strings.ToUpper(bankname)
 
 	// the filter should be using aggregate  search function since the fields that are to be acccessed are not on the top level.
-	filter := bson.D{primitive.E{Key: "accountnumber", Value: accountNumber}, primitive.E{Key: "bankname", Value: bankName}}
+	filter := bson.D{primitive.E{Key: "account_number", Value: accountNumber}, primitive.E{Key: "bank_name", Value: bankname}}
 	res := m.col(counterColl).FindOne(ctx, filter)
 
 	err := res.Decode(&counterparty)

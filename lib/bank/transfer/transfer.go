@@ -68,6 +68,7 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 		Email:          data.Email,
 		Phone:          data.Phone,
 		Username:       data.Username,
+		RecipientName:  data.Name,
 		Source:         "aremxyplug",
 	})
 	if err != nil {
@@ -84,18 +85,26 @@ func (c *Config) TransferToBank(info TransferInfo) (models.TransferResponse, err
 
 	// first check if the details is already in the database. if it is just procced to the point of transfer
 	counterparty, err := c.getCounterParty(info.Account_Number, info.Bank_name)
-	if err == mongo.ErrNoDocuments {
-		bankDetail, _ := c.db.GetBankDetail(info.Bank_name)
-		details, err := c.verifyAccount(bankDetail.NIPCode, info.Account_Number)
-		if err != nil {
-			return models.TransferResponse{}, JSONError(err)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			c.logger.Info("Counterparty not found, creating new one", zap.String("account_number", info.Account_Number), zap.String("bank_name", info.Bank_name))
+			bankDetail, err := c.db.GetBankDetail(info.Bank_name)
+			if err != nil {
+				c.logger.Error("Failed to get bank details", zap.Error(err))
+				return models.TransferResponse{}, err
+			}
+			c.logger.Info("Bank details for verifying account", zap.Any("bankDetail", bankDetail))
+			details, err := c.verifyAccount(bankDetail.NIPCode, info.Account_Number)
+			if err != nil {
+				return models.TransferResponse{}, err
+			}
+			counterparty, err = c.createCounterParty(details)
+			if err != nil {
+				return models.TransferResponse{}, err
+			}
+		} else {
+			return models.TransferResponse{}, err
 		}
-		counterparty, err = c.createCounterParty(details)
-		if err != nil {
-			return models.TransferResponse{}, JSONError(err)
-		}
-	} else if err != nil {
-		return models.TransferResponse{}, DBConnectionError(err)
 	}
 
 	orderID, err := randomgen.GenerateOrderID()
@@ -164,7 +173,9 @@ func (c *Config) TransferToBank(info TransferInfo) (models.TransferResponse, err
 	}
 	c.logger.Log(c.logger.Level(), string(body))
 	if resp.StatusCode != http.StatusCreated {
-		c.logger.Error(resp.Status)
+		// need to log the response at this point
+		c.logger.Log(c.logger.Level(), resp.Status)
+		c.logger.Error("Transfer failed", zap.String("response", string(body)))
 		return models.TransferResponse{}, ErrAccountValidationFailed
 	}
 	/*
@@ -205,7 +216,7 @@ func (c *Config) TransferToBank(info TransferInfo) (models.TransferResponse, err
 		result.Username = &info.Username
 		result.Email = &info.Email
 		result.Phone = &info.Phone
-		result.CustomerName = &info.FullName
+		result.CustomerName = &info.RecipientName
 
 	}
 
@@ -248,6 +259,7 @@ func (c *Config) verifyAccount(sortCode, accNumber string) (verifyAccountRespons
 
 	if res.StatusCode != http.StatusOK {
 		// return that account wasn't found
+		c.logger.Error("Account verification failed", zap.String("response", string(body)))
 		c.logger.Log(c.logger.Level(), res.Status)
 		return verifyAccountResponse{}, ErrAccountValidationFailed
 	}

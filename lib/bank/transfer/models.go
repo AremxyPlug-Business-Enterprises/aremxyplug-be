@@ -160,4 +160,5 @@ type TransferInfo struct {
 	Email          string
 	Phone          string
 	Username       string
+	RecipientName  string
 }

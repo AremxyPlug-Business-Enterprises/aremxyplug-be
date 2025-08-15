@@ -54,15 +54,15 @@ type AccountDetails struct {
 }
 
 type CounterParty struct {
-	ID            string `json:"id"`
-	AccountName   string `json:"account_name"`
-	AccountNumber string `json:"account_number"`
-	BankName      string `json:"bank_name"`
-	NIPCode       string `json:"nipCode"`
+	ID            string `json:"id" bson:"id"`
+	AccountName   string `json:"account_name" bson:"account_name"`
+	AccountNumber string `json:"account_number" bson:"account_number"`
+	BankName      string `json:"bank_name" bson:"bank_name"`
+	NIPCode       string `json:"nip_code" bson:"nip_code"`
 }
 type BankDetails struct {
 	Name    string `json:"name" bson:"name"`
-	NIPCode string `json:"nipCode" bson:"nipCode"`
+	NIPCode string `json:"nip_code" bson:"nip_code"`
 }
 
 type DepositResponse struct {

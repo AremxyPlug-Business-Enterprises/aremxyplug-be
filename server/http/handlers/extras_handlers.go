@@ -276,8 +276,8 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&pin); err != nil {
 		handler.logger.Error("Failed to decode request body", zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -296,11 +296,9 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify PIN - CRITICAL FIX: Success case outside error block
 	err = handler.pin.VerifyPin(user.ID, pin.Pin)
 	if err != nil {
 		if err == auth_pin.ErrIncorrectPin {
-			// FIX: Handle Redis errors properly
 			attempts, incrErr := handler.redisClient.IncrWithTTL(attemptsKey, attemptsTTL)
 			if incrErr != nil {
 				handler.logger.Error("Failed to increment attempts", zap.Error(incrErr))
@@ -310,7 +308,6 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 
 			if attempts >= int64(maxAttempts) {
 				unblockTime := time.Now().Add(blockDuration)
-				// FIX: Handle potential Redis error
 				if err := handler.redisClient.SetWithTTL(blockKey, unblockTime.Format(time.RFC3339), blockDuration); err != nil {
 					handler.logger.Error("Failed to set block key", zap.Error(err))
 				}
@@ -324,7 +321,6 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// FIX: Return proper error for incorrect PIN
 			handler.logger.Warn("Incorrect PIN attempt",
 				zap.String("user_id", user.ID),
 				zap.Int64("attempt", attempts),
@@ -415,11 +411,12 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 	}
 
 	type identityRequest struct {
-		BVN     string `json:"bvn,omitempty"`
-		NIN     string `json:"nin,omitempty"`
-		Dob     string `json:"dob,omitempty"`
-		Address string `json:"address,omitempty"`
-		Gender  string `json:"gender,omitempty"`
+		BVN        string `json:"bvn,omitempty"`
+		NIN        string `json:"nin,omitempty"`
+		Dob        string `json:"dob,omitempty"`
+		Address    string `json:"address,omitempty"`
+		Gender     string `json:"gender,omitempty"`
+		PostalCode string `json:"postal_code,omitempty"`
 	}
 
 	var req identityRequest
@@ -533,7 +530,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			handler.logger.Warn("Failed to update points after BVN verification", zap.Error(err))
 		}
 
-		if err := handler.store.UpdateUserAddress(user.ID, req.Gender, req.Dob, req.Address); err != nil {
+		if err := handler.store.UpdateUserAddress(user.ID, req.Gender, req.Dob, req.Address, req.PostalCode); err != nil {
 			handler.logger.Warn("Failed to update user address", zap.Error(err))
 		}
 
@@ -593,7 +590,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			handler.logger.Warn("Failed to update points after NIN verification", zap.Error(err))
 		}
 
-		if err := handler.store.UpdateUserAddress(user.ID, req.Gender, req.Dob, req.Address); err != nil {
+		if err := handler.store.UpdateUserAddress(user.ID, req.Gender, req.Dob, req.Address, req.PostalCode); err != nil {
 			handler.logger.Warn("Failed to update user address", zap.Error(err))
 		}
 

@@ -216,10 +216,42 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 		return
 	}
 
+	userBalance, err := handler.getUserBalance(userDetails.ID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance: %s", err.Error())}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	bal, err := userBalance.Decimal()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance decimal: %s", err.Error())}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	newBal, valid, err := handler.checkTransfer(bal, info.Amount)
+	if !valid || err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not complete transfer: %s", err.Error())}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
 	info.UserID = userDetails.ID
+	info.FullName = userDetails.FullName
 
 	resp, err := handler.bankTrf.TransferToAremxyPlug(info)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if err := handler.updateBalance(userDetails.ID, newBal); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
