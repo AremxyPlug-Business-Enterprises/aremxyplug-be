@@ -32,7 +32,7 @@ func (m *mongoStore) updateReferralCount(referrersCode string) error {
 
 	filter := bson.D{primitive.E{Key: "id", Value: referrersCode}}
 	updateFilter := bson.D{
-		{Key: "$inc", Value: bson.D{{Key: "count", Value: 1}}},
+		{Key: "$inc", Value: bson.D{{Key: "referral_count", Value: 1}}},
 	}
 
 	updateResult, err := m.col("user").UpdateOne(ctx, filter, updateFilter)
@@ -108,7 +108,7 @@ func (m *mongoStore) GetReferredUsers(referrerID string) ([]models.ReferredUserI
 		// Project desired fields
 		{{
 			Key: "$project", Value: bson.M{
-				"user_id":     "$user_id",
+				"referred_id": "$user_id",
 				"full_name":   "$user_info.fullname",
 				"username":    "$user_info.username",
 				"is_active":   "$is_active",

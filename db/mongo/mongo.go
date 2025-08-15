@@ -370,7 +370,7 @@ func (m *mongoStore) VerifyUser(identifier string) (*models.User, error) {
 	return user, nil
 }
 
-func (m *mongoStore) UpdateUserAddress(userID string, gender string, dob string, address string) error {
+func (m *mongoStore) UpdateUserAddress(userID string, gender string, dob string, address string, postalCode string) error {
 
 	ctx := context.Background()
 
@@ -383,9 +383,10 @@ func (m *mongoStore) UpdateUserAddress(userID string, gender string, dob string,
 	filter := bson.M{"id": userID}
 	update := bson.M{
 		"$set": bson.M{
-			"birth_date": birth_date,
-			"gender":     gender,
-			"address":    address,
+			"birth_date":  birth_date,
+			"gender":      gender,
+			"address":     address,
+			"postal_code": postalCode,
 		}}
 	_, err = m.col(models.UserCollectionName).
 		UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))

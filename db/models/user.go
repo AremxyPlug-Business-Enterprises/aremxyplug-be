@@ -26,5 +26,6 @@ type User struct {
 	ReferralCount   int       `json:"referral_count" bson:"referral_count"`
 	LastTransaction time.Time `json:"last_transaction" bson:"last_transaction"`
 	Address         string    `json:"address" bson:"address"`
+	PostalCode      string    `json:"postal_code" bson:"postal_code"`
 	Gender          string    `json:"gender" bson:"gender"`
 }

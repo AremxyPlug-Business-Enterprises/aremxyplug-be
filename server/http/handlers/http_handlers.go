@@ -128,7 +128,8 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if user.InvitationCode != "" {
-		err := handler.store.CreateUserReferral(userId, user.InvitationCode)
+		inviteCode := cases.Title(language.English).String(user.InvitationCode)
+		err := handler.store.CreateUserReferral(userId, inviteCode)
 		if err != nil {
 			handler.logger.Warn("error updating referral count", zap.Error(err))
 		}
