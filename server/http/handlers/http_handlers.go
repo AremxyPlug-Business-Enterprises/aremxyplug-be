@@ -173,13 +173,63 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	hashedPassword := user.Password
 
+	attemptsKey := fmt.Sprintf("password_attempts:%s", user.ID)
+	blockedKey := fmt.Sprintf("password_blocked:%s", user.ID)
+
+	maxAttempts := 5
+	blockDuration := 1 * time.Hour
+	attemptsTTL := 10 * time.Minute
+
+	// Check if user is already blocked
+	if blockedUntil, err := handler.redisClient.Get(blockedKey); err == nil && blockedUntil != nil {
+		msg := fmt.Sprintf("PIN blocked until %s", blockedUntil.(string))
+		handler.logger.Warn(msg, zap.String("user_id", user.ID))
+		writeError(w, http.StatusForbidden, msg)
+		return
+	}
+
 	ok := handler.encrypt.ComparePasscode(userlogin.Password, hashedPassword)
 	if !ok {
+		// Increment failed login attempts in Redis with a TTL of 15 minutes
+		attempts, incrErr := handler.redisClient.IncrWithTTL(attemptsKey, attemptsTTL)
+		if incrErr != nil {
+			handler.logger.Error("Failed to increment attempts", zap.Error(incrErr))
+			writeError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+
+		if attempts >= int64(maxAttempts) {
+			unblockTime := time.Now().Add(blockDuration)
+			if err := handler.redisClient.SetWithTTL(blockedKey, unblockTime.Format(time.RFC3339), blockDuration); err != nil {
+				handler.logger.Error("Failed to set block key", zap.Error(err))
+			}
+			handler.redisClient.Del(attemptsKey)
+
+			handler.logger.Warn("user temporarily blocked due to too many failed login attempts", zap.String("userID", user.ID))
+			handler.logger.Warn("Too many incorrect paswsword attempts - account blocked",
+				zap.String("user_id", user.ID),
+				zap.Time("unblock_time", unblockTime),
+			)
+			writeError(w, http.StatusForbidden, "account blocked due to too many incorrect paasword attempts")
+			return
+		}
+
+		handler.logger.Warn("Incorrect PIN attempt",
+			zap.String("user_id", user.ID),
+			zap.Int64("attempt", attempts),
+			zap.Int("max_attempts", maxAttempts),
+		)
+
 		handler.logger.Error("store validating password")
 		w.WriteHeader(http.StatusUnauthorized)
 		response := responseFormat.CustomResponse{Status: http.StatusUnauthorized, Message: "error", Data: map[string]interface{}{"data": "password incorrect"}}
 		json.NewEncoder(w).Encode(response)
 		return
+	}
+
+	// On successful login, reset the login attempts counter
+	if err := handler.redisClient.Del(attemptsKey); err != nil {
+		handler.logger.Warn("failed to reset login attempts after successful login", zap.Error(err))
 	}
 
 	refreshTokenClaims := dto.Claims{

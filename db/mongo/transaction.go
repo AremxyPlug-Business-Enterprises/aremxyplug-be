@@ -67,10 +67,18 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 	}
 
 	// Projection
-	projectStage := bson.D{{Key: "$project", Value: bson.M{
-		"transaction_product": 1, "transaction_description": 1, "order_id": 1,
-		"created_at": 1, "status": 1, "amount": 1,
-	}}}
+	projectStage := bson.D{
+		{Key: "$project", Value: bson.D{
+			{Key: "product", Value: "$transaction_product"},
+			{Key: "description", Value: "$transaction_description"},
+			{Key: "order_id", Value: "$order_id"},
+			{Key: "created_at", Value: "$created_at"},
+			{Key: "status", Value: "$status"},
+			{Key: "amountDecimal", Value: bson.D{
+				{Key: "$toDouble", Value: "$amount"},
+			}},
+		}},
+	}
 
 	// Base flow type
 	baseFlowType := "outflow"
@@ -469,7 +477,6 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 			bson.M{"product": regex},
 		}})
 	}
-
 	dateRange := bson.M{}
 	if start, ok := filter["start_date"].(time.Time); ok {
 		dateRange["$gte"] = start
@@ -481,27 +488,54 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 		matchConditions = append(matchConditions, bson.E{Key: "created_at", Value: dateRange})
 	}
 
-	// Base pipeline
+	projectStage := bson.D{
+		{Key: "$project", Value: bson.D{
+			{Key: "product", Value: "$transaction_product"},
+			{Key: "description", Value: "$transaction_description"},
+			{Key: "order_id", Value: "$order_id"},
+			{Key: "created_at", Value: "$created_at"},
+			{Key: "status", Value: "$status"},
+			{Key: "amountDecimal", Value: bson.D{
+				{Key: "$toDouble", Value: "$amount"},
+			}},
+		}},
+	}
+
+	// amountDecimal conversion stage (reused)
+	amountConversionStage := bson.D{{Key: "$addFields", Value: bson.M{
+		"amountDecimal": bson.M{
+			"$cond": bson.A{
+				bson.M{"$eq": bson.A{bson.M{"$type": "$amount"}, "double"}},
+				"$amount",
+				bson.M{"$convert": bson.M{
+					"input":   "$amount",
+					"to":      "double",
+					"onError": 0,
+					"onNull":  0,
+				}},
+			},
+		},
+	}}}
+
+	// Base pipeline (deposit-transaction -> inflow)
 	basePipeline := mongo.Pipeline{
 		{{Key: "$match", Value: matchConditions}},
 		{{Key: "$addFields", Value: bson.M{"flowType": "inflow"}}},
-		{{Key: "$addFields", Value: bson.M{
-			"amountDecimal": bson.M{
-				"$cond": bson.A{
-					bson.M{"$eq": bson.A{bson.M{"$type": "$amount"}, "double"}},
-					"$amount",
-					bson.M{"$convert": bson.M{
-						"input": "$amount", "to": "double",
-						"onError": 0,
-						"onNull":  0,
-					}},
-				},
-			},
-		}}},
+		amountConversionStage,
+		projectStage,
 	}
 
-	// Data pipeline with pagination
+	// Transfer pipeline stages for $unionWith (transfer -> outflow)
+	transferUnionPipeline := bson.A{
+		bson.D{{Key: "$match", Value: matchConditions}},
+		bson.D{{Key: "$addFields", Value: bson.M{"flowType": "outflow"}}},
+		amountConversionStage,
+		projectStage,
+	}
+
+	// Data pipeline with union, pagination and sorting
 	dataPipeline := append(basePipeline,
+		bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
 		bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
 		bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
 		bson.D{{Key: "$limit", Value: int64(pageSize)}},
@@ -509,7 +543,7 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 
 	cursor, err := m.col(depositColl).Aggregate(ctx, dataPipeline)
 	if err != nil {
-		m.logger.Error("Wallet inflow data aggregation failed", zap.Error(err))
+		m.logger.Error("Wallet inflow+outflow data aggregation failed", zap.Error(err))
 		return models.TransactionResponse{}, err
 	}
 	defer cursor.Close(ctx)
@@ -519,8 +553,9 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 		return models.TransactionResponse{}, err
 	}
 
-	// Totals pipeline
+	// Totals pipeline (same union, then group)
 	totalsPipeline := append(basePipeline,
+		bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
 		bson.D{{Key: "$group", Value: bson.M{
 			"_id":        nil,
 			"totalCount": bson.M{"$sum": 1},
@@ -528,19 +563,24 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 				bson.M{"$eq": bson.A{"$flowType", "inflow"}},
 				"$amountDecimal", 0,
 			}}},
-		}}},
+			"totalOutflow": bson.M{"$sum": bson.M{"$cond": bson.A{
+				bson.M{"$eq": bson.A{"$flowType", "outflow"}},
+				"$amountDecimal", 0,
+			}}},
+		}}}, // end group
 	)
 
 	totalsCursor, err := m.col(depositColl).Aggregate(ctx, totalsPipeline)
 	if err != nil {
-		m.logger.Error("Wallet inflow totals aggregation failed", zap.Error(err))
+		m.logger.Error("Wallet totals aggregation failed", zap.Error(err))
 		return models.TransactionResponse{}, err
 	}
 	defer totalsCursor.Close(ctx)
 
 	var totals []struct {
-		TotalCount  int     `bson:"totalCount"`
-		TotalInflow float64 `bson:"totalInflow"`
+		TotalCount   int     `bson:"totalCount"`
+		TotalInflow  float64 `bson:"totalInflow"`
+		TotalOutflow float64 `bson:"totalOutflow"`
 	}
 	if err := totalsCursor.All(ctx, &totals); err != nil {
 		return models.TransactionResponse{}, err
@@ -549,16 +589,17 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 	// Prepare response
 	res := models.TransactionResponse{
 		Transactions: transactions,
-		TotalOutflow: 0, // always 0 for wallet inflow summary
 	}
 	if len(totals) > 0 {
 		res.TotalCount = totals[0].TotalCount
 		res.TotalInflow = totals[0].TotalInflow
+		res.TotalOutflow = totals[0].TotalOutflow
 	}
 
-	m.logger.Info("Wallet inflow summary fetched",
+	m.logger.Info("Wallet summary fetched",
 		zap.Int("count", len(transactions)),
 		zap.Int("total", res.TotalCount),
+		zap.Any("filter", filter),
 	)
 
 	return res, nil
