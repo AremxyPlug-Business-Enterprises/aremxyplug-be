@@ -39,6 +39,7 @@ func NewDepositConfig(db db.DataStore, logger *zap.Logger) *Config {
 		logger: logger,
 	}
 }
+
 func (c *Config) Deposit(virtualaccountid string, userID string) error {
 	// using the list payment endpoint.
 	url := fmt.Sprintf("%s/%s?%s=%s", api, "payments", "virtualNubanId", virtualaccountid)

@@ -189,11 +189,29 @@ func (c *Config) TransferToBank(info TransferInfo) (models.TransferResponse, err
 		return models.TransferResponse{}, JSONError(err)
 	}
 
+	apiStatus := apiResponse.Data.Attributes.Status
+
+	status := ""
+	switch apiStatus {
+	case "PENDING":
+		// implement the redis case for this???
+		c.logger.Info("Transfer is pending, saving transaction details", zap.String("transaction_id", apiResponse.Data.ID))
+		status = "pending"
+	case "FAILED":
+		c.logger.Info("Transfer is pending, saving transaction details", zap.String("transaction_id", apiResponse.Data.ID))
+		status = "failed"
+	case "SUCCESS":
+		c.logger.Info("Transfer is pending, saving transaction details", zap.String("transaction_id", apiResponse.Data.ID))
+		status = "success"
+	default:
+		c.logger.Info("Transfer is pending, saving transaction details", zap.String("transaction_id", apiResponse.Data.ID))
+		status = "pending"
+	}
+
 	amt := strconv.Itoa(int(info.Amount))
 
 	result := models.TransferResponse{
-
-		Status:                 "success",
+		Status:                 status,
 		Amount:                 amt,
 		UserID:                 info.UserID,
 		FullName:               info.FullName,
@@ -202,8 +220,8 @@ func (c *Config) TransferToBank(info TransferInfo) (models.TransferResponse, err
 		Reason:                 info.Reason,
 		Order_ID:               orderID,
 		Transaction_ID:         transactionID,
-		// sessionID is gotten from the webhook
-		CreatedAt: time.Now().UTC(),
+		Reference:              apiResponse.Data.ID,
+		CreatedAt:              time.Now().UTC(),
 	}
 
 	switch info.Source {

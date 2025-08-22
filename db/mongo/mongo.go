@@ -100,6 +100,23 @@ func (m *mongoStore) InitIndexes() error {
 		return fmt.Errorf("failed to create user index: %w", err)
 	}
 
+	bankIndex := mongo.IndexModel{
+		Keys:    bson.D{{Key: "nip_code", Value: 1}},
+		Options: options.Index().SetUnique(true),
+	}
+	if _, err := db.Collection(bankColl).Indexes().CreateOne(ctx, bankIndex); err != nil {
+		return fmt.Errorf("failed to create bank index: %w", err)
+	}
+
+	deptIndex := mongo.IndexModel{
+		Keys:    bson.D{primitive.E{Key: "ID", Value: 1}},
+		Options: options.Index().SetUnique(true),
+	}
+
+	if _, err := db.Collection(deptColl).Indexes().CreateOne(ctx, deptIndex); err != nil {
+		return fmt.Errorf("failed to create department index: %w", err)
+	}
+
 	return nil
 }
 

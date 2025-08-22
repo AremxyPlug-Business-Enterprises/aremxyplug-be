@@ -29,6 +29,8 @@ type TransferResponse struct {
 	Transaction_ID         string    `json:"transaction_id" bson:"transaction_id"`
 	Session_ID             string    `json:"session_id" bson:"session_id"`
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
+	Reference              string    `bson:"reference"`
+	TXN                    string    `bson:"txn"`
 }
 
 type TransferRecipient struct {

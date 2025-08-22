@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/mongo"
@@ -13,6 +14,7 @@ import (
 	"github.com/aremxyplug-be/lib/bank/transfer"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
@@ -62,8 +64,44 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// --- Create a txID (used for Redis hold) ---
+		txID := uuid.New().String()
+
+		// convert amount to lowest unit (kobo) for Redis hold
+		// adjust this conversion if info.Amount is an int type in your project
+		amountKobo := float64(info.Amount * 100)
+
+		// --- Place the atomic hold in Redis BEFORE calling provider ---
+		holdTTL := 48 * time.Hour // tune to your needs (how long to keep a pending hold)
+		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txID, amountKobo, holdTTL); err != nil {
+			// preserve your logging + response style
+			handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userDetails.ID))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "failed to reserve funds, try again"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Save minimal meta so webhook can find user/amount without extra DB reads
+		meta := map[string]interface{}{
+			"user_id":     userDetails.ID,
+			"amount_kobo": amountKobo,
+			"created_at":  time.Now().UTC().Format(time.RFC3339),
+		}
+		// non-fatal if this fails; just log
+		if err := handler.redisClient.SetMeta(txID, meta, 7*24*time.Hour); err != nil {
+			handler.logger.Warn("failed to set transfer meta in redis", zap.Error(err), zap.String("txID", txID))
+		}
+
+		// should create a redis job to hold balance
+
 		info.UserID = userBalance.UserID
 		info.Source = "direct"
+		info.TXN = txID
 
 		resp, err := handler.bankTrf.TransferToBank(info)
 		if err != nil {
@@ -71,21 +109,57 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
-
 		}
 
-		if err := handler.updateBalance(userDetails.ID, newBal); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		switch resp.Status {
+		case "success":
+			// confirm the hold in Redis (finalize funds)
+			if ok, err := handler.redisClient.ConfirmHold(userDetails.ID, txID); err != nil || !ok {
+				handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
+
+			}
+			// persist DB balance (idempotent) — this preserves your original behaviour
+			if err := handler.updateBalance(userDetails.ID, newBal); err != nil {
+				handler.logger.Error("Failed to update user balance", zap.Error(err))
+				// keep behavior: return NotModified if persistence fails (as your original did)
+				w.WriteHeader(http.StatusInternalServerError)
+				response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+
+			// return success (same response structure you had)
+			w.WriteHeader(http.StatusOK)
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
+			json.NewEncoder(w).Encode(response)
+			return
+		case "pending":
+
+			w.WriteHeader(http.StatusOK)
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
+			json.NewEncoder(w).Encode(response)
+			return
+
+		case "failed":
+
+			// release the hold in Redis
+			if ok, err := handler.redisClient.ReleaseHold(userDetails.ID, txID); err != nil || !ok {
+				handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
+			}
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(response)
+			return
+
+		default:
+
+			//treat as pending
+			w.WriteHeader(http.StatusOK)
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		// if successfull return the Transfer receipt, otherwise return the error
-
-		w.WriteHeader(http.StatusOK)
-		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
-		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {

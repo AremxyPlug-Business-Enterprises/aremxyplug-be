@@ -15,6 +15,7 @@ type DataStore interface {
 	TelcomStore
 	UtilitiesStore
 	TransactionStore
+	WebhookStore
 }
 
 type Extras interface {
@@ -121,4 +122,13 @@ type TransactionStore interface {
 	GetTransactions(filter map[string]interface{}, page, pageSize int) (models.TransactionResponse, error)
 	GetSalesSummary(category string, filter map[string]interface{}, page int) (models.SalesSummary, error)
 	GetWalletSummary(filter map[string]interface{}, page int) (models.TransactionResponse, error)
+}
+
+type WebhookStore interface {
+	GetReceiptByExternalRef(externalRef string) (models.TransferResponse, error)
+	GetReceiptByTxID(txID string) (models.TransferResponse, error)
+	UpdateReceiptFinal(txID, status, sessionID string) error
+	UpdateUserBalanceFromRedis(userID string, balance float64) error
+	UpdateReceiptStatus(txID, status string) error
+	UpdateReceiptExternalRef(txID, externalRef string) error
 }

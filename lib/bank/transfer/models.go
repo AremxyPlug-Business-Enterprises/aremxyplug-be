@@ -47,6 +47,7 @@ type transferResult struct {
 }
 
 type transferResultData struct {
+	ID         string                   `json:"id"`
 	Type       string                   `json:"type"`
 	Attributes transferResultAttributes `json:"attributes"`
 }
@@ -161,4 +162,5 @@ type TransferInfo struct {
 	Phone          string
 	Username       string
 	RecipientName  string
+	TXN            string
 }
