@@ -105,7 +105,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 	router.Route("/api/v1", func(router chi.Router) {
 
-		router.Post("/webhook", handlers.WebhookHandler)
+		router.Post("/webhook", httpHandler.WebhookHandler)
 
 		// SignUp
 		router.Post("/signup", httpHandler.SignUp)

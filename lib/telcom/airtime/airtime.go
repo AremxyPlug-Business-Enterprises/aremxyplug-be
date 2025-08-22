@@ -96,6 +96,7 @@ func (a *AirtimeConn) BuyAirtime(airtime telcom.AirtimeInfo) (*telcom.AirtimeRes
 		OrderID:                id,
 		Amount:                 amount,
 		Network:                network,
+		NetworkProduct:         product,
 		TransactionProduct:     transactionProduct,
 		TransactionDescription: description,
 		Phone_no:               airtime.Phone_no,

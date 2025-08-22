@@ -29,37 +29,6 @@ var (
 	ErrDepositIDExist = errors.New("deposit_id already exists")
 )
 
-func (m *mongoStore) deptColl() (*mongo.Collection, error) {
-	col := m.mongoClient.Database(m.databaseName).Collection("deposit_IDs")
-	ctx := context.Background()
-	indexModel := mongo.IndexModel{
-		Keys:    bson.D{primitive.E{Key: "ID", Value: 1}},
-		Options: options.Index().SetUnique(true),
-	}
-
-	_, err := col.Indexes().CreateOne(ctx, indexModel)
-	if err != nil {
-		return nil, err
-	}
-
-	return col, nil
-}
-
-func (m *mongoStore) bankColl() (*mongo.Collection, error) {
-	ctx := context.Background()
-	coll := m.mongoClient.Database(m.databaseName).Collection(bankColl)
-	// Unique index on nip_code
-	idxModel := mongo.IndexModel{
-		Keys:    bson.D{{Key: "nip_code", Value: 1}},
-		Options: options.Index().SetUnique(true),
-	}
-	_, err := coll.Indexes().CreateOne(ctx, idxModel)
-	if err != nil {
-		return nil, err
-	}
-	return coll, nil
-}
-
 func (m *mongoStore) SaveBankList(banklist models.BankDetails) error {
 	err := m.saveToDB(bankColl, banklist)
 	return err
@@ -67,10 +36,7 @@ func (m *mongoStore) SaveBankList(banklist models.BankDetails) error {
 
 func (m *mongoStore) GetAllBanks() ([]models.BankDetails, error) {
 	ctx := context.Background()
-	bankColl, err := m.bankColl()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get bank collection: %w", err)
-	}
+	bankColl := m.col(bankColl)
 	cursor, err := bankColl.Find(ctx, bson.D{})
 	if err != nil {
 		return nil, err
@@ -91,23 +57,18 @@ func (m *mongoStore) GetAllBanks() ([]models.BankDetails, error) {
 func (m *mongoStore) UpsertBankByNIPCode(bank models.BankDetails) error {
 	filter := bson.M{"nip_code": bank.NIPCode}
 	update := bson.M{"$set": bson.M{"name": bank.Name}}
-	bankColl, err := m.bankColl()
-	if err != nil {
-		return err
-	}
+	bankColl := m.col(bankColl)
 	opts := options.Update().SetUpsert(true)
-	_, err = bankColl.UpdateOne(context.Background(), filter, update, opts)
+	_, err := bankColl.UpdateOne(context.Background(), filter, update, opts)
 	return err
 }
 
 func (m *mongoStore) DeleteBankByNIPCode(nipCode string) error {
 	ctx := context.Background()
 	filter := bson.D{primitive.E{Key: "nip_code", Value: nipCode}}
-	bankColl, err := m.bankColl()
-	if err != nil {
-		return err
-	}
-	_, err = bankColl.DeleteOne(ctx, filter)
+	bankColl := m.col(bankColl)
+
+	_, err := bankColl.DeleteOne(ctx, filter)
 	return err
 }
 
@@ -115,10 +76,7 @@ func (m *mongoStore) GetBankByNIPCode(nipCode string) (*models.BankDetails, erro
 	ctx := context.Background()
 	filter := bson.D{primitive.E{Key: "nip_code", Value: nipCode}}
 	var bank models.BankDetails
-	bankColl, err := m.bankColl()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get bank collection: %w", err)
-	}
+	bankColl := m.col(bankColl)
 	if err := bankColl.FindOne(ctx, filter).Decode(&bank); err != nil {
 		return nil, err
 	}
@@ -129,11 +87,8 @@ func (m *mongoStore) UpdateBank(bank models.BankDetails) error {
 	ctx := context.Background()
 	filter := bson.D{primitive.E{Key: "nip_code", Value: bank.NIPCode}}
 	update := bson.D{primitive.E{Key: "$set", Value: bson.D{primitive.E{Key: "name", Value: bank.Name}}}}
-	bankColl, err := m.bankColl()
-	if err != nil {
-		return err
-	}
-	_, err = bankColl.UpdateOne(ctx, filter, update)
+	bankColl := m.col(bankColl)
+	_, err := bankColl.UpdateOne(ctx, filter, update)
 	return err
 }
 
@@ -371,12 +326,9 @@ func (m *mongoStore) SaveDeposit(detail models.DepositResponse) error {
 func (m *mongoStore) SaveDepositID(detail interface{}) error {
 	ctx := context.Background()
 
-	col, err := m.deptColl()
-	if err != nil {
-		return err
-	}
+	col := m.col(deptColl)
 
-	_, err = col.InsertOne(ctx, detail)
+	_, err := col.InsertOne(ctx, detail)
 	if err != nil {
 		if writeException, ok := err.(mongo.WriteException); ok {
 			for _, writeError := range writeException.WriteErrors {
