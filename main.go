@@ -53,12 +53,11 @@ func main() {
 		logger.Fatal("failed to open mongodb", zap.Error(err))
 	}
 
-	sshClient, err := createSSHClient()
-	if err != nil {
-		logger.Fatal("failed to create SSH client", zap.Error(err))
+	sshFactory := func() (*ssh.Client, error) {
+		return createSSHClient()
 	}
 
-	sqlStore, err := sqlstore.NewSQLConn(sshClient, logger)
+	sqlStore, err := sqlstore.NewSQLConn(sshFactory, logger)
 	if err != nil {
 		logger.Fatal("failed to create SQL connection", zap.Error(err))
 	}
@@ -136,27 +135,23 @@ func createSSHClient() (*ssh.Client, error) {
 		Timeout:         30 * time.Second,
 	}
 
-	// Connect to SSH server
 	sshClient, err := ssh.Dial("tcp", sshHost, config)
 	if err != nil {
 		return nil, fmt.Errorf("SSH connection failed: %w", err)
 	}
 
 	// Start SSH keep-alive goroutine
-	go func() {
+	go func(client *ssh.Client) {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			session, err := sshClient.NewSession()
+			_, _, err := client.SendRequest("keepalive@openssh.com", true, nil)
 			if err != nil {
-				fmt.Printf("SSH keep-alive session failed: %v\n", err)
-				return // break out if the connection is gone
+				fmt.Printf("SSH keepalive failed: %v\n", err)
+				return // tunnel is dead → SqlStore.reconnect() will build a new one
 			}
-			// Run a harmless command that doesn’t produce output
-			_ = session.Run("true")
-			session.Close()
 		}
-	}()
+	}(sshClient)
 
 	return sshClient, nil
 }

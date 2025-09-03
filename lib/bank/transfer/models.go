@@ -53,9 +53,10 @@ type transferResultData struct {
 }
 
 type transferResultAttributes struct {
+	Reference     string  `json:"reference"`
 	Reason        string  `json:"reason"`
 	FailureReason string  `json:"failureReason"`
-	Ammount       float64 `json:"ammount"`
+	Amount        float64 `json:"amount"`
 	Status        string  `json:"status"`
 }
 
@@ -147,6 +148,7 @@ type AremxyPlugTransfer struct {
 	Name     string  `json:"name"`
 	Reason   string  `json:"reason,omitempty"`
 	FullName string
+	TXN      string
 }
 
 type TransferInfo struct {

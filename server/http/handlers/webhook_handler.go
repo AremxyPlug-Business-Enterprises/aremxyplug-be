@@ -7,17 +7,19 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/db/mongo"
+	"github.com/aremxyplug-be/lib/balance"
+	"github.com/aremxyplug-be/lib/randomgen"
+	"github.com/shopspring/decimal"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/zap"
 )
 
-type DBInterface interface {
-
-	// add any other methods you have already implemented
-}
-
 // Webhook handler: quick ack then background processing
-func (handler HttpHandler) WebhookHandler(w http.ResponseWriter, r *http.Request) {
+func (handler *HttpHandler) WebhookHandler(w http.ResponseWriter, r *http.Request) {
 	if !handler.allowedIP(r) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
@@ -41,9 +43,9 @@ func (handler HttpHandler) WebhookHandler(w http.ResponseWriter, r *http.Request
 	}(body)
 }
 
-func (handler HttpHandler) allowedIP(r *http.Request) bool {
+func (handler *HttpHandler) allowedIP(r *http.Request) bool {
 	allowedIPs := map[string]bool{
-		"123.45.67.89": true,
+		"18.133.55.102": true,
 	}
 	if xf := r.Header.Get("X-Forwarded-For"); xf != "" {
 		parts := strings.Split(xf, ",")
@@ -64,15 +66,32 @@ type webhookPayload struct {
 	Relationships map[string]interface{} `json:"relationships"`
 }
 
-func (handler HttpHandler) ProcessWebhook(body []byte) error {
-
+func (handler *HttpHandler) ProcessWebhook(body []byte) error {
+	// parse payload
 	var p webhookPayload
 	if err := json.Unmarshal(body, &p); err != nil {
 		handler.logger.Error("failed parse webhook JSON", zap.Error(err))
 		return err
 	}
 
-	// extract apiRef
+	switch p.Type {
+	case "transfer.initiated", "transfer.success", "transfer.failed":
+		// existing transfer processing
+		return handler.processTransfer(p)
+
+	case "payment.settled":
+		// new deposit processing
+		return handler.processDeposit(p)
+
+	default:
+		handler.logger.Warn("unhandled webhook type", zap.String("type", p.Type))
+	}
+
+	return nil
+}
+
+func (handler *HttpHandler) processTransfer(p webhookPayload) error {
+
 	var apiRef string
 	if rel, ok := p.Relationships["transfer"]; ok {
 		if m, ok := rel.(map[string]interface{}); ok {
@@ -84,10 +103,6 @@ func (handler HttpHandler) ProcessWebhook(body []byte) error {
 		}
 	}
 
-	if apiRef == "" {
-		apiRef = p.ID
-	}
-
 	// extract sessionId and failureReason
 	var sessionID, failureReason string
 	if s, ok := p.Attributes["sessionId"].(string); ok {
@@ -97,52 +112,80 @@ func (handler HttpHandler) ProcessWebhook(body []byte) error {
 		failureReason = fr
 	}
 
+	// event type and reversed detection
+	eventType := p.Type
+	isReversed := strings.Contains(strings.ToLower(eventType), "transfer.reversed")
+	failed := strings.Contains(strings.ToLower(eventType), "transfer.failed")
+	success := strings.Contains(strings.ToLower(eventType), "transfer.successful")
+
 	// Fast Redis lookup: transfer:ext:{apiRef} -> txID
 	var txID string
 	val, err := handler.redisClient.Get(fmt.Sprintf("transfer:ext:%s", apiRef))
 	if err != nil {
-		handler.logger.Warn("redis lookup error for ext mapping", zap.Error(err))
+		handler.logger.Warn("redis lookup error for ext mapping", zap.Error(err), zap.String("apiRef", apiRef))
 	}
 	if val != nil {
-		if s, ok := val.(string); ok {
-			txID = s
-		} else {
-			// val may be []byte or numeric string; attempt conversion
-			if bs, ok := val.([]byte); ok {
-				txID = string(bs)
+		switch v := val.(type) {
+		case string:
+			txID = v
+		case []byte:
+			txID = string(v)
+		default:
+			// attempt to marshal -> string
+			if b, merr := json.Marshal(v); merr == nil {
+				txID = string(b)
 			}
 		}
 	}
 
-	// fallback DB lookup
+	// fallback DB lookup by external ref
 	if txID == "" {
 		rec, derr := handler.store.GetReceiptByExternalRef(apiRef)
 		if derr != nil {
+			// unknown external ref — already acked upstream; log and stop
 			handler.logger.Warn("unknown externalRef in webhook", zap.String("apiRef", apiRef))
-			return nil // ack done already
+			return nil
 		}
-		txID = rec.Transaction_ID
+		txID = rec.TXN
 	}
 
-	// load receipt and idempotency check
+	// load receipt by txID
 	rec, err := handler.store.GetReceiptByTxID(txID)
 	if err != nil {
 		handler.logger.Error("store get receipt failed", zap.Error(err), zap.String("txID", txID))
 		return err
 	}
-	if rec.Status == "success" || rec.Status == "failed" {
-		handler.logger.Info("receipt already final, skipping", zap.String("txID", txID), zap.String("status", rec.Status))
+
+	// idempotency: if already final, skip
+	statusLower := strings.ToLower(rec.Status)
+	dbStatus := statusLower
+
+	shouldProcess := false
+	if dbStatus == "pending" {
+		shouldProcess = true
+	} else if dbStatus == "failed" && (success || isReversed) {
+		shouldProcess = true
+	} else if dbStatus == "success" && (isReversed || failed) {
+		shouldProcess = true
+	}
+
+	if !shouldProcess {
+		handler.logger.Info("receipt already final, skipping",
+			zap.String("txID", txID),
+			zap.String("dbStatus", dbStatus),
+			zap.String("incoming", eventType),
+		)
 		return nil
 	}
 
-	// get meta: try redis Get on transfer:meta:{txID}
+	// load metadata: try redis transfer:meta:{txID}
 	var meta struct {
 		UserID string `json:"user_id"`
 		Amount int64  `json:"amount"`
 	}
-	metaVal, err := handler.redisClient.Get(fmt.Sprintf("transfer:meta:%s", txID))
-	if err != nil {
-		handler.logger.Warn("failed to read transfer meta from redis", zap.Error(err))
+	metaVal, merr := handler.redisClient.Get(fmt.Sprintf("transfer:meta:%s", txID))
+	if merr != nil {
+		handler.logger.Warn("failed to read transfer meta from redis", zap.Error(merr), zap.String("txID", txID))
 	}
 	if metaVal != nil {
 		switch v := metaVal.(type) {
@@ -151,24 +194,26 @@ func (handler HttpHandler) ProcessWebhook(body []byte) error {
 		case []byte:
 			_ = json.Unmarshal(v, &meta)
 		default:
-			// attempt to marshal then unmarshal
-			b, _ := json.Marshal(v)
-			_ = json.Unmarshal(b, &meta)
+			// marshal then unmarshal into struct
+			if b, _ := json.Marshal(v); len(b) > 0 {
+				_ = json.Unmarshal(b, &meta)
+			}
 		}
 	} else {
-		// fallback to receipt data
+		// fallback to receipt values
 		meta.UserID = rec.UserID
-		// Convert rec.Amount (string) to int64
-		if amt, err := strconv.ParseInt(rec.Amount, 10, 64); err == nil {
-			meta.Amount = amt
-		} else {
-			handler.logger.Warn("failed to parse receipt amount", zap.String("amount", rec.Amount), zap.Error(err))
-			meta.Amount = 0
+		if rec.Amount != "" {
+			if amt, err := strconv.ParseInt(rec.Amount, 10, 64); err == nil {
+				meta.Amount = amt
+			} else {
+				handler.logger.Warn("failed to parse receipt amount", zap.String("amount", rec.Amount), zap.Error(err))
+				meta.Amount = 0
+			}
 		}
 	}
 
-	// decide: failure -> release, else success -> confirm
-	if failureReason != "" {
+	// Branch: failure OR reversed -> release hold and mark failed/reversed
+	if failureReason != "" || isReversed {
 		if meta.UserID != "" {
 			if released, err := handler.redisClient.ReleaseHold(meta.UserID, txID); err != nil {
 				handler.logger.Error("release hold failed", zap.Error(err), zap.String("txID", txID))
@@ -178,18 +223,30 @@ func (handler HttpHandler) ProcessWebhook(body []byte) error {
 				handler.logger.Info("no hold to release", zap.String("txID", txID))
 			}
 		}
-		if err := handler.store.UpdateReceiptFinal(txID, "failed", sessionID); err != nil {
-			handler.logger.Error("failed update receipt final", zap.Error(err))
+
+		finalStatus := "failed"
+		if isReversed {
+			finalStatus = "reversed"
+		}
+
+		if err := handler.store.UpdateReceiptFinal(txID, finalStatus, sessionID); err != nil {
+			handler.logger.Error("failed update receipt final", zap.Error(err), zap.String("txID", txID))
 			return err
 		}
-		handler.logger.Info("processed failed webhook", zap.String("txID", txID), zap.String("reason", failureReason))
+
+		handler.logger.Info("processed failed/reversed webhook",
+			zap.String("txID", txID),
+			zap.String("final_status", finalStatus),
+			zap.String("reason", failureReason),
+			zap.Bool("reversed", isReversed),
+		)
 		return nil
 	}
 
-	// success path
+	// Success path: confirm hold, persist balance snapshot to DB, mark success
 	if meta.UserID != "" {
 		if confirmed, err := handler.redisClient.ConfirmHold(meta.UserID, txID); err != nil {
-			handler.logger.Error("confirm hold failed", zap.Error(err))
+			handler.logger.Error("confirm hold failed", zap.Error(err), zap.String("txID", txID))
 		} else if confirmed {
 			handler.logger.Info("hold confirmed", zap.String("txID", txID))
 		} else {
@@ -199,18 +256,154 @@ func (handler HttpHandler) ProcessWebhook(body []byte) error {
 		// persist current Redis balance snapshot to DB
 		if currentBal, err := handler.redisClient.GetBalance(meta.UserID); err == nil {
 			if err := handler.store.UpdateUserBalanceFromRedis(meta.UserID, currentBal); err != nil {
-				handler.logger.Error("failed to persist user balance to DB", zap.Error(err))
+				handler.logger.Error("failed to persist user balance to DB", zap.Error(err), zap.String("userID", meta.UserID))
 			}
 		} else {
-			handler.logger.Warn("failed to read balance from redis for persist", zap.Error(err))
+			handler.logger.Warn("failed to read balance from redis for persist", zap.Error(err), zap.String("userID", meta.UserID))
 		}
 	}
 
+	// final update to receipt = success
 	if err := handler.store.UpdateReceiptFinal(txID, "success", sessionID); err != nil {
-		handler.logger.Error("failed to update receipt final", zap.Error(err))
+		handler.logger.Error("failed to update receipt final", zap.Error(err), zap.String("txID", txID))
 		return err
 	}
 
 	handler.logger.Info("processed success webhook", zap.String("txID", txID))
+	return nil
+}
+
+func (handler HttpHandler) processDeposit(p webhookPayload) error {
+
+	var paymentID string
+	var virtualNubanID string
+	var narration string
+	var amount float64
+	var created_At string
+	if rel, ok := p.Attributes["payment"]; ok {
+		if m, ok := rel.(map[string]interface{}); ok {
+			if id, ok := m["paymentId"].(string); ok {
+				paymentID = id
+			}
+			if nar, ok := m["narration"].(string); ok {
+				narration = nar
+			}
+			if amt, ok := m["amount"].(float64); ok {
+				amount = amt
+			}
+			if crt_at, ok := m["createdAt"].(string); ok {
+				created_At = crt_at
+			}
+		}
+
+	}
+	if rel, ok := p.Attributes["virtualNuban"]; ok {
+		if m, ok := rel.(map[string]interface{}); ok {
+			if id, ok := m["paymentId"].(string); ok {
+				virtualNubanID = id
+			}
+		}
+	}
+	accountNumber := ""
+	accountName := ""
+	bankName := ""
+	if rel, ok := p.Attributes["counterParty"]; ok {
+		if m, ok := rel.(map[string]interface{}); ok {
+			if id, ok := m["accountNumber"].(string); ok {
+				accountNumber = id
+			}
+			if id, ok := m["accountName"].(string); ok {
+				accountName = id
+			}
+			if bank, ok := m["bank"].(map[string]interface{}); ok {
+				if name, ok := bank["name"].(string); ok {
+					bankName = name
+				}
+			}
+		}
+	}
+
+	// get the userID from the virtualNubanID
+	userID, err := handler.store.GetUserFromVirtualNuban(virtualNubanID)
+	if err != nil {
+		handler.logger.Error("Deposit failed: unable to get user ID from virtual Nuban", zap.Error(err))
+		return err
+	}
+
+	orderID, err := randomgen.GenerateOrderID()
+	if err != nil {
+		handler.logger.Error("Deposit failed: unable to generate order ID", zap.Error(err))
+		return err
+	}
+
+	transactionID := randomgen.GenerateTransactionID("dep")
+	deposit := struct {
+		VirtualNuban string `json:"virtualNuban" bson:"virtualNuban"`
+		ID           string `json:"id" bson:"ID"`
+	}{
+		VirtualNuban: virtualNubanID,
+		ID:           paymentID,
+	}
+
+	if err := handler.store.SaveDepositID(deposit); err != nil {
+		if err == mongo.ErrDepositIDExist {
+			handler.logger.Info("Deposit ID already exists, skipping", zap.String("depositID", paymentID))
+			return nil
+		}
+		handler.logger.Error("Deposit failed: unable to save deposit ID", zap.Error(err))
+		return err
+	}
+
+	bal, err := handler.store.GetBalance(userID)
+	if err != nil {
+		handler.logger.Error("Deposit failed: unable to fetch balance", zap.Error(err))
+		return err
+	}
+	handler.logger.Debug("Fetched Balance", zap.Any("balance", bal))
+
+	deposit_amount := amount * 0.01
+	newBalance, depositAmount := balance.NewBalanceDeposit(bal, decimal.NewFromFloatWithExponent(deposit_amount, -2))
+	parsedBalance, _ := primitive.ParseDecimal128(newBalance.String())
+	handler.logger.Debug("New Balance Calculated", zap.String("newBalance", newBalance.String()))
+
+	userBalance := models.Balance{
+		VirtualNuban: virtualNubanID,
+		Balance:      parsedBalance,
+		UserID:       userID,
+		UpdatedAt:    time.Now().UTC(),
+	}
+	if err := handler.store.SaveBalance(userID, userBalance); err != nil {
+		handler.logger.Error("Deposit failed: unable to save user balance", zap.Error(err))
+		return err
+	}
+
+	createdAt, err := time.Parse("2006-01-02T15:04:05", created_At)
+	if err != nil {
+		handler.logger.Error("Deposit failed: unable to parse createdAt", zap.Error(err))
+		return err
+	}
+
+	result := models.DepositResponse{
+		UserID:                 userID,
+		Status:                 "success",
+		Amount:                 fmt.Sprintf("%v", depositAmount),
+		WalletType:             "Nigerian NGN Wallet",
+		Bank_Name:              bankName,
+		Account_Name:           accountName,
+		Account_No:             accountNumber,
+		TransactionProduct:     "Virtual Account",
+		TransactionDescription: "NGN Wallet Top Up",
+		Message:                narration,
+		Order_ID:               orderID,
+		Transaction_ID:         transactionID,
+		CreatedAt:              createdAt,
+		Reference:              paymentID,
+	}
+
+	if err := handler.store.SaveDeposit(result); err != nil {
+		handler.logger.Error("Deposit failed: unable to save transaction", zap.Error(err))
+		return err
+	}
+	handler.logger.Info("Deposit transaction saved successfully", zap.Any("transaction", result))
 	return nil
 }

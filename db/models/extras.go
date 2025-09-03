@@ -35,9 +35,10 @@ type PointTransaction struct {
 }
 
 type PointSummary struct {
-	TotalPoints       int `json:"total_points"`
+	EarnedPoints      int `json:"earned_points"`
 	TransactionPoints int `json:"transaction_points"`
 	ReferralPoints    int `json:"referral_points"`
+	AvailablePoints   int `json:"available_points"`
 }
 
 type PointRedeem struct {

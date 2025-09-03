@@ -93,7 +93,7 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 			handler.logger.Error("Failed to get points", zap.Error(err))
 		}
 
-		handler.logger.Info("Points retrieved successfully", zap.Int("points", points.TotalPoints))
+		handler.logger.Info("Points retrieved successfully", zap.Int("earned_points", points.EarnedPoints), zap.Int("available_points", points.AvailablePoints))
 		w.WriteHeader(http.StatusOK)
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"point": points}}
 		json.NewEncoder(w).Encode(response)
@@ -614,14 +614,14 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 
 func (handler *HttpHandler) Chart(w http.ResponseWriter, r *http.Request) {
 
-	// userDetails, err := handler.GetUserDetails(r)
-	// if err != nil {
-	// 	handler.logger.Error("Failed to get user details", zap.Error(err))
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-	// 	json.NewEncoder(w).Encode(response)
-	// 	return
-	// }
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
 	rangeType := r.URL.Query().Get("range")
 	fromStr := r.URL.Query().Get("from")
@@ -656,7 +656,7 @@ func (handler *HttpHandler) Chart(w http.ResponseWriter, r *http.Request) {
 		toTime = now.Add(24 * time.Hour)
 	}
 
-	chartData, err := handler.store.GetChart("", rangeType, fromTime, toTime)
+	chartData, err := handler.store.GetChart(userDetails.ID, rangeType, fromTime, toTime)
 	if err != nil {
 		handler.logger.Error("Failed to get chart data", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)

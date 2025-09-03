@@ -80,7 +80,7 @@ type DepositResponse struct {
 	Message                string    `json:"message" bson:"message"`                                 // map to narration
 	Order_ID               int       `json:"order_id" bson:"order_id"`                               // orderID created
 	Transaction_ID         string    `json:"transaction_id" bson:"transaction_id"`                   // transactionID created
-	Session_ID             string    `json:"session_id" bson:"session_id"`                           // map to paymentReference
+	Reference              string    `json:"reference" bson:"reference"`                             // map to paymentReference
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`                           // ISO datetime string
 }
 
@@ -89,7 +89,7 @@ type Balance struct {
 	UserID       string               `json:"user_id" bson:"user_id"`
 	Balance      primitive.Decimal128 `json:"balance" bson:"balance"`
 	CreatedAt    time.Time            `json:"created_at" bson:"created_at"`
-	UpdateAt     time.Time            `json:"update_at" bson:"update_at"`
+	UpdatedAt    time.Time            `json:"updated_at" bson:"updated_at"`
 }
 
 func (b Balance) Decimal() (decimal.Decimal, error) {
