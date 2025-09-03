@@ -70,6 +70,7 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 		Username:       data.Username,
 		RecipientName:  data.Name,
 		Source:         "aremxyplug",
+		TXN:            data.TXN,
 	})
 	if err != nil {
 		c.logger.Error(err.Error())
@@ -120,6 +121,7 @@ func (c *Config) TransferToBank(info TransferInfo) (models.TransferResponse, err
 			Attributes: transferDataAttributes{
 				Amount:   amount,
 				Currency: "NGN",
+				Reason:   info.Reason,
 			},
 			Relationships: relationships{
 				DestinationAcc: destination{
@@ -220,6 +222,7 @@ func (c *Config) TransferToBank(info TransferInfo) (models.TransferResponse, err
 		Reason:                 info.Reason,
 		Order_ID:               orderID,
 		Transaction_ID:         transactionID,
+		TXN:                    info.TXN,
 		Reference:              apiResponse.Data.ID,
 		CreatedAt:              time.Now().UTC(),
 	}

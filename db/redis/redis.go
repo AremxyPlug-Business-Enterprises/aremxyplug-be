@@ -174,6 +174,24 @@ var (
 `)
 )
 
+// Lua script to sum all holds for a given user
+var sumHoldsScript = redis.NewScript(`
+    local cursor = "0"
+    local total = 0
+    repeat
+        local result = redis.call("SCAN", cursor, "MATCH", KEYS[1], "COUNT", 100)
+        cursor = result[1]
+        local keys = result[2]
+        for i, key in ipairs(keys) do
+            local val = redis.call("GET", key)
+            if val then
+                total = total + tonumber(val)
+            end
+        end
+    until cursor == "0"
+    return tostring(total) -- return as string to avoid precision loss
+`)
+
 func (r *RedisConn) Close() error {
 	return r.client.Close()
 }
@@ -243,6 +261,31 @@ func (r *RedisConn) ConfirmHold(userID, txID string) (bool, error) {
 		return true, nil
 	}
 	return false, nil
+}
+
+func (r *RedisConn) GetHeldFundsLua(userID string) (float64, error) {
+	ctx := context.Background()
+	pattern := fmt.Sprintf("hold:%s:*", userID)
+
+	res, err := sumHoldsScript.Run(ctx, r.client, []string{pattern}).Result()
+	if err != nil {
+		return 0, err
+	}
+
+	switch v := res.(type) {
+	case string:
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return 0, err
+		}
+		return f, nil
+	case int64:
+		return float64(v), nil
+	case float64:
+		return v, nil
+	default:
+		return 0, nil
+	}
 }
 
 // PutJob pushes a job JSON to a queue (left push)

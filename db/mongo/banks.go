@@ -377,7 +377,7 @@ func (m *mongoStore) CreateInitialBalance(userID, virtualNuban string) error {
 		UserID:       userID,
 		Balance:      balance,
 		CreatedAt:    time.Now().UTC(),
-		UpdateAt:     time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
 	}
 
 	_, err = m.col(balColl).InsertOne(context.Background(), initialBalance)

@@ -78,9 +78,18 @@ func (m *mongoStore) UpdateReceiptStatus(txID, status string) error {
 	return err
 }
 
-func (m *mongoStore) UpdateReceiptExternalRef(txID, externalRef string) error {
-	_, err := m.col(transferColl).UpdateOne(context.Background(), bson.M{"txn": txID}, bson.M{
-		"$set": bson.M{"reference": externalRef},
+func (m *mongoStore) UpdateReceiptExternalRef(externalRef, status string) error {
+	_, err := m.col(transferColl).UpdateOne(context.Background(), bson.M{"reference": externalRef}, bson.M{
+		"$set": bson.M{"status": status},
 	})
 	return err
+}
+
+func (m *mongoStore) GetUserFromVirtualNuban(virtualNuban string) (string, error) {
+	var result models.AccountDetails
+	err := m.col(virtualColl).FindOne(context.Background(), bson.M{"virtual_nuban": virtualNuban}).Decode(&result)
+	if err != nil {
+		return "", err
+	}
+	return result.User_ID, nil
 }

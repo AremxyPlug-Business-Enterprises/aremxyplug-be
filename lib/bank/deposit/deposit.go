@@ -120,7 +120,7 @@ func (c *Config) Deposit(virtualaccountid string, userID string) error {
 			VirtualNuban: virtualNuban,
 			Balance:      parsedBalance,
 			UserID:       userID,
-			UpdateAt:     time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
 		}
 		if err := c.db.SaveBalance(userID, userBalance); err != nil {
 			c.logger.Error("Deposit failed: unable to save user balance", zap.Error(err))
@@ -146,7 +146,7 @@ func (c *Config) Deposit(virtualaccountid string, userID string) error {
 			Message:                data.Attributes.Narration,
 			Order_ID:               orderID,
 			Transaction_ID:         transctionID,
-			Session_ID:             data.Attributes.PaymentReference,
+			Reference:              data.Attributes.PaymentReference,
 			CreatedAt:              createdAt,
 		}
 

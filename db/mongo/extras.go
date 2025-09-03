@@ -142,7 +142,7 @@ func (m *mongoStore) GetPoint(userID string) (models.PointSummary, error) {
 	if err != nil && err != mongo.ErrNoDocuments {
 		return summary, fmt.Errorf("failed to fetch total points: %v", err)
 	}
-	summary.TotalPoints = points.Balance
+	summary.AvailablePoints = points.Balance
 
 	// 2. Single aggregation for both transaction and referral points
 	agg := bson.A{
@@ -165,6 +165,7 @@ func (m *mongoStore) GetPoint(userID string) (models.PointSummary, error) {
 	// Initialize points
 	summary.TransactionPoints = 0
 	summary.ReferralPoints = 0
+	summary.EarnedPoints = 0
 
 	// Process aggregated results
 	for cursor.Next(ctx) {
@@ -182,6 +183,7 @@ func (m *mongoStore) GetPoint(userID string) (models.PointSummary, error) {
 		case "referral":
 			summary.ReferralPoints = result.Total
 		}
+		summary.EarnedPoints += result.Total
 	}
 
 	if err := cursor.Err(); err != nil {

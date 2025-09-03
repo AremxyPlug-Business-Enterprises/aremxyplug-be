@@ -130,5 +130,6 @@ type WebhookStore interface {
 	UpdateReceiptFinal(txID, status, sessionID string) error
 	UpdateUserBalanceFromRedis(userID string, balance float64) error
 	UpdateReceiptStatus(txID, status string) error
-	UpdateReceiptExternalRef(txID, externalRef string) error
+	UpdateReceiptExternalRef(externalRef, status string) error
+	GetUserFromVirtualNuban(virtualNuban string) (string, error)
 }

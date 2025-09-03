@@ -69,11 +69,11 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 
 		// convert amount to lowest unit (kobo) for Redis hold
 		// adjust this conversion if info.Amount is an int type in your project
-		amountKobo := float64(info.Amount * 100)
+		amount := float64(info.Amount)
 
 		// --- Place the atomic hold in Redis BEFORE calling provider ---
 		holdTTL := 48 * time.Hour // tune to your needs (how long to keep a pending hold)
-		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txID, amountKobo, holdTTL); err != nil {
+		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txID, amount, holdTTL); err != nil {
 			// preserve your logging + response style
 			handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userDetails.ID))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -88,9 +88,9 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 
 		// Save minimal meta so webhook can find user/amount without extra DB reads
 		meta := map[string]interface{}{
-			"user_id":     userDetails.ID,
-			"amount_kobo": amountKobo,
-			"created_at":  time.Now().UTC().Format(time.RFC3339),
+			"user_id":    userDetails.ID,
+			"amount":     amount,
+			"created_at": time.Now().UTC().Format(time.RFC3339),
 		}
 		// non-fatal if this fails; just log
 		if err := handler.redisClient.SetMeta(txID, meta, 7*24*time.Hour); err != nil {
@@ -109,6 +109,12 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
+		}
+
+		// ✅ map external provider reference to our internal transaction ID
+		apiRef := resp.Reference // provider's unique reference
+		if err := handler.redisClient.SetExternalMapping(apiRef, txID, holdTTL); err != nil {
+			handler.logger.Error("Failed to set external mapping in Redis", zap.Error(err))
 		}
 
 		switch resp.Status {
@@ -153,7 +159,6 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 
 		default:
 
-			//treat as pending
 			w.WriteHeader(http.StatusOK)
 			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
 			json.NewEncoder(w).Encode(response)
@@ -314,8 +319,40 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 		return
 	}
 
+	txnID := uuid.New().String()
+
+	// adjust this conversion if info.Amount is an int type in your project
+	amount := float64(info.Amount)
+
+	// --- Place the atomic hold in Redis BEFORE calling provider ---
+	holdTTL := 48 * time.Hour // tune to your needs (how long to keep a pending hold)
+	if _, err := handler.redisClient.HoldFunds(userDetails.ID, txnID, amount, holdTTL); err != nil {
+		// preserve your logging + response style
+		handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userDetails.ID))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "failed to reserve funds, try again"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Save minimal meta so webhook can find user/amount without extra DB reads
+	meta := map[string]interface{}{
+		"user_id":    userDetails.ID,
+		"amount":     amount,
+		"created_at": time.Now().UTC().Format(time.RFC3339),
+	}
+	// non-fatal if this fails; just log
+	if err := handler.redisClient.SetMeta(txnID, meta, 7*24*time.Hour); err != nil {
+		handler.logger.Warn("failed to set transfer meta in redis", zap.Error(err), zap.String("txID", txnID))
+	}
+
 	info.UserID = userDetails.ID
 	info.FullName = userDetails.FullName
+	info.TXN = txnID
 
 	resp, err := handler.bankTrf.TransferToAremxyPlug(info)
 	if err != nil {
@@ -325,17 +362,59 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if err := handler.updateBalance(userDetails.ID, newBal); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+	// ✅ map external provider reference to our internal transaction ID
+	apiRef := resp.Reference // provider's unique reference
+	if err := handler.redisClient.SetExternalMapping(apiRef, txnID, holdTTL); err != nil {
+		handler.logger.Error("Failed to set external mapping in Redis", zap.Error(err))
+	}
+
+	switch resp.Status {
+	case "success":
+		// confirm the hold in Redis (finalize funds)
+		if ok, err := handler.redisClient.ConfirmHold(userDetails.ID, txnID); err != nil || !ok {
+			handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
+
+		}
+		// persist DB balance (idempotent) — this preserves your original behaviour
+		if err := handler.updateBalance(userDetails.ID, newBal); err != nil {
+			handler.logger.Error("Failed to update user balance", zap.Error(err))
+			// keep behavior: return NotModified if persistence fails (as your original did)
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		handler.logger.Info("Transfer to AremxyPlug account successful", zap.String("userID", userDetails.ID), zap.String("response", resp.Status))
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
+		json.NewEncoder(w).Encode(response)
+		return
+	case "pending":
+		handler.logger.Info("Transfer to AremxyPlug account pending", zap.String("userID", userDetails.ID), zap.String("response", resp.Status))
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
+		json.NewEncoder(w).Encode(response)
+		return
+
+	case "failed":
+		handler.logger.Info("Transfer to AremxyPlug account failed", zap.String("userID", userDetails.ID), zap.String("response", resp.Status))
+		// release the hold in Redis
+		if ok, err := handler.redisClient.ReleaseHold(userDetails.ID, txnID); err != nil || !ok {
+			handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
+		}
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+		return
+
+	default:
+
+		w.WriteHeader(http.StatusOK)
+		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-
-	handler.logger.Info("Transfer to AremxyPlug account successful", zap.String("userID", userDetails.ID), zap.String("response", resp.Status))
-	w.WriteHeader(http.StatusOK)
-	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
-	json.NewEncoder(w).Encode(response)
 
 }
 
@@ -480,24 +559,42 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user's details: %s", err.Error())}}
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data: map[string]interface{}{
+				"data": fmt.Sprintf("failed to get user's details: %s", err.Error()),
+			},
+		}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
 
 	id := userDetails.ID
 
+	// refresh balance from DB/external
 	if err := handler.refreshBalance(id); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not refresh balance: %s", err.Error())}}
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data: map[string]interface{}{
+				"data": fmt.Sprintf("could not refresh balance: %s", err.Error()),
+			},
+		}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
 
+	// get actual balance
 	bal, err := handler.getUserBalance(id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": err.Error()},
+		}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -505,21 +602,46 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	userBal, err := bal.Decimal()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("failed to get user's balance: %s", err.Error())}}
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data: map[string]interface{}{
+				"data": fmt.Sprintf("failed to get user's balance: %s", err.Error()),
+			},
+		}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
 
+	// get held funds from redis
+	held, err := handler.redisClient.GetHeldFundsLua(id)
+	if err != nil {
+		handler.logger.Warn("could not fetch held funds", zap.Error(err))
+		held = 0
+	}
+
+	// compute available balance
+	available := userBal.Sub(decimal.NewFromFloat(held))
+
+	// build response
 	userBalance := struct {
-		Balance string `json:"balance"`
-		UserID  string `json:"user_id"`
+		Balance          string  `json:"balance"`
+		AvailableBalance string  `json:"available_balance"`
+		HeldFunds        float64 `json:"held_funds"`
+		UserID           string  `json:"user_id"`
 	}{
-		Balance: userBal.StringFixed(2),
-		UserID:  bal.UserID,
+		Balance:          userBal.StringFixed(2),
+		AvailableBalance: available.StringFixed(2),
+		HeldFunds:        held,
+		UserID:           bal.UserID,
 	}
 
 	w.WriteHeader(http.StatusOK)
-	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": userBalance}}
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": userBalance},
+	}
 	json.NewEncoder(w).Encode(response)
 }
 
