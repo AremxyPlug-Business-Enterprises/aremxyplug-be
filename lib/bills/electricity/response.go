@@ -27,6 +27,7 @@ type ElectricInfo struct {
 	RequestID    string `json:"request_id"`
 	FullName     string
 	UserID       string
+	TXN          string
 }
 
 type electricAPI struct {

@@ -37,6 +37,7 @@ type TvInfo struct {
 	SubType          string `json:"sub_type"`
 	RequestID        string `json:"request_id"`
 	Name             string
+	TXN              string
 }
 type tvAPI struct {
 	Code          string     `json:"code"`

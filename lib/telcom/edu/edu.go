@@ -38,7 +38,7 @@ func NewEdu(DbConn db.UtilitiesStore, logger *zap.Logger) *EduConn {
 	}
 }
 
-func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, error) {
+func (edu *EduConn) BuyEduPin(eduInfo EduInfo) (*models.EduResponse, error) {
 
 	examType := eduInfo.Exam_Type
 	pinNumber := strconv.Itoa(eduInfo.Quantity)
@@ -59,7 +59,7 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 		return nil, errors.New("response body is nil")
 	}
 	defer resp.Body.Close()
-	apiResponse := models.EduApiResponse{}
+	apiResponse := EduApiResponse{}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Println(err)
@@ -120,7 +120,10 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 		}
 	}
 
-	examType = cases.Title(language.English).String(eduInfo.Exam_Type)
+	status := "success"
+
+	// examType should be upper cases
+	examType = cases.Upper(language.English).String(examType)
 	txnDesc := fmt.Sprintf("%s E-PINs", examType)
 	txnProduct := "Education Pins"
 
@@ -135,12 +138,13 @@ func (edu *EduConn) BuyEduPin(eduInfo models.EduInfo) (*models.EduResponse, erro
 		FullName:               eduInfo.Name,
 		Email:                  eduInfo.Email,
 		TransactionProduct:     txnProduct,
-		Status:                 apiResponse.Status,
+		Status:                 status,
 		TransactionDescription: txnDesc,
 		OrderID:                id,
 		Pin_Generated:          pinGenerated,
 		CreatedAt:              time.Now().UTC(),
 		TransactionID:          transactionID,
+		TXN:                    eduInfo.TXN,
 	}
 
 	log.Printf("%+v", result)
@@ -164,7 +168,7 @@ func (edu *EduConn) QueryTransaction(id string) (*models.EduResponse, error) {
 	}
 	defer resp.Body.Close()
 
-	apiResponse := models.EduApiResponse{}
+	apiResponse := EduApiResponse{}
 	result := &models.EduResponse{}
 	json.NewDecoder(resp.Body).Decode(&apiResponse)
 

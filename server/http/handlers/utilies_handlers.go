@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/responseFormat"
+	"github.com/aremxyplug-be/lib/telcom/edu"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
@@ -28,7 +31,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 	id := userDetails.ID
 
 	if r.Method == "POST" {
-		data := models.EduInfo{}
+		data := edu.EduInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusBadRequest) // Changed from 500 to 400
 			handler.logger.Error("Failed to decode EduPins request", zap.Error(err))
@@ -92,8 +95,41 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		txnID := uuid.New().String()
+
+		// convert amount to lowest unit (kobo) for Redis hold
+		// adjust this conversion if info.Amount is an int type in your project
+		amt := float64(amount)
+
+		// --- Place the atomic hold in Redis BEFORE calling provider ---
+		holdTTL := 48 * time.Hour // tune to your needs (how long to keep a pending hold)
+		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txnID, amt, holdTTL); err != nil {
+			// preserve your logging + response style
+			handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userDetails.ID))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "failed to reserve funds, try again"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Save minimal meta so webhook can find user/amount without extra DB reads
+		meta := map[string]interface{}{
+			"user_id":    userDetails.ID,
+			"amount":     amount,
+			"created_at": time.Now().UTC().Format(time.RFC3339),
+		}
+		// non-fatal if this fails; just log
+		if err := handler.redisClient.SetMeta(txnID, meta, 7*24*time.Hour); err != nil {
+			handler.logger.Warn("failed to set transfer meta in redis", zap.Error(err), zap.String("txnID", txnID))
+		}
+
 		data.UserID = id
 		data.Name = userDetails.FullName
+		data.TXN = txnID
 		res, err := handler.eduClient.BuyEduPin(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -107,61 +143,79 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// receiptAmount, _ := strconv.ParseFloat(data.Amount, 64)
-		// reference := "ID93717490080"
-		// transactionID := "AP-EDU-UMTIQ"
-		// status := "success"
-		// txnDesc := ""
-		// orderID := 7888346081
-		// pinGenerated := []string{
-		// 	"430402339547<=>NRCP10455329",
-		// }
+		// based on the response status to update or hold balance.
+		switch res.Status {
+		case "success":
+			// confirm the hold in Redis (finalize funds)
+			if ok, err := handler.redisClient.ConfirmHold(userDetails.ID, txnID); err != nil || !ok {
+				handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
 
-		// result := &models.EduResponse{
-		// 	UserID:                 data.UserID,
-		// 	Amount:                 receiptAmount,
-		// 	Exam_Type:              data.Exam_Type,
-		// 	Quantity:               data.Quantity,
-		// 	PhoneNumber:            data.Phone_Number,
-		// 	ReferenceNumber:        reference,
-		// 	FullName:               data.Name,
-		// 	Email:                  data.Email,
-		// 	TransactionProduct:     data.Exam_Type,
-		// 	Status:                 status,
-		// 	TransactionDescription: txnDesc,
-		// 	OrderID:                orderID,
-		// 	Pin_Generated:          pinGenerated,
-		// 	CreatedAt:              time.Now().UTC(),
-		// 	TransactionID:          transactionID,
-		// }
-
-		if err := handler.updateBalance(id, newBal); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Balance update failed after purchase", zap.Error(err))
-			response := responseFormat.CustomResponse{
-				Status:  http.StatusInternalServerError,
-				Message: "error",
-				Data:    map[string]interface{}{"data": "Purchase succeeded but balance update failed. Contact support."},
 			}
+			// persist DB balance (idempotent) — this preserves your original behaviour
+			if err := handler.updateBalance(userDetails.ID, newBal); err != nil {
+				handler.logger.Error("Failed to update user balance", zap.Error(err))
+				// keep behavior: return NotModified if persistence fails (as your original did)
+				w.WriteHeader(http.StatusInternalServerError)
+				response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+
+			if err := handler.updateBalance(id, newBal); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				handler.logger.Error("Balance update failed after purchase", zap.Error(err))
+				response := responseFormat.CustomResponse{
+					Status:  http.StatusInternalServerError,
+					Message: "error",
+					Data:    map[string]interface{}{"data": "Purchase succeeded but balance update failed. Contact support."},
+				}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+
+			pointsEarned := 2
+
+			if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
+				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
+			}
+
+			w.WriteHeader(http.StatusOK)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusOK,
+				Message: "success",
+				Data: map[string]interface{}{
+					"data": res,
+				},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+
+		case "pending":
+
+			w.WriteHeader(http.StatusOK)
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
+			json.NewEncoder(w).Encode(response)
+			return
+
+		case "failed":
+
+			// release the hold in Redis
+			if ok, err := handler.redisClient.ReleaseHold(userDetails.ID, txnID); err != nil || !ok {
+				handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
+			}
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(response)
+			return
+
+		default:
+
+			w.WriteHeader(http.StatusOK)
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		pointsEarned := 2
-
-		if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
-			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
-		}
-
-		w.WriteHeader(http.StatusOK)
-		response := responseFormat.CustomResponse{
-			Status:  http.StatusOK,
-			Message: "success",
-			Data: map[string]interface{}{
-				"data": res,
-			},
-		}
-		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {
@@ -305,7 +359,40 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
+		txnID := uuid.New().String()
+
+		// convert amount to lowest unit (kobo) for Redis hold
+		// adjust this conversion if info.Amount is an int type in your project
+		amount := float64(data.Amount)
+
+		// --- Place the atomic hold in Redis BEFORE calling provider ---
+		holdTTL := 48 * time.Hour // tune to your needs (how long to keep a pending hold)
+		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txnID, amount, holdTTL); err != nil {
+			// preserve your logging + response style
+			handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userDetails.ID))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "failed to reserve funds, try again"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Save minimal meta so webhook can find user/amount without extra DB reads
+		meta := map[string]interface{}{
+			"user_id":    userDetails.ID,
+			"amount":     amount,
+			"created_at": time.Now().UTC().Format(time.RFC3339),
+		}
+		// non-fatal if this fails; just log
+		if err := handler.redisClient.SetMeta(txnID, meta, 7*24*time.Hour); err != nil {
+			handler.logger.Warn("failed to set transfer meta in redis", zap.Error(err), zap.String("txnID", txnID))
+		}
+
 		data.UserID = id
+		data.TXN = txnID
 		res, err := handler.tvClient.BuySub(data)
 		if err != nil {
 			if err == tvsub.ErrInvalidCardNumber {
@@ -330,32 +417,69 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		if err := handler.updateBalance(id, newBal); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("TV balance update failed", zap.Error(err))
-			response := responseFormat.CustomResponse{
-				Status:  http.StatusInternalServerError,
-				Message: "error",
-				Data:    map[string]interface{}{"data": "Subscription active but balance update failed. Contact support."},
+		// based on the status on the response. either hold or update the balance
+		switch res.Status {
+		case "success":
+			// confirm the hold in Redis (finalize funds)
+			if ok, err := handler.redisClient.ConfirmHold(userDetails.ID, txnID); err != nil || !ok {
+				handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
+
 			}
+
+			if err := handler.updateBalance(id, newBal); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				handler.logger.Error("TV balance update failed", zap.Error(err))
+				response := responseFormat.CustomResponse{
+					Status:  http.StatusInternalServerError,
+					Message: "error",
+					Data:    map[string]interface{}{"data": "Subscription active but balance update failed. Contact support."},
+				}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+
+			pointsEarned := 2
+
+			if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
+				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
+			}
+
+			w.WriteHeader(http.StatusOK)
+			handler.logger.Info("TV subscription processed successfully", zap.Any("response", res))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusOK,
+				Message: "success",
+				Data:    map[string]interface{}{"data": res},
+			}
+			json.NewEncoder(w).Encode(response)
+
+			return
+		case "pending":
+
+			w.WriteHeader(http.StatusOK)
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
+			json.NewEncoder(w).Encode(response)
+			return
+
+		case "failed":
+
+			// release the hold in Redis
+			if ok, err := handler.redisClient.ReleaseHold(userDetails.ID, txnID); err != nil || !ok {
+				handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
+			}
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(response)
+			return
+
+		default:
+
+			w.WriteHeader(http.StatusOK)
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		pointsEarned := 2
-
-		if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
-			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
-		}
-
-		w.WriteHeader(http.StatusOK)
-		handler.logger.Info("TV subscription processed successfully", zap.Any("response", res))
-		response := responseFormat.CustomResponse{
-			Status:  http.StatusOK,
-			Message: "success",
-			Data:    map[string]interface{}{"data": res},
-		}
-		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {
@@ -456,6 +580,38 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 		}
 		data.FullName = userDetails.Username
 
+		txnID := uuid.New().String()
+
+		// convert amount to lowest unit (kobo) for Redis hold
+		// adjust this conversion if info.Amount is an int type in your project
+		amount := float64(data.Amount)
+
+		// --- Place the atomic hold in Redis BEFORE calling provider ---
+		holdTTL := 48 * time.Hour // tune to your needs (how long to keep a pending hold)
+		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txnID, amount, holdTTL); err != nil {
+			// preserve your logging + response style
+			handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userDetails.ID))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "failed to reserve funds, try again"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Save minimal meta so webhook can find user/amount without extra DB reads
+		meta := map[string]interface{}{
+			"user_id":    userDetails.ID,
+			"amount":     amount,
+			"created_at": time.Now().UTC().Format(time.RFC3339),
+		}
+		// non-fatal if this fails; just log
+		if err := handler.redisClient.SetMeta(txnID, meta, 7*24*time.Hour); err != nil {
+			handler.logger.Warn("failed to set transfer meta in redis", zap.Error(err), zap.String("txnID", txnID))
+		}
+
 		bal, err := handler.getBalance(id)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -508,32 +664,69 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		if err := handler.updateBalance(id, newBal); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Electricity balance update failed", zap.Error(err))
-			response := responseFormat.CustomResponse{
-				Status:  http.StatusInternalServerError,
-				Message: "error",
-				Data:    map[string]interface{}{"error": "Subscription active but balance update failed. Contact support."},
+		// based on the response status to update or hold balance.
+		switch res.Status {
+		case "success":
+			// confirm the hold in Redis (finalize funds)
+			if ok, err := handler.redisClient.ConfirmHold(userDetails.ID, txnID); err != nil || !ok {
+				handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
+
 			}
+
+			if err := handler.updateBalance(id, newBal); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				handler.logger.Error("Electricity balance update failed", zap.Error(err))
+				response := responseFormat.CustomResponse{
+					Status:  http.StatusInternalServerError,
+					Message: "error",
+					Data:    map[string]interface{}{"error": "Subscription active but balance update failed. Contact support."},
+				}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+
+			pointsEarned := 2
+
+			if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
+				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
+			}
+
+			w.WriteHeader(http.StatusOK)
+			handler.logger.Info("Electricity subscription processed successfully", zap.Any("response", res))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusOK,
+				Message: "success",
+				Data:    map[string]interface{}{"data": res},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+
+		case "pending":
+
+			w.WriteHeader(http.StatusOK)
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
+			json.NewEncoder(w).Encode(response)
+			return
+
+		case "failed":
+
+			// release the hold in Redis
+			if ok, err := handler.redisClient.ReleaseHold(userDetails.ID, txnID); err != nil || !ok {
+				handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
+			}
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(response)
+			return
+
+		default:
+
+			w.WriteHeader(http.StatusOK)
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
 
-		pointsEarned := 2
-
-		if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
-			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
-		}
-
-		w.WriteHeader(http.StatusOK)
-		handler.logger.Info("Electricity subscription processed successfully", zap.Any("response", res))
-		response := responseFormat.CustomResponse{
-			Status:  http.StatusOK,
-			Message: "success",
-			Data:    map[string]interface{}{"data": res},
-		}
-		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {

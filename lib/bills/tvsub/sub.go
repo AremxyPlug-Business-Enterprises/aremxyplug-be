@@ -64,11 +64,24 @@ func (t *TvConn) BuySub(data TvInfo) (*models.TV_Result, error) {
 		return nil, t.logAndReturnError("error decoding response body", err)
 	}
 	log.Printf("%+v", apiResponse)
-	if apiResponse.Code != "000" {
-		t.logger.Error("error processing payment", zap.Any("apiresponse", apiResponse))
-		return nil, t.logAndReturnError("error processing payment", errors.New(""))
-	}
+
+	// if apiResponse.Code != "000" {
+	// 	t.logger.Error("error processing payment", zap.Any("apiresponse", apiResponse))
+	// 	return nil, t.logAndReturnError("error processing payment", errors.New(""))
+	// }
 	fmt.Printf("%+v\n", apiResponse)
+
+	status := ""
+	switch apiResponse.Content.Transactions.Status {
+	case "delivered":
+		status = "success"
+	case "pending":
+		status = "pending"
+	case "failed":
+		status = "failed"
+	default:
+		status = "failed"
+	}
 
 	var token *string
 	if data.DecoderType == "showmax" {
@@ -77,17 +90,20 @@ func (t *TvConn) BuySub(data TvInfo) (*models.TV_Result, error) {
 		token = nil
 	}
 
+	transacProd := "TV Subscription"
+	transDesc := data.DecoderType + " " + "Subscription"
+
 	result := &models.TV_Result{
 		UserID:                 data.UserID,
-		Status:                 apiResponse.Content.Transactions.Status,
+		Status:                 status,
 		DecoderType:            data.DecoderType,
 		Package:                data.Package,
 		IucNumber:              data.SmartCard_Number,
 		Phone:                  data.Phone,
 		Email:                  data.Email,
 		FullName:               data.Name,
-		TransactionProduct:     apiResponse.Content.Transactions.Type,
-		TransactionDescription: apiResponse.Content.Transactions.Product_Desc,
+		TransactionProduct:     transacProd,
+		TransactionDescription: transDesc,
 		OrderID:                orderID,
 		TransactionID:          transactionID,
 		RequestID:              apiResponse.RequestID,
@@ -95,6 +111,7 @@ func (t *TvConn) BuySub(data TvInfo) (*models.TV_Result, error) {
 		Token:                  token,
 		Amount:                 data.Amount,
 		CreatedAt:              time.Now().UTC(),
+		TXN:                    data.TXN,
 	}
 
 	if err := t.saveTransaction(result); err != nil {

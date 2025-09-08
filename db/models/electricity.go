@@ -21,4 +21,5 @@ type ElectricResult struct {
 	ReferenceNumber        string    `json:"reference_number" bson:"reference_number"`
 	RequestID              string    `bson:"request_ID"`
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
+	TXN                    string    `bson:"txn"`
 }

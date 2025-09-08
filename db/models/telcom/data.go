@@ -7,7 +7,8 @@ type DataResult struct {
 	Status                 string    `json:"Status" bson:"status"`
 	Network                string    `json:"network" bson:"network"`                 // "MTN"
 	NetworkProduct         string    `json:"network_product" bson:"network_product"` // "MTN SME"
-	PlanName               string    `json:"plan_name" bson:"plan_name"`             // "MTN SME 10GB (₦100) ~ 1 MONTH"
+	PlanName               string    `json:"plan_name" bson:"plan_name"`
+	Validity               string    `json:"validity" bson:"validity"`
 	PhoneNumber            string    `json:"phone_number" bson:"phone_number"`
 	RecipientName          string    `json:"recipient_name" bson:"recipient_name"`
 	Plan_Amount            string    `json:"amount" bson:"amount"`

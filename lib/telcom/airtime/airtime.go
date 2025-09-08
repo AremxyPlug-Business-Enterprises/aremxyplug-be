@@ -100,7 +100,6 @@ func (a *AirtimeConn) BuyAirtime(airtime telcom.AirtimeInfo) (*telcom.AirtimeRes
 		TransactionProduct:     transactionProduct,
 		TransactionDescription: description,
 		Phone_no:               airtime.Phone_no,
-		Product:                product,
 		FullName:               airtime.FullName,
 		RecipientName:          airtime.Recipient,
 		ReferenceNumber:        strconv.Itoa(apiResponse.Data.RechargeID),

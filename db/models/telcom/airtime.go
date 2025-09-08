@@ -31,7 +31,6 @@ type AirtimeResponse struct {
 	Amount                 string    `json:"amount" bson:"amount"`
 	Phone_no               string    `json:"phone_no" bson:"phone_no"`
 	FullName               string    `json:"full_name" bson:"full_name"`
-	Product                string    `json:"product" bson:"product"`
 	RecipientName          string    `json:"recipient_name,omitempty" bson:"recipient_name,omitempty"`
 	OrderID                int       `json:"order_id" bson:"order_id"`
 	TransactionProduct     string    `json:"transaction_product" bson:"transaction_product"`
