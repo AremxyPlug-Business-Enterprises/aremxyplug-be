@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -57,13 +56,25 @@ func (e *ElectricConn) PayBill(data ElectricInfo) (*models.ElectricResult, error
 	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
 		return nil, e.logAndReturnError("error decoding response body", err)
 	}
-	log.Printf("%+v", apiResponse)
-	if apiResponse.Code != "000" {
-		e.logger.Error("error processing payment", zap.Any("apiresponse", apiResponse))
-		return nil, e.logAndReturnError("error processing payment", errors.New(""))
-	}
+	// log.Printf("%+v", apiResponse)
+	// if apiResponse.Code != "000" {
+	// 	e.logger.Error("error processing payment", zap.Any("apiresponse", apiResponse))
+	// 	return nil, e.logAndReturnError("error processing payment", errors.New(""))
+	// }
 	transDetails := apiResponse.Content
 	description := data.DiscoType + " " + data.Meter_Type
+	status := ""
+
+	switch transDetails.Transactions.Status {
+	case "delivered":
+		status = "success"
+	case "pending":
+		status = "pending"
+	case "failed":
+		status = "failed"
+	default:
+		status = "failed"
+	}
 
 	token := apiResponse.Token
 
@@ -78,6 +89,7 @@ func (e *ElectricConn) PayBill(data ElectricInfo) (*models.ElectricResult, error
 	amount := strconv.Itoa(data.Amount)
 
 	result := &models.ElectricResult{
+		Status:                 status,
 		UserID:                 data.UserID,
 		Amount:                 amount,
 		DiscoType:              data.DiscoType,
@@ -95,6 +107,7 @@ func (e *ElectricConn) PayBill(data ElectricInfo) (*models.ElectricResult, error
 		RequestID:              apiResponse.RequestID,
 		ReferenceNumber:        transDetails.Transactions.TransactionID,
 		CreatedAt:              time.Now().UTC(),
+		TXN:                    data.TXN,
 	}
 
 	if err := e.saveTransaction(result); err != nil {

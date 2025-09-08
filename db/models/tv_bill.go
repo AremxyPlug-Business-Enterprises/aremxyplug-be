@@ -12,7 +12,7 @@ type TV_Result struct {
 	Email                  string    `json:"email" bson:"email"`
 	FullName               string    `json:"full_name" bson:"full_name"`
 	Amount                 int       `json:"amount" bson:"amount"`
-	TransactionProduct     string    `json:"transaction_product" bson:"transactionproduct"`
+	TransactionProduct     string    `json:"transaction_product" bson:"transaction_product"`
 	TransactionDescription string    `json:"transaction_description" bson:"transaction_description"`
 	OrderID                int       `json:"order_id" bson:"order_id"`
 	Token                  *string   `json:"token,omitempty" bson:"token,omitempty"`
@@ -20,4 +20,5 @@ type TV_Result struct {
 	RequestID              string    `json:"request_id" bson:"request_id"`
 	ReferenceNumber        string    `json:"reference_number" bson:"reference_number"`
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
+	TXN                    string    `bson:"txn"`
 }
