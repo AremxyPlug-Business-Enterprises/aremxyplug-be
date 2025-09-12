@@ -100,10 +100,11 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 		// convert amount to lowest unit (kobo) for Redis hold
 		// adjust this conversion if info.Amount is an int type in your project
 		amt := float64(amount)
+		currentBalance, _ := bal.Float64()
 
 		// --- Place the atomic hold in Redis BEFORE calling provider ---
 		holdTTL := 48 * time.Hour // tune to your needs (how long to keep a pending hold)
-		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txnID, amt, holdTTL); err != nil {
+		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txnID, currentBalance, amt, holdTTL); err != nil {
 			// preserve your logging + response style
 			handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userDetails.ID))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -360,14 +361,14 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 		}
 
 		txnID := uuid.New().String()
+		currentBalance, _ := bal.Float64()
 
-		// convert amount to lowest unit (kobo) for Redis hold
 		// adjust this conversion if info.Amount is an int type in your project
 		amount := float64(data.Amount)
 
 		// --- Place the atomic hold in Redis BEFORE calling provider ---
 		holdTTL := 48 * time.Hour // tune to your needs (how long to keep a pending hold)
-		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txnID, amount, holdTTL); err != nil {
+		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txnID, currentBalance, amount, holdTTL); err != nil {
 			// preserve your logging + response style
 			handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userDetails.ID))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -395,6 +396,13 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 		data.TXN = txnID
 		res, err := handler.tvClient.BuySub(data)
 		if err != nil {
+			// Release the hold on error
+			if ok, releaseErr := handler.redisClient.ReleaseHold(userDetails.ID, txnID); releaseErr != nil {
+				handler.logger.Error("Failed to release hold on BuySub error", zap.Error(releaseErr))
+			} else if !ok {
+				handler.logger.Warn("Hold not found on BuySub error", zap.String("txnID", txnID))
+			}
+			// Handle error response
 			if err == tvsub.ErrInvalidCardNumber {
 				handler.logger.Error("Invalid card number", zap.String("card_number", data.SmartCard_Number))
 				w.WriteHeader(http.StatusBadRequest)
@@ -464,8 +472,10 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 		case "failed":
 
 			// release the hold in Redis
-			if ok, err := handler.redisClient.ReleaseHold(userDetails.ID, txnID); err != nil || !ok {
+			if ok, err := handler.redisClient.ReleaseHold(userDetails.ID, txnID); err != nil {
 				handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
+			} else if !ok {
+				handler.logger.Warn("Failed to release hold in Redis: not found", zap.String("txnID", txnID))
 			}
 			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
 			w.WriteHeader(http.StatusOK)
@@ -580,38 +590,6 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 		}
 		data.FullName = userDetails.Username
 
-		txnID := uuid.New().String()
-
-		// convert amount to lowest unit (kobo) for Redis hold
-		// adjust this conversion if info.Amount is an int type in your project
-		amount := float64(data.Amount)
-
-		// --- Place the atomic hold in Redis BEFORE calling provider ---
-		holdTTL := 48 * time.Hour // tune to your needs (how long to keep a pending hold)
-		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txnID, amount, holdTTL); err != nil {
-			// preserve your logging + response style
-			handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userDetails.ID))
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{
-				Status:  http.StatusInternalServerError,
-				Message: "error",
-				Data:    map[string]interface{}{"data": "failed to reserve funds, try again"},
-			}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-
-		// Save minimal meta so webhook can find user/amount without extra DB reads
-		meta := map[string]interface{}{
-			"user_id":    userDetails.ID,
-			"amount":     amount,
-			"created_at": time.Now().UTC().Format(time.RFC3339),
-		}
-		// non-fatal if this fails; just log
-		if err := handler.redisClient.SetMeta(txnID, meta, 7*24*time.Hour); err != nil {
-			handler.logger.Warn("failed to set transfer meta in redis", zap.Error(err), zap.String("txnID", txnID))
-		}
-
 		bal, err := handler.getBalance(id)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -648,6 +626,39 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			}
 			json.NewEncoder(w).Encode(response)
 			return
+		}
+
+		txnID := uuid.New().String()
+
+		// convert amount to lowest unit (kobo) for Redis hold
+		// adjust this conversion if info.Amount is an int type in your project
+		amount := float64(data.Amount)
+		currentBalance, _ := bal.Float64()
+
+		// --- Place the atomic hold in Redis BEFORE calling provider ---
+		holdTTL := 48 * time.Hour // tune to your needs (how long to keep a pending hold)
+		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txnID, currentBalance, amount, holdTTL); err != nil {
+			// preserve your logging + response style
+			handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userDetails.ID))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "failed to reserve funds, try again"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Save minimal meta so webhook can find user/amount without extra DB reads
+		meta := map[string]interface{}{
+			"user_id":    userDetails.ID,
+			"amount":     amount,
+			"created_at": time.Now().UTC().Format(time.RFC3339),
+		}
+		// non-fatal if this fails; just log
+		if err := handler.redisClient.SetMeta(txnID, meta, 7*24*time.Hour); err != nil {
+			handler.logger.Warn("failed to set transfer meta in redis", zap.Error(err), zap.String("txnID", txnID))
 		}
 
 		data.UserID = userDetails.ID

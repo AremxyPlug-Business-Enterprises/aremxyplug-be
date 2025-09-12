@@ -1,8 +1,10 @@
 package tvsub
 
+import "encoding/json"
+
 type serverResponse struct {
-	Code    string  `json:"code"`
-	Content content `json:"content"`
+	Code    string          `json:"code"`
+	Content json.RawMessage `json:"content"`
 }
 
 type content struct {
@@ -12,6 +14,7 @@ type content struct {
 	CustomerNumber    string            `json:"Customer_Number"`
 	CustomerType      string            `json:"Customer_Type"`
 	CommissionDetails commissionDetails `json:"commission_details"`
+	Error             string            `json:"error,omitempty"`
 }
 
 type commissionDetails struct {

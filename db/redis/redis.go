@@ -137,14 +137,16 @@ var (
 	// ARGV[1] = amount (integer)
 	// ARGV[2] = holdTTLSeconds
 	holdScript = redis.NewScript(`
-	local bal = tonumber(redis.call("GET", KEYS[1]) or "0")
-	local amt = tonumber(ARGV[1])
-	if bal < amt then
-		return -1
-	end
-	redis.call("DECRBY", KEYS[1], amt)
-	redis.call("SET", KEYS[2], ARGV[1], "EX", ARGV[2])
-	return bal - amt
+local bal = tonumber(redis.call("GET", KEYS[1]) or "0")
+local amt = tonumber(ARGV[1])
+if bal < amt then
+    return -1
+end
+-- Use INCRBYFLOAT with negative value to decrement
+redis.call("INCRBYFLOAT", KEYS[1], -amt)
+redis.call("SET", KEYS[2], ARGV[1], "EX", ARGV[2])
+-- Get the updated balance to return
+return tonumber(redis.call("GET", KEYS[1]))
 `)
 
 	// release script:
@@ -156,7 +158,7 @@ var (
 	if not val then
 		return 0
 	end
-	redis.call("INCRBY", KEYS[1], val)
+	redis.call("INCRBYFLOAT", KEYS[1], val)
 	redis.call("DEL", KEYS[2])
 	return 1
 `)
@@ -210,42 +212,98 @@ func (r *RedisConn) GetBalance(userID string) (float64, error) {
 	return r.client.Get(ctx, key).Float64()
 }
 
-// HoldFunds atomically decrements balance and creates a hold key. Returns new available balance or error if insufficient funds.
-func (r *RedisConn) HoldFunds(userID, txID string, amount float64, ttl time.Duration) (float64, error) {
+// InitializeBalance sets a user's balance if it doesn't exist
+func (r *RedisConn) InitializeBalance(userID string, initialBalance float64) error {
+	ctx := context.Background()
+	balanceKey := fmt.Sprintf("balance:%s", userID)
+
+	// Use SET with NX (Only set if not exists) to avoid overwriting existing balances
+	result, err := r.client.SetNX(ctx, balanceKey, initialBalance, 0).Result()
+	if err != nil {
+		return err
+	}
+
+	if result {
+		r.logger.Info("Initialized balance for user",
+			zap.String("userID", userID),
+			zap.Float64("balance", initialBalance))
+	}
+
+	return nil
+}
+
+func (r *RedisConn) HoldFunds(userID, txID string, currentBalance, amount float64, ttl time.Duration) (float64, error) {
 	ctx := context.Background()
 	balanceKey := fmt.Sprintf("balance:%s", userID)
 	holdKey := fmt.Sprintf("hold:%s:%s", userID, txID)
-	res, err := holdScript.Run(ctx, r.client, []string{balanceKey, holdKey}, amount, int(ttl.Seconds())).Result()
+
+	// Check if balance exists first
+	exists, err := r.client.Exists(ctx, balanceKey).Result()
 	if err != nil {
+		r.logger.Error("Failed to check balance existence in Redis", zap.Error(err))
 		return 0, err
 	}
+
+	// Initialize with 0 if balance doesn't exist
+	if exists == 0 {
+		r.logger.Warn("Balance key does not exist, initializing to balance", zap.String("userID", userID))
+		if err := r.InitializeBalance(userID, currentBalance); err != nil {
+			return 0, err
+		}
+	}
+
+	res, err := holdScript.Run(ctx, r.client, []string{balanceKey, holdKey}, amount, int(ttl.Seconds())).Result()
+	if err != nil {
+		r.logger.Error("Failed to hold funds in Redis", zap.Error(err))
+		return 0, err
+	}
+
 	switch v := res.(type) {
 	case float64:
 		if v < 0 {
-			return 0, errors.New("insufficient funds")
+			if v == -1 {
+				return 0, errors.New("insufficient funds")
+			}
+			return 0, fmt.Errorf("script returned error code: %f", v)
 		}
 		return v, nil
+	case int64:
+		if v < 0 {
+			if v == -1 {
+				return 0, errors.New("insufficient funds")
+			}
+			return 0, fmt.Errorf("script returned error code: %d", v)
+		}
+		return float64(v), nil
 	case string:
-		// in some redis clients returns string
-		// try to read balance directly
+		// Try to parse as float
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f, nil
+		}
+		// If parsing fails, try to get balance directly
 		return r.client.Get(ctx, balanceKey).Float64()
+	case nil:
+		return 0, errors.New("script returned nil")
 	default:
-		return 0, nil
+		return 0, fmt.Errorf("invalid return type from script: %T", v)
 	}
 }
 
 // ReleaseHold increments balance by hold amount and deletes hold. Returns true if hold existed.
-func (r *RedisConn) ReleaseHold(userID, txID string) (bool, error) {
+func (r *RedisConn) ReleaseHold(userID, txnID string) (bool, error) {
 	ctx := context.Background()
 	balanceKey := fmt.Sprintf("balance:%s", userID)
-	holdKey := fmt.Sprintf("hold:%s:%s", userID, txID)
+	holdKey := fmt.Sprintf("hold:%s:%s", userID, txnID)
 	res, err := releaseScript.Run(ctx, r.client, []string{balanceKey, holdKey}).Result()
 	if err != nil {
+		r.logger.Error("Failed to release hold in Redis", zap.Error(err))
 		return false, err
 	}
 	if n, ok := res.(int64); ok && n == 1 {
+		r.logger.Info("Hold released in Redis", zap.String("userID", userID), zap.String("txnID", txnID))
 		return true, nil
 	}
+	r.logger.Warn("Failed to release hold in Redis: not found", zap.String("userID", userID), zap.String("txnID", txnID))
 	return false, nil
 }
 

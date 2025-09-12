@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -16,6 +17,8 @@ import (
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/randomgen"
 	"go.uber.org/zap"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var (
@@ -25,7 +28,8 @@ var (
 )
 
 var (
-	ErrInvalidCardNumber = errors.New("invalid card number")
+	ErrInvalidCardNumber  = errors.New("invalid card number")
+	ErrBillerNotAvailable = errors.New("biller not available")
 )
 
 type TvConn struct {
@@ -90,8 +94,10 @@ func (t *TvConn) BuySub(data TvInfo) (*models.TV_Result, error) {
 		token = nil
 	}
 
+	decoderType := cases.Title(language.English).String(data.DecoderType)
+
 	transacProd := "TV Subscription"
-	transDesc := data.DecoderType + " " + "Subscription"
+	transDesc := decoderType + " " + "Subscription"
 
 	result := &models.TV_Result{
 		UserID:                 data.UserID,
@@ -209,20 +215,42 @@ func (t *TvConn) VerifyCard(service, iucNumber string) (verifyResponse, error) {
 	}
 	defer resp.Body.Close()
 
-	apiResponse := serverResponse{}
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+	// Read body once
+	bdy, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return verifyResponse{}, err
 	}
-	code := apiResponse.Code
-	log.Println(code)
-	if code != "000" {
-		return verifyResponse{}, ErrInvalidCardNumber
+
+	// Parse into base struct
+	apiResponse := serverResponse{}
+	if err := json.Unmarshal(bdy, &apiResponse); err != nil {
+		return verifyResponse{}, err
 	}
 
-	return verifyResponse{
-		Name:  apiResponse.Content.CustomerName,
-		Phone: apiResponse.Content.CustomerNumber,
-	}, nil
+	cnt := content{}
+
+	if err := json.Unmarshal(apiResponse.Content, &cnt); err == nil {
+		// ✅ object case
+		if apiResponse.Code != "000" || cnt.Error != "" {
+			return verifyResponse{}, ErrInvalidCardNumber
+		}
+		return verifyResponse{
+			Name:  cnt.CustomerName,
+			Phone: cnt.CustomerNumber,
+		}, nil
+	}
+
+	// Otherwise, maybe it's a string
+	var str string
+	if err := json.Unmarshal(apiResponse.Content, &str); err == nil {
+		if apiResponse.Code != "000" {
+			return verifyResponse{}, ErrBillerNotAvailable
+		}
+		// return empty verifyResponse but not an error
+		return verifyResponse{}, nil
+	}
+
+	return verifyResponse{}, fmt.Errorf("unexpected content format: %s", string(apiResponse.Content))
 }
 
 func (t *TvConn) buySub(data TvInfo) (*http.Response, error) {
