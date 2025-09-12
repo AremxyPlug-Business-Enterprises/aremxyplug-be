@@ -79,6 +79,11 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 
 	c.logger.Info("Transfer processed successfully", zap.Any("response", transferResponse))
 
+	transferResponse.Email = &user.Email
+	transferResponse.Username = &user.Username
+	transferResponse.Phone = &user.PhoneNumber
+	transferResponse.CustomerName = &user.FullName
+
 	return transferResponse, nil
 }
 

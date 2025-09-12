@@ -70,10 +70,11 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		// convert amount to lowest unit (kobo) for Redis hold
 		// adjust this conversion if info.Amount is an int type in your project
 		amount := float64(info.Amount)
+		currentBalance, _ := bal.Float64()
 
 		// --- Place the atomic hold in Redis BEFORE calling provider ---
 		holdTTL := 48 * time.Hour // tune to your needs (how long to keep a pending hold)
-		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txID, amount, holdTTL); err != nil {
+		if _, err := handler.redisClient.HoldFunds(userDetails.ID, txID, currentBalance, amount, holdTTL); err != nil {
 			// preserve your logging + response style
 			handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userDetails.ID))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -323,10 +324,11 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 
 	// adjust this conversion if info.Amount is an int type in your project
 	amount := float64(info.Amount)
+	currentBalance, _ := bal.Float64()
 
 	// --- Place the atomic hold in Redis BEFORE calling provider ---
 	holdTTL := 48 * time.Hour // tune to your needs (how long to keep a pending hold)
-	if _, err := handler.redisClient.HoldFunds(userDetails.ID, txnID, amount, holdTTL); err != nil {
+	if _, err := handler.redisClient.HoldFunds(userDetails.ID, txnID, currentBalance, amount, holdTTL); err != nil {
 		// preserve your logging + response style
 		handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userDetails.ID))
 		w.WriteHeader(http.StatusInternalServerError)
