@@ -199,7 +199,9 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 	pageSize := 50
 
 	// Build match conditions
-	matchConditions := bson.D{}
+	matchConditions := bson.D{
+		bson.E{Key: "status", Value: "success"},
+	}
 	if userID, ok := filter["user_id"].(string); ok && userID != "" {
 		matchConditions = append(matchConditions, bson.E{Key: "user_id", Value: userID})
 	}

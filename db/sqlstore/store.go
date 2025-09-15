@@ -10,7 +10,9 @@ import (
 )
 
 func (s *SqlStore) GetProducts(id int) ([]models.Product, error) {
-	rows, err := s.db.Query("SELECT product_id, network_id, plan_type FROM products WHERE network_id = ?", id)
+	rows, err := s.db.Query(
+		"SELECT product_id, network_id, plan_type FROM products WHERE network_id = ? ORDER BY sort ASC",
+		id)
 	if err != nil {
 		s.logger.Error("Error querying products", zap.Error(err))
 		return nil, err
@@ -205,6 +207,26 @@ func (s *SqlStore) GetPlansByProductID(productID int) ([]models.Plan, error) {
 			p.available = TRUE AND 
 			ap.status = 'active' AND 
 			ap.available = TRUE
+		ORDER BY
+			CASE
+				WHEN LOWER(TRIM(REPLACE(p.size, ' ', ''))) LIKE '%tb'
+				THEN CAST(REPLACE(LOWER(TRIM(REPLACE(p.size, ' ', ''))), 'tb', '') AS DECIMAL(20,6)) * 1024 * 1024
+				WHEN LOWER(TRIM(REPLACE(p.size, ' ', ''))) LIKE '%gb'
+				THEN CAST(REPLACE(LOWER(TRIM(REPLACE(p.size, ' ', ''))), 'gb', '') AS DECIMAL(20,6)) * 1024
+				WHEN LOWER(TRIM(REPLACE(p.size, ' ', ''))) LIKE '%mb'
+				THEN CAST(REPLACE(LOWER(TRIM(REPLACE(p.size, ' ', ''))), 'mb', '') AS DECIMAL(20,6))
+				WHEN LOWER(TRIM(REPLACE(p.size, ' ', ''))) LIKE '%kb'
+				THEN CAST(REPLACE(LOWER(TRIM(REPLACE(p.size, ' ', ''))), 'kb', '') AS DECIMAL(20,6)) / 1024
+				ELSE 0
+			END ASC,
+			CASE
+				WHEN LOWER(p.validity) LIKE '%daily%' THEN 1
+				WHEN LOWER(p.validity) LIKE '%weekly%' THEN 7
+				WHEN LOWER(p.validity) LIKE '%7 day%' THEN 7
+				WHEN LOWER(p.validity) LIKE '%30 day%' THEN 30
+				WHEN LOWER(p.validity) LIKE '%1 month%' THEN 30
+				ELSE 9999 
+			END ASC
 	`, productID)
 	if err != nil {
 		s.logger.Error("Failed to retrieve plans", zap.Int("productID", productID), zap.Error(err))
