@@ -29,3 +29,26 @@ type vendData struct {
 	TextStatus    string `json:"text_status"`
 	BonusEarned   string `json:"bonus_earned"`
 }
+
+type AirtimeInfo struct {
+	UserID    string
+	Network   string `json:"network"`
+	Amount    string `json:"amount"`
+	Phone_no  string `json:"mobileno"`
+	Recipient string `json:"recipient,omitempty"`
+	FullName  string
+	Reference string
+	TXN       string
+}
+
+type AirtimeApiResponse struct {
+	Success_Response string  `json:"success"`
+	Message          string  `json:"message"`
+	Network          string  `json:"network"`
+	Phone_no         string  `json:"mobileno"`
+	Amount           int     `json:"airtimeamount"`
+	Charged          float64 `json:"amountcharged"`
+	Status           string  `json:"status"`
+	Date             string  `json:"transaction_date"`
+	Reference        string  `json:"reference_no"`
+}

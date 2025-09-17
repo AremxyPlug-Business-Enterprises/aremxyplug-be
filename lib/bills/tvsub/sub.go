@@ -98,12 +98,13 @@ func (t *TvConn) BuySub(data TvInfo) (*models.TV_Result, error) {
 
 	transacProd := "TV Subscription"
 	transDesc := decoderType + " " + "Subscription"
+	pkge := cases.Title(language.English).String(data.Package)
 
 	result := &models.TV_Result{
 		UserID:                 data.UserID,
 		Status:                 status,
 		DecoderType:            data.DecoderType,
-		Package:                data.Package,
+		Package:                pkge,
 		IucNumber:              data.SmartCard_Number,
 		Phone:                  data.Phone,
 		Email:                  data.Email,

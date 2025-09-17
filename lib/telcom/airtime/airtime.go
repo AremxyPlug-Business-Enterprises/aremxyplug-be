@@ -34,13 +34,53 @@ func NewAirtimeConn(store db.TelcomStore, logger *zap.Logger) *AirtimeConn {
 	}
 }
 
-func (a *AirtimeConn) BuyAirtime(airtime telcom.AirtimeInfo) (*telcom.AirtimeResponse, error) {
+func (a *AirtimeConn) BuyAirtime(airtime AirtimeInfo) (*telcom.AirtimeResponse, error) {
 
 	id, err := randomgen.GenerateOrderID()
 	if err != nil {
 		a.logger.Error("unable to generate orderID", zap.Any("error:", "failed to generate orderID"))
 		return nil, err
 	}
+
+	network := ""
+
+	switch airtime.Network {
+	case "1":
+		network = "MTN"
+	case "2":
+		network = "AIRTEL"
+	case "3":
+		network = "GLO"
+	case "4":
+		network = "9MOBILE"
+
+	default:
+		network = "UNKNOWN"
+	}
+
+	airtime.Reference = randomgen.GenerateRequestID()
+	transactionID := randomgen.GenerateTransactionID("vtu")
+	amount := airtime.Amount
+	product := network + " " + "VTU"
+	description := product
+	transactionProduct := "Airtime Top-up"
+
+	result := &telcom.AirtimeResponse{
+		UserID:                 airtime.UserID,
+		OrderID:                id,
+		Amount:                 amount,
+		Network:                network,
+		NetworkProduct:         product,
+		TransactionProduct:     transactionProduct,
+		TransactionDescription: description,
+		Phone_no:               airtime.Phone_no,
+		FullName:               airtime.FullName,
+		RecipientName:          airtime.Recipient,
+		TransactionID:          transactionID,
+		CreatedAt:              time.Now().UTC(),
+		UserReference:          airtime.Reference,
+	}
+
 	resp, err := a.buy(airtime)
 	if err != nil {
 		a.logger.Error("error returned from server", zap.Any("error:", err))
@@ -62,51 +102,15 @@ func (a *AirtimeConn) BuyAirtime(airtime telcom.AirtimeInfo) (*telcom.AirtimeRes
 	}
 
 	log.Printf("%+v\n", apiResponse)
+	status := "success"
 
 	// check to see if the buy was successful. The response is printed to the log
 	if !apiResponse.Status {
-		log.Print(apiResponse.ServerMessage)
-		return nil, errors.New("failed to buy airtime")
+		status = "failed"
 	}
 
-	network := ""
-
-	switch airtime.Network {
-	case "1":
-		network = "MTN"
-	case "2":
-		network = "AIRTEL"
-	case "3":
-		network = "GLO"
-	case "4":
-		network = "9MOBILE"
-
-	default:
-		network = "UNKNOWN"
-	}
-
-	transactionID := randomgen.GenerateTransactionID("vtu")
-	amount := apiResponse.Data.Amount
-	product := network + " " + "VTU"
-	description := product
-	transactionProduct := "Airtime Top-up"
-
-	result := &telcom.AirtimeResponse{
-		UserID:                 airtime.UserID,
-		OrderID:                id,
-		Amount:                 amount,
-		Network:                network,
-		NetworkProduct:         product,
-		TransactionProduct:     transactionProduct,
-		TransactionDescription: description,
-		Phone_no:               airtime.Phone_no,
-		FullName:               airtime.FullName,
-		RecipientName:          airtime.Recipient,
-		ReferenceNumber:        strconv.Itoa(apiResponse.Data.RechargeID),
-		Status:                 apiResponse.TextStatus,
-		TransactionID:          transactionID,
-		CreatedAt:              time.Now().UTC(),
-	}
+	result.Status = status
+	result.ReferenceNumber = strconv.Itoa(apiResponse.Data.RechargeID)
 
 	// save transaction
 	if err := a.saveTransaction(result); err != nil {
@@ -165,9 +169,7 @@ func (a *AirtimeConn) GetAllTransactions() ([]telcom.AirtimeResponse, error) {
 	return result, nil
 }
 
-func (a *AirtimeConn) buy(data telcom.AirtimeInfo) (*http.Response, error) {
-
-	userReference := randomgen.GenerateRequestID()
+func (a *AirtimeConn) buy(data AirtimeInfo) (*http.Response, error) {
 
 	productcode := ""
 
@@ -201,7 +203,7 @@ func (a *AirtimeConn) buy(data telcom.AirtimeInfo) (*http.Response, error) {
 		Amount:        amount,
 		PhoneNumber:   data.Phone_no,
 		Action:        "vend",
-		UserReference: userReference,
+		UserReference: data.Reference,
 		BypassNetwork: "yes",
 	}
 
