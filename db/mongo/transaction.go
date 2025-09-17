@@ -259,57 +259,35 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 			// Category-specific quantity handling
 			switch {
 			case category == "data":
-				// Extract numeric data value from product string
+				// Split the transaction_description into words
 				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-					"dataInfo": bson.M{
-						"$regexFind": bson.M{
-							"input": "$product",
-							"regex": "([0-9.]+)\\s*(GB|MB)",
-						},
-					},
+					"words": bson.M{"$split": bson.A{"$transaction_description", " "}},
 				}}})
 
+				// Filter out words that contain numbers followed by GB/MB
 				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-					"dataValue": bson.M{
-						"$toDouble": bson.M{
-							"$arrayElemAt": bson.A{"$dataInfo.captures", 0},
-						},
-					},
-					"dataUnit": bson.M{
-						"$arrayElemAt": bson.A{"$dataInfo.captures", 1},
-					},
-				}}})
-
-				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-					"quantity": bson.M{
-						"$cond": bson.A{
-							bson.M{"$eq": bson.A{"$dataUnit", "MB"}},
-							bson.M{"$divide": bson.A{"$dataValue", 1000}}, // 1GB = 1000MB
-							"$dataValue",
-						},
-					},
-				}}})
-
-				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-					"parts": bson.M{"$split": bson.A{"$product", " "}},
-				}}})
-
-				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-					"normalizedProduct": bson.M{
-						"$reduce": bson.M{
-							"input": bson.M{
-								"$cond": bson.A{
-									bson.M{
-										"$regexMatch": bson.M{
-											"input":   bson.M{"$arrayElemAt": bson.A{"$parts", 0}},
-											"regex":   "^[0-9.]+(MB|GB)?$",
-											"options": "i",
-										},
+					"filteredWords": bson.M{
+						"$filter": bson.M{
+							"input": "$words",
+							"as":    "word",
+							"cond": bson.M{
+								"$not": bson.M{
+									"$regexMatch": bson.M{
+										"input":   "$$word",
+										"regex":   "^[0-9.]+(GB|MB|gb|mb)?$",
+										"options": "i",
 									},
-									bson.M{"$slice": bson.A{"$parts", 1, bson.M{"$size": "$parts"}}},
-									"$parts",
 								},
 							},
+						},
+					},
+				}}})
+
+				// Reconstruct the product type from filtered words
+				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+					"productType": bson.M{
+						"$reduce": bson.M{
+							"input":        "$filteredWords",
 							"initialValue": "",
 							"in": bson.M{
 								"$cond": bson.A{
@@ -322,10 +300,78 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 					},
 				}}})
 
-				pipeline = append(pipeline, bson.D{{Key: "$project", Value: bson.M{
-					"parts": 0,
+				// Extract numeric data value from product string
+				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+					"dataInfo": bson.M{
+						"$regexFind": bson.M{
+							"input":   "$transaction_description",
+							"regex":   "([0-9.]+)\\s*(GB|MB|gb|mb)",
+							"options": "i",
+						},
+					},
 				}}})
 
+				// Extract value and unit with error handling
+				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+					"dataValue": bson.M{
+						"$cond": bson.A{
+							bson.M{"$ne": bson.A{"$dataInfo", nil}},
+							bson.M{"$toDouble": bson.M{
+								"$arrayElemAt": bson.A{"$dataInfo.captures", 0},
+							}},
+							0, // Default value if no match
+						},
+					},
+					"dataUnit": bson.M{
+						"$cond": bson.A{
+							bson.M{"$ne": bson.A{"$dataInfo", nil}},
+							bson.M{"$toLower": bson.M{
+								"$arrayElemAt": bson.A{"$dataInfo.captures", 1},
+							}},
+							"gb", // Default unit if no match
+						},
+					},
+				}}})
+
+				// Convert all quantities to GB
+				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+					"quantityInGB": bson.M{
+						"$cond": bson.A{
+							bson.M{"$eq": bson.A{"$dataUnit", "mb"}},
+							bson.M{"$divide": bson.A{"$dataValue", 1000}},
+							"$dataValue",
+						},
+					},
+				}}})
+
+				// Group by the extracted product type
+				groupStage := bson.D{{Key: "$group", Value: bson.M{
+					"_id": bson.M{
+						"product_type": "$productType",
+					},
+					"quantity":        bson.M{"$sum": "$quantityInGB"},
+					"totalAmount":     bson.M{"$sum": "$amountDecimal"},
+					"lastTransaction": bson.M{"$max": "$created_at"},
+					"count":           bson.M{"$sum": 1},
+				}}}
+				pipeline = append(pipeline, groupStage)
+
+				// Project to final format
+				projectStage := bson.D{{Key: "$project", Value: bson.M{
+					"product":     "$_id.product_type",
+					"quantity":    1,
+					"totalAmount": 1,
+					"created_at":  "$lastTransaction",
+					"count":       1,
+					"_id":         0,
+				}}}
+				pipeline = append(pipeline, projectStage)
+
+				// Clean up temporary fields
+				pipeline = append(pipeline, bson.D{{Key: "$project", Value: bson.M{
+					"words":         0,
+					"filteredWords": 0,
+				}}})
 			case collection == "edu":
 				// Use existing quantity field for education
 				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
@@ -339,24 +385,27 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 				}}})
 			}
 
-			// Group by product
-			groupStage := bson.D{{Key: "$group", Value: bson.M{
-				"_id":             "$product",
-				"quantity":        bson.M{"$sum": "$quantity"},
-				"totalAmount":     bson.M{"$sum": "$amountDecimal"},
-				"lastTransaction": bson.M{"$max": "$created_at"},
-			}}}
-			pipeline = append(pipeline, groupStage)
+			// Only apply generic grouping for non-data categories
+			if category != "data" {
+				// Group by product
+				groupStage := bson.D{{Key: "$group", Value: bson.M{
+					"_id":             "$product",
+					"quantity":        bson.M{"$sum": "$quantity"},
+					"totalAmount":     bson.M{"$sum": "$amountDecimal"},
+					"lastTransaction": bson.M{"$max": "$created_at"},
+				}}}
+				pipeline = append(pipeline, groupStage)
 
-			// Project to final format
-			projectStage := bson.D{{Key: "$project", Value: bson.M{
-				"product":     "$_id",
-				"quantity":    1,
-				"totalAmount": 1,
-				"created_at":  "$lastTransaction",
-				"_id":         0,
-			}}}
-			pipeline = append(pipeline, projectStage)
+				// Project to final format
+				projectStage := bson.D{{Key: "$project", Value: bson.M{
+					"product":     "$_id",
+					"quantity":    1,
+					"totalAmount": 1,
+					"created_at":  "$lastTransaction",
+					"_id":         0,
+				}}}
+				pipeline = append(pipeline, projectStage)
+			}
 
 			// Execute aggregation
 			cursor, err := m.col(collection).Aggregate(ctx, pipeline)

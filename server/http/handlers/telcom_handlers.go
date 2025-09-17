@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/aremxyplug-be/lib/responseFormat"
+	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
@@ -33,7 +36,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 	fullName := userDetails.FullName
 
 	if r.Method == "POST" {
-		data := telcom.AirtimeInfo{}
+		data := airtime.AirtimeInfo{}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Failed to decode airtime request", zap.Error(err))
@@ -58,58 +61,6 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// userBalance, err := handler.getUserBalance(id)
-		// if err != nil {
-		// 	w.WriteHeader(http.StatusBadRequest)
-		// 	handler.logger.Error("Failed to retrieve user balance", zap.Error(err))
-		// 	response := responseFormat.CustomResponse{
-		// 		Status:  http.StatusBadRequest,
-		// 		Message: "error",
-		// 		Data:    map[string]interface{}{"data": err.Error()},
-		// 	}
-		// 	json.NewEncoder(w).Encode(response)
-		// 	return
-		// }
-
-		// amount, err := strconv.Atoi(data.Amount)
-		// if err != nil {
-		// 	w.WriteHeader(http.StatusInternalServerError)
-		// 	handler.logger.Error("Failed to convert amount to integer", zap.Error(err))
-		// 	response := responseFormat.CustomResponse{
-		// 		Status:  http.StatusInternalServerError,
-		// 		Message: "error",
-		// 		Data:    map[string]interface{}{"data": err.Error()},
-		// 	}
-		// 	json.NewEncoder(w).Encode(response)
-		// 	return
-		// }
-
-		// bal, err := userBalance.Decimal()
-		// if err != nil {
-		// 	w.WriteHeader(http.StatusInternalServerError)
-		// 	handler.logger.Error("Failed to convert balance to decimal", zap.Error(err))
-		// 	response := responseFormat.CustomResponse{
-		// 		Status:  http.StatusInternalServerError,
-		// 		Message: "error",
-		// 		Data:    map[string]interface{}{"data": err.Error()},
-		// 	}
-		// 	json.NewEncoder(w).Encode(response)
-		// 	return
-		// }
-
-		// newBal, valid, err := handler.checkPayment(bal, decimal.NewFromFloatWithExponent(float64(amount), -2))
-		// if !valid || err != nil {
-		// 	w.WriteHeader(http.StatusBadRequest)
-		// 	handler.logger.Error("Payment validation failed", zap.Error(err))
-		// 	response := responseFormat.CustomResponse{
-		// 		Status:  http.StatusBadRequest,
-		// 		Message: "error",
-		// 		Data:    map[string]interface{}{"data": err.Error()},
-		// 	}
-		// 	json.NewEncoder(w).Encode(response)
-		// 	return
-		// }
-
 		amount, err := strconv.Atoi(data.Amount)
 		if err != nil {
 			handler.logger.Error("Failed to convert amount to integer", zap.Error(err))
@@ -124,13 +75,12 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		}
 		amtDecimal := decimal.NewFromFloatWithExponent(float64(amount), -2)
 
+		// Get balance from Redis, fallback to DB
 		userBalance, err := handler.redisClient.Get(fmt.Sprintf("user:balance:%s", id))
 		balanceStr := ""
 		if err != nil || userBalance == nil {
-			// fallback to DB
 			balance, err := handler.getUserBalance(id)
 			handler.logger.Info("fallback to DB for user balance", zap.String("userID", id), zap.Error(err))
-			handler.logger.Info("user balance from DB", zap.Any("balance", balance))
 			if err != nil {
 				handler.logger.Error("Failed to retrieve user balance from DB", zap.Error(err))
 				w.WriteHeader(http.StatusInternalServerError)
@@ -142,17 +92,18 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 				json.NewEncoder(w).Encode(response)
 				return
 			}
-
 			bal, _ := balance.Decimal()
 			balanceStr = bal.String()
-			_ = handler.redisClient.Set(fmt.Sprintf("user:balance:%s", id), balanceStr) // cache indefinitely
+			_ = handler.redisClient.Set(fmt.Sprintf("user:balance:%s", id), balanceStr)
+		} else {
+			balanceStr = userBalance.(string)
 		}
-
 		bal, _ := decimal.NewFromString(balanceStr)
+		currentBalance, _ := bal.Float64()
 
 		handler.logger.Info("User balance", zap.String("userID", id), zap.String("balance", bal.String()))
 
-		// ✅ Step 2: Check + Hold balance in Redis
+		// Check payment validity
 		newBal, valid, err := handler.checkPayment(bal, amtDecimal)
 		if !valid || err != nil {
 			handler.logger.Error("Payment validation failed", zap.Error(err))
@@ -166,25 +117,36 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		amtString := strconv.FormatFloat(newBal, 'f', -1, 64)
-
-		// Deduct temporarily in Redis
-		if err := handler.redisClient.Set(fmt.Sprintf("user:balance:%s", id), amtString); err != nil {
-			handler.logger.Error("Failed to hold balance in Redis", zap.Error(err))
+		txnID := uuid.New().String()
+		holdTTL := 48 * time.Hour
+		if _, err := handler.redisClient.HoldFunds(id, txnID, currentBalance, float64(amount), holdTTL); err != nil {
+			handler.logger.Error("Failed to hold funds in Redis", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{
 				Status:  http.StatusInternalServerError,
 				Message: "error",
-				Data:    map[string]interface{}{"data": "Failed to hold balance"},
+				Data:    map[string]interface{}{"data": "Failed to reserve funds"},
 			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
 
+		meta := map[string]interface{}{
+			"user_id":    id,
+			"amount":     amount,
+			"created_at": time.Now().UTC().Format(time.RFC3339),
+		}
+		if err := handler.redisClient.SetMeta(txnID, meta, 7*24*time.Hour); err != nil {
+			handler.logger.Warn("failed to set transfer meta in redis", zap.Error(err), zap.String("txnID", txnID))
+		}
+
 		data.FullName = fullName
 		data.UserID = id
+		data.TXN = txnID
 		res, err := handler.vtuClient.BuyAirtime(data)
 		if err != nil {
+			// Release hold on error
+			handler.redisClient.ReleaseHold(id, txnID)
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to purchase airtime", zap.Error(err))
 			response := responseFormat.CustomResponse{
@@ -196,50 +158,59 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// if err := handler.updateBalance(id, newBal); err != nil {
-		// 	w.WriteHeader(http.StatusNotModified)
-		// 	handler.logger.Error("Failed to update user balance", zap.Error(err))
-		// 	response := responseFormat.CustomResponse{
-		// 		Status:  http.StatusNotModified,
-		// 		Message: "error",
-		// 		Data:    map[string]interface{}{"data": "Payment successful but server failed to modify balance"},
-		// 	}
-		// 	json.NewEncoder(w).Encode(response)
-		// 	return
-		// }
-
-		// ✅ Step 4: Persist new balance in DB
-		if err := handler.updateBalance(id, newBal); err != nil {
-			handler.logger.Error("Failed to update DB balance, rolling back", zap.Error(err))
-			// rollback Redis as well
-			_ = handler.redisClient.Set(fmt.Sprintf("user:balance:%s", id), bal.String())
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Failed to update user balance in DB", zap.Error(err))
+		switch res.Status {
+		case "success":
+			if ok, err := handler.redisClient.ConfirmHold(id, txnID); err != nil || !ok {
+				handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
+			}
+			if err := handler.updateBalance(id, newBal); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				handler.logger.Error("Airtime balance update failed", zap.Error(err))
+				response := responseFormat.CustomResponse{
+					Status:  http.StatusInternalServerError,
+					Message: "error",
+					Data:    map[string]interface{}{"data": "Airtime active but balance update failed. Contact support."},
+				}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+			pointsEarned := 2
+			if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
+				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
+			}
+			w.WriteHeader(http.StatusOK)
+			handler.logger.Info("Airtime processed successfully", zap.Any("response", res))
 			response := responseFormat.CustomResponse{
-				Status:  http.StatusInternalServerError,
-				Message: "error",
-				Data:    map[string]interface{}{"data": "payment successful but balance update failed"},
+				Status:  http.StatusOK,
+				Message: "success",
+				Data:    map[string]interface{}{"data": res},
 			}
 			json.NewEncoder(w).Encode(response)
 			return
+
+		case "pending":
+			w.WriteHeader(http.StatusOK)
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
+			json.NewEncoder(w).Encode(response)
+			return
+
+		case "failed":
+			if ok, err := handler.redisClient.ReleaseHold(id, txnID); err != nil {
+				handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
+			} else if !ok {
+				handler.logger.Warn("Failed to release hold in Redis: not found", zap.String("txnID", txnID))
+			}
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(response)
+			return
+
+		default:
+			w.WriteHeader(http.StatusOK)
+			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
+			json.NewEncoder(w).Encode(response)
+			return
 		}
-
-		// ✅ Step 5: Finalize (sync Redis with DB-confirmed balance)
-		_ = handler.redisClient.Set(fmt.Sprintf("user:balance:%s", id), amtString)
-
-		pointsEarned := 2
-
-		if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
-			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
-		}
-
-		w.WriteHeader(http.StatusOK)
-		response := responseFormat.CustomResponse{
-			Status:  http.StatusOK,
-			Message: "success",
-			Data:    map[string]interface{}{"data": res},
-		}
-		json.NewEncoder(w).Encode(response)
 	}
 
 	if r.Method == "GET" {

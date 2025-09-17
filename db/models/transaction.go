@@ -35,6 +35,6 @@ type SalesSummary struct {
 type SalesSummaryItem struct {
 	Product     string    `bson:"product" json:"product"`
 	CreatedAt   time.Time `bson:"created_at" json:"created_at"`
-	Quantity    int       `bson:"quantity" json:"quantity"`
+	Quantity    float64   `bson:"quantity" json:"quantity"`
 	TotalAmount float64   `bson:"totalAmount" json:"total_amount"`
 }
