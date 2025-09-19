@@ -13,7 +13,9 @@ import (
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/lib/balance"
 	"github.com/aremxyplug-be/lib/randomgen"
+	"github.com/shopspring/decimal"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
@@ -41,6 +43,52 @@ func NewConfig(store db.DataStore, logger *zap.Logger) *Config {
 	}
 }
 
+// func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferResponse, error) {
+
+// 	user, err := c.db.GetUserByUsernameOrEmail(data.Email, data.Username)
+// 	if err != nil {
+// 		c.logger.Error(err.Error())
+// 		return models.TransferResponse{}, err
+// 	}
+
+// 	// now retrieve the virtual account details of the user
+// 	virtualAccount, err := c.db.GetVirtualNuban(user.ID)
+// 	if err != nil {
+// 		c.logger.Error(err.Error())
+// 		return models.TransferResponse{}, err
+// 	}
+
+// 	// now initiate the transfer to the AremxyPlug account
+// 	transferResponse, err := c.TransferToBank(TransferInfo{
+// 		UserID:         user.ID,
+// 		Account_Name:   virtualAccount.Account_Name, // assuming virtualAccount has AccountName field
+// 		Account_Number: virtualAccount.Account_No,   // assuming virtualAccount has AccountNumber field
+// 		Bank_name:      virtualAccount.Bank_Name,    // assuming virtualAccount has BankName field
+// 		Reason:         data.Reason,
+// 		FullName:       data.FullName,
+// 		Amount:         data.Amount, // assuming data has Amount field
+// 		Email:          data.Email,
+// 		Phone:          data.Phone,
+// 		Username:       data.Username,
+// 		RecipientName:  data.Name,
+// 		Source:         "aremxyplug",
+// 		TXN:            data.TXN,
+// 	})
+// 	if err != nil {
+// 		c.logger.Error(err.Error())
+// 		return models.TransferResponse{}, err
+// 	}
+
+// 	c.logger.Info("Transfer processed successfully", zap.Any("response", transferResponse))
+
+// 	transferResponse.Email = &user.Email
+// 	transferResponse.Username = &user.Username
+// 	transferResponse.Phone = &user.PhoneNumber
+// 	transferResponse.CustomerName = &user.FullName
+
+// 	return transferResponse, nil
+// }
+
 func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferResponse, error) {
 
 	user, err := c.db.GetUserByUsernameOrEmail(data.Email, data.Username)
@@ -48,43 +96,78 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 		c.logger.Error(err.Error())
 		return models.TransferResponse{}, err
 	}
+	trfOrderID, _ := randomgen.GenerateOrderID()
+	depOrderID, _ := randomgen.GenerateOrderID()
+	trfTransactionID := randomgen.GenerateTransactionID("trf")
+	depTransactionID := randomgen.GenerateTransactionID("dep")
 
-	// now retrieve the virtual account details of the user
-	virtualAccount, err := c.db.GetVirtualNuban(user.ID)
+	// get the sender's bank information
+	senderBank, err := c.db.GetVirtualNuban(user.ID)
 	if err != nil {
 		c.logger.Error(err.Error())
 		return models.TransferResponse{}, err
 	}
 
-	// now initiate the transfer to the AremxyPlug account
-	transferResponse, err := c.TransferToBank(TransferInfo{
-		UserID:         user.ID,
-		Account_Name:   virtualAccount.Account_Name, // assuming virtualAccount has AccountName field
-		Account_Number: virtualAccount.Account_No,   // assuming virtualAccount has AccountNumber field
-		Bank_name:      virtualAccount.Bank_Name,    // assuming virtualAccount has BankName field
-		Reason:         data.Reason,
-		FullName:       data.FullName,
-		Amount:         data.Amount, // assuming data has Amount field
-		Email:          data.Email,
-		Phone:          data.Phone,
-		Username:       data.Username,
-		RecipientName:  data.Name,
-		Source:         "aremxyplug",
-		TXN:            data.TXN,
-	})
+	bal, err := c.db.GetBalance(user.ID)
 	if err != nil {
 		c.logger.Error(err.Error())
 		return models.TransferResponse{}, err
 	}
 
-	c.logger.Info("Transfer processed successfully", zap.Any("response", transferResponse))
+	newBalance, _ := balance.NewBalanceDeposit(bal, decimal.NewFromFloatWithExponent(data.Amount, -2))
 
-	transferResponse.Email = &user.Email
-	transferResponse.Username = &user.Username
-	transferResponse.Phone = &user.PhoneNumber
-	transferResponse.CustomerName = &user.FullName
+	if err := c.db.UpdateBalance(user.ID, newBalance); err != nil {
+		c.logger.Error(err.Error())
+		return models.TransferResponse{}, err
+	}
 
-	return transferResponse, nil
+	// save the new deposit receipt for the reciever's account
+	dept := models.DepositResponse{
+		UserID:                 user.ID,
+		Amount:                 fmt.Sprintf("%v", data.Amount),
+		Bank_Name:              senderBank.Bank_Name,
+		Account_Name:           senderBank.Account_Name,
+		Account_No:             senderBank.Account_No,
+		TransactionProduct:     "Virtual Account",
+		TransactionDescription: "NGN Wallet Top Up",
+		Message:                data.Reason,
+		Reference:              trfTransactionID,
+		Order_ID:               depOrderID,
+		Transaction_ID:         depTransactionID,
+		Status:                 "success",
+		CreatedAt:              time.Now().UTC(),
+	}
+
+	if err := c.db.SaveDeposit(dept); err != nil {
+		c.logger.Error(err.Error())
+		return models.TransferResponse{}, err
+	}
+
+	trf := models.TransferResponse{
+		Status:                 "success",
+		Amount:                 fmt.Sprintf("%v", data.Amount),
+		UserID:                 data.UserID,
+		FullName:               data.FullName,
+		Email:                  &user.Email,
+		Username:               &user.Username,
+		Phone:                  &user.PhoneNumber,
+		CustomerName:           &user.FullName,
+		TransactionProduct:     "Money Transfer",
+		TransactionDescription: "From NGN Wallet",
+		Reason:                 data.Reason,
+		Order_ID:               trfOrderID,
+		Transaction_ID:         trfTransactionID,
+		TXN:                    data.TXN,
+		CreatedAt:              time.Now().UTC(),
+	}
+
+	if err := c.saveTransaction(trf); err != nil {
+		c.logger.Error(err.Error())
+		return trf, DBConnectionError(err)
+	}
+
+	return trf, nil
+
 }
 
 func (c *Config) TransferToBank(info TransferInfo) (models.TransferResponse, error) {

@@ -72,15 +72,23 @@ func (d *DataConn) buyDontechData(data DataInfo) (*telcom.DataResult, error) {
 		MobileNumber: data.Mobile_Num,
 		PortedNumber: true,
 	}
+	var networkStr string
+	switch data.Network {
+	case 1:
+		networkStr = "MTN"
+	case 2:
+		networkStr = "GLO"
+	case 3:
+		networkStr = "9MOBILE"
+	case 4:
+		networkStr = "AIRTEL"
+	default:
+		return nil, errors.New("Invalid Network ID")
+	}
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(&reqData); err != nil {
 		return nil, d.logAndReturnError("unable to encode data", err)
-	}
-	id, err := randomgen.GenerateOrderID()
-	if err != nil {
-		d.logger.Error("Could not generate orderID...", zap.Error(err))
-		return nil, d.logAndReturnError("Could not generate orderID", err)
 	}
 
 	req, err := http.NewRequest("POST", dontechapi+"/data/", &buf)
@@ -100,6 +108,25 @@ func (d *DataConn) buyDontechData(data DataInfo) (*telcom.DataResult, error) {
 
 	apiResponse := dontechAPIResponse{}
 
+	transactionID := randomgen.GenerateTransactionID("dat")
+	orderID, _ := randomgen.GenerateOrderID()
+	transactionDesc := data.Plan_Name + " " + data.PlanSize
+	result := &telcom.DataResult{
+		UserID:                 data.UserID,
+		Network:                networkStr,
+		NetworkProduct:         data.Plan_Name,
+		PhoneNumber:            data.Mobile_Num,
+		Plan_Amount:            data.Amount,
+		PlanName:               data.Plan_Name,
+		CreatedAt:              time.Now().UTC(),
+		OrderID:                orderID,
+		FullName:               data.FullName,
+		TransactionProduct:     "Data Top-up",
+		TransactionDescription: transactionDesc,
+		TransactionID:          transactionID,
+		RecipientName:          data.Name,
+	}
+
 	log.Println(resp.StatusCode)
 	if resp.StatusCode == http.StatusCreated {
 
@@ -112,34 +139,19 @@ func (d *DataConn) buyDontechData(data DataInfo) (*telcom.DataResult, error) {
 
 		if apiResponse.Status != "successful" {
 			d.logger.Error("server response error", zap.Any("apiresponse", apiResponse))
-			return nil, d.logAndReturnError("failed to purchase data", errors.New(apiResponse.Status))
+			result.Status = "failed"
+			result.RecipientName = apiResponse.Ident
+			result.ApiID = apiResponse.Id
+			if err := d.saveTransaction(result); err != nil {
+				d.logger.Error("Database error try again...", zap.Error(err))
+				return nil, errors.New("Database Insert Error...")
+			}
+			return result, d.logAndReturnError("failed to purchase data", errors.New(apiResponse.Status))
 		}
 
-		network := apiResponse.Plan_network
-
-		networkProduct := network + " " + apiResponse.Plan_Name
-
-		transactionDesc := networkProduct + " " + apiResponse.Plan_Name
-
-		transactionID := randomgen.GenerateTransactionID("dat")
-		result := &telcom.DataResult{
-			UserID:                 data.UserID,
-			Network:                network,
-			NetworkProduct:         networkProduct,
-			PhoneNumber:            apiResponse.Mobile_number,
-			ReferenceNumber:        apiResponse.Ident,
-			Plan_Amount:            apiResponse.Plan_amount,
-			PlanName:               apiResponse.Plan_Name,
-			CreatedAt:              time.Now().UTC(),
-			OrderID:                id,
-			FullName:               data.FullName,
-			TransactionProduct:     "Data Top-up",
-			TransactionDescription: transactionDesc,
-			TransactionID:          transactionID,
-			Status:                 apiResponse.Status,
-			RecipientName:          data.Name,
-			ApiID:                  apiResponse.Id,
-		}
+		result.RecipientName = apiResponse.Ident
+		result.ApiID = apiResponse.Id
+		result.Status = "success"
 		if err := d.saveTransaction(result); err != nil {
 			d.logger.Error("Database error try again...", zap.Error(err))
 			return nil, errors.New("Database Insert Error...")
@@ -212,17 +224,6 @@ func (d *DataConn) buyEasyaccessData(data DataInfo) (*telcom.DataResult, error) 
 	}
 	defer resp.Body.Close()
 
-	apiResponse := easyaccessResponse{}
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		if err == io.EOF {
-			return nil, d.logAndReturnError("Empty response body retured from server", err)
-		}
-		return nil, d.logAndReturnError("error while decoding json", err)
-	}
-	if apiResponse.Status != "success" {
-		d.logger.Error("server response error", zap.Any("apiresponse", apiResponse))
-		return nil, d.logAndReturnError("failed to purchase data", errors.New(apiResponse.Status))
-	}
 	transactionID := randomgen.GenerateTransactionID("dat")
 	id, err := randomgen.GenerateOrderID()
 	if err != nil {
@@ -234,7 +235,6 @@ func (d *DataConn) buyEasyaccessData(data DataInfo) (*telcom.DataResult, error) 
 
 	result := &telcom.DataResult{
 		UserID:                 data.UserID,
-		Status:                 apiResponse.Status,
 		Network:                networkStr,
 		NetworkProduct:         data.Plan_Name,
 		PhoneNumber:            data.Mobile_Num,
@@ -249,6 +249,29 @@ func (d *DataConn) buyEasyaccessData(data DataInfo) (*telcom.DataResult, error) 
 		TransactionID:          transactionID,
 		RecipientName:          data.Name,
 		// ApiID:                  apiID,
+	}
+
+	apiResponse := easyaccessResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+		if err == io.EOF {
+			return nil, d.logAndReturnError("Empty response body retured from server", err)
+		}
+		return nil, d.logAndReturnError("error while decoding json", err)
+	}
+	if apiResponse.Status != "success" {
+		d.logger.Error("failded to purchase data", zap.Any("apiresponse", apiResponse))
+		result.Status = "failed"
+		if err := d.saveTransaction(result); err != nil {
+			d.logger.Error("Database error try again...", zap.Error(err))
+			return nil, errors.New("Database Insert Error...")
+		}
+		return result, d.logAndReturnError("failed to purchase data", errors.New(apiResponse.Message))
+	}
+
+	result.Status = "success"
+	if err := d.saveTransaction(result); err != nil {
+		d.logger.Error("Database error try again...", zap.Error(err))
+		return nil, errors.New("Database Insert Error...")
 	}
 
 	return result, nil
@@ -306,17 +329,6 @@ func (d *DataConn) buy247Data(data DataInfo) (*telcom.DataResult, error) {
 	}
 	defer resp.Body.Close()
 
-	apiResponse := api247Response{}
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		if err == io.EOF {
-			return nil, d.logAndReturnError("Empty response body retured from server", err)
-		}
-		return nil, d.logAndReturnError("error while decoding json", err)
-	}
-	if apiResponse.Status != "success" {
-		d.logger.Error("server response error", zap.Any("apiresponse", apiResponse))
-		return nil, d.logAndReturnError("failed to purchase data", errors.New(apiResponse.Status))
-	}
 	transactionID := randomgen.GenerateTransactionID("dat")
 	id, err := randomgen.GenerateOrderID()
 	if err != nil {
@@ -326,9 +338,10 @@ func (d *DataConn) buy247Data(data DataInfo) (*telcom.DataResult, error) {
 
 	transactionDesc := data.Plan_Name + " " + data.PlanSize
 
+	status := ""
+
 	result := &telcom.DataResult{
 		UserID:                 data.UserID,
-		Status:                 apiResponse.Status,
 		Network:                networkStr,
 		NetworkProduct:         data.Plan_Name,
 		PhoneNumber:            data.Mobile_Num,
@@ -343,6 +356,32 @@ func (d *DataConn) buy247Data(data DataInfo) (*telcom.DataResult, error) {
 		TransactionID:          transactionID,
 		RecipientName:          data.Name,
 		// ApiID:                  apiID,
+	}
+
+	apiResponse := api247Response{}
+	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+		if err == io.EOF {
+			return nil, d.logAndReturnError("Empty response body retured from server", err)
+		}
+		return nil, d.logAndReturnError("error while decoding json", err)
+	}
+	if apiResponse.Status != "success" {
+		d.logger.Error("failded to purchase data", zap.Any("apiresponse", apiResponse))
+		status = "failed"
+		result.Status = status
+		if err := d.saveTransaction(result); err != nil {
+			d.logger.Error("Database error try again...", zap.Error(err))
+			return nil, errors.New("Database Insert Error...")
+		}
+		return result, d.logAndReturnError("failed to purchase data", errors.New(apiResponse.Message))
+	}
+
+	status = "success"
+	result.Status = status
+
+	if err := d.saveTransaction(result); err != nil {
+		d.logger.Error("Database error try again...", zap.Error(err))
+		return nil, errors.New("Database Insert Error...")
 	}
 
 	return result, nil
