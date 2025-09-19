@@ -102,7 +102,7 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 	depTransactionID := randomgen.GenerateTransactionID("dep")
 
 	// get the sender's bank information
-	senderBank, err := c.db.GetVirtualNuban(user.ID)
+	senderBank, err := c.db.GetVirtualNuban(data.UserID)
 	if err != nil {
 		c.logger.Error(err.Error())
 		return models.TransferResponse{}, err
