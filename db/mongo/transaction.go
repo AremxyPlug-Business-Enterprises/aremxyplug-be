@@ -139,21 +139,41 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		return models.TransactionResponse{}, err
 	}
 
-	// Get totals
-	totalsPipeline := append(pipeline,
-		bson.D{{Key: "$group", Value: bson.M{
-			"_id":        nil,
-			"totalCount": bson.M{"$sum": 1},
-			"totalInflow": bson.M{"$sum": bson.M{"$cond": bson.A{
-				bson.M{"$eq": bson.A{"$flowType", "inflow"}},
-				"$amountDecimal", 0,
-			}}},
-			"totalOutflow": bson.M{"$sum": bson.M{"$cond": bson.A{
-				bson.M{"$eq": bson.A{"$flowType", "outflow"}},
-				"$amountDecimal", 0,
-			}}},
-		}}},
-	)
+	// Totals pipeline: use all filters except status, and match status in ["success", "pending"]
+	totalsMatch := bson.D{}
+	for _, cond := range matchConditions {
+		if cond.Key != "status" {
+			totalsMatch = append(totalsMatch, cond)
+		}
+	}
+	totalsMatch = append(totalsMatch, bson.E{Key: "status", Value: bson.M{"$in": bson.A{"success", "pending"}}})
+	totalsPipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: totalsMatch}},
+		projectStage,
+		bson.D{{Key: "$addFields", Value: bson.M{"flowType": baseFlowType}}},
+	}
+	for _, coll := range remainingCollections {
+		flowType := "outflow"
+		if slices.Contains(inflowCollections, coll) {
+			flowType = "inflow"
+		}
+		unionStages := mongo.Pipeline{
+			bson.D{{Key: "$match", Value: totalsMatch}},
+			projectStage,
+			bson.D{{Key: "$addFields", Value: bson.M{"flowType": flowType}}},
+		}
+		totalsPipeline = append(totalsPipeline, bson.D{{Key: "$unionWith", Value: bson.M{"coll": coll, "pipeline": unionStages}}})
+	}
+	totalsPipeline = append(totalsPipeline, bson.D{{Key: "$addFields", Value: bson.M{
+		"amountDecimal": bson.M{
+			"$convert": bson.M{
+				"input":   "$amount",
+				"to":      "double",
+				"onError": 0,
+				"onNull":  0,
+			},
+		},
+	}}})
 
 	totalsCursor, err := m.col(baseCollection).Aggregate(ctx, totalsPipeline)
 	if err != nil {
@@ -596,19 +616,39 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 		return models.TransactionResponse{}, err
 	}
 
+	// Copy matchConditions and add status filter for totals only
+	totalsMatch := append(bson.D{}, matchConditions...)
+	totalsMatch = append(totalsMatch,
+		bson.E{Key: "status", Value: bson.M{"$in": bson.A{"success", "pending"}}},
+	)
+
+	// Base pipeline for totals (deposit = inflow)
+	totalsBasePipeline := mongo.Pipeline{
+		{{Key: "$match", Value: totalsMatch}},
+		amountConversionStage,
+		{{Key: "$addFields", Value: bson.M{"flowType": "inflow"}}},
+		projectStage,
+	}
+
+	// Transfer union pipeline (transfer = outflow)
+	totalsTransferUnionPipeline := bson.A{
+		bson.D{{Key: "$match", Value: totalsMatch}},
+		amountConversionStage,
+		bson.D{{Key: "$addFields", Value: bson.M{"flowType": "outflow"}}},
+		projectStage,
+	}
+
 	// Totals pipeline
-	totalsPipeline := append(basePipeline,
-		bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
+	totalsPipeline := append(totalsBasePipeline,
+		bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": totalsTransferUnionPipeline}}},
 		bson.D{{Key: "$group", Value: bson.M{
 			"_id":        nil,
 			"totalCount": bson.M{"$sum": 1},
 			"totalInflow": bson.M{"$sum": bson.M{"$cond": bson.A{
-				bson.M{"$eq": bson.A{"$flowType", "inflow"}},
-				"$amountDecimal", 0,
+				bson.M{"$eq": bson.A{"$flowType", "inflow"}}, "$amountDecimal", 0,
 			}}},
 			"totalOutflow": bson.M{"$sum": bson.M{"$cond": bson.A{
-				bson.M{"$eq": bson.A{"$flowType", "outflow"}},
-				"$amountDecimal", 0,
+				bson.M{"$eq": bson.A{"$flowType", "outflow"}}, "$amountDecimal", 0,
 			}}},
 		}}},
 	)
