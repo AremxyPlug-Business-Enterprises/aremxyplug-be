@@ -146,12 +146,16 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 			totalsMatch = append(totalsMatch, cond)
 		}
 	}
-	totalsMatch = append(totalsMatch, bson.E{Key: "status", Value: bson.M{"$in": bson.A{"success", "pending"}}})
+	totalsMatch = append(totalsMatch,
+		bson.E{Key: "status", Value: bson.M{"$in": bson.A{"success", "pending"}}},
+	)
+
 	totalsPipeline := mongo.Pipeline{
 		bson.D{{Key: "$match", Value: totalsMatch}},
 		projectStage,
 		bson.D{{Key: "$addFields", Value: bson.M{"flowType": baseFlowType}}},
 	}
+
 	for _, coll := range remainingCollections {
 		flowType := "outflow"
 		if slices.Contains(inflowCollections, coll) {
@@ -162,18 +166,33 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 			projectStage,
 			bson.D{{Key: "$addFields", Value: bson.M{"flowType": flowType}}},
 		}
-		totalsPipeline = append(totalsPipeline, bson.D{{Key: "$unionWith", Value: bson.M{"coll": coll, "pipeline": unionStages}}})
+		totalsPipeline = append(totalsPipeline,
+			bson.D{{Key: "$unionWith", Value: bson.M{"coll": coll, "pipeline": unionStages}}},
+		)
 	}
-	totalsPipeline = append(totalsPipeline, bson.D{{Key: "$addFields", Value: bson.M{
-		"amountDecimal": bson.M{
-			"$convert": bson.M{
-				"input":   "$amount",
-				"to":      "double",
-				"onError": 0,
-				"onNull":  0,
+
+	totalsPipeline = append(totalsPipeline,
+		bson.D{{Key: "$addFields", Value: bson.M{
+			"amountDecimal": bson.M{
+				"$convert": bson.M{
+					"input":   "$amount",
+					"to":      "double",
+					"onError": 0,
+					"onNull":  0,
+				},
 			},
-		},
-	}}})
+		}}},
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":        nil,
+			"totalCount": bson.M{"$sum": 1},
+			"totalInflow": bson.M{"$sum": bson.M{"$cond": bson.A{
+				bson.M{"$eq": bson.A{"$flowType", "inflow"}}, "$amountDecimal", 0,
+			}}},
+			"totalOutflow": bson.M{"$sum": bson.M{"$cond": bson.A{
+				bson.M{"$eq": bson.A{"$flowType", "outflow"}}, "$amountDecimal", 0,
+			}}},
+		}}},
+	)
 
 	totalsCursor, err := m.col(baseCollection).Aggregate(ctx, totalsPipeline)
 	if err != nil {
