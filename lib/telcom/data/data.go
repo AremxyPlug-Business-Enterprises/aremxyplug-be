@@ -368,8 +368,8 @@ func (d *DataConn) buy247Data(data DataInfo) (*telcom.DataResult, error) {
 		}
 		return nil, d.logAndReturnError("error while decoding json", err)
 	}
-	if apiResponse.Status != "success" {
-		d.logger.Error("failded to purchase data", zap.Any("apiresponse", apiResponse))
+	if apiResponse.Status != "successful" {
+		d.logger.Error("failed to purchase data", zap.Any("apiresponse", apiResponse))
 		status = "failed"
 		result.Status = status
 		if err := d.saveTransaction(result); err != nil {
