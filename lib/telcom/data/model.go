@@ -12,6 +12,7 @@ type DataInfo struct {
 	Amount     string
 	Plan_Name  string
 	PlanSize   string
+	Validity   string
 }
 
 type dontechAPIResponse struct {
