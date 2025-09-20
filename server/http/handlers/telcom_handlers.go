@@ -480,6 +480,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		data.Amount = fmt.Sprintf("%.f", plan.Amount)
 		data.Plan_Name = plan.PlanType
 		data.PlanSize = plan.Size
+		data.Validity = plan.Validity
 		res, err := handler.dataClient.BuyData(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)

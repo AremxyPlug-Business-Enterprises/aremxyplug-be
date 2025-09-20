@@ -118,6 +118,7 @@ func (d *DataConn) buyDontechData(data DataInfo) (*telcom.DataResult, error) {
 		PhoneNumber:            data.Mobile_Num,
 		Plan_Amount:            data.Amount,
 		PlanName:               data.Plan_Name,
+		Validity:               data.Validity,
 		CreatedAt:              time.Now().UTC(),
 		OrderID:                orderID,
 		FullName:               data.FullName,
@@ -146,7 +147,7 @@ func (d *DataConn) buyDontechData(data DataInfo) (*telcom.DataResult, error) {
 				d.logger.Error("Database error try again...", zap.Error(err))
 				return nil, errors.New("Database Insert Error...")
 			}
-			return result, d.logAndReturnError("failed to purchase data", errors.New(apiResponse.Status))
+			return result, nil
 		}
 
 		result.RecipientName = apiResponse.Ident
@@ -241,6 +242,7 @@ func (d *DataConn) buyEasyaccessData(data DataInfo) (*telcom.DataResult, error) 
 		ReferenceNumber:        requestID,
 		Plan_Amount:            data.Amount,
 		PlanName:               data.Plan_Name,
+		Validity:               data.Validity,
 		CreatedAt:              time.Now().UTC(),
 		OrderID:                id,
 		FullName:               data.FullName,
@@ -265,7 +267,7 @@ func (d *DataConn) buyEasyaccessData(data DataInfo) (*telcom.DataResult, error) 
 			d.logger.Error("Database error try again...", zap.Error(err))
 			return nil, errors.New("Database Insert Error...")
 		}
-		return result, d.logAndReturnError("failed to purchase data", errors.New(apiResponse.Message))
+		return result, nil
 	}
 
 	result.Status = "success"
@@ -348,6 +350,7 @@ func (d *DataConn) buy247Data(data DataInfo) (*telcom.DataResult, error) {
 		ReferenceNumber:        requestID,
 		Plan_Amount:            data.Amount,
 		PlanName:               data.Plan_Name,
+		Validity:               data.Validity,
 		CreatedAt:              time.Now().UTC(),
 		OrderID:                id,
 		FullName:               data.FullName,
@@ -373,7 +376,7 @@ func (d *DataConn) buy247Data(data DataInfo) (*telcom.DataResult, error) {
 			d.logger.Error("Database error try again...", zap.Error(err))
 			return nil, errors.New("Database Insert Error...")
 		}
-		return result, d.logAndReturnError("failed to purchase data", errors.New(apiResponse.Message))
+		return result, nil
 	}
 
 	status = "success"
