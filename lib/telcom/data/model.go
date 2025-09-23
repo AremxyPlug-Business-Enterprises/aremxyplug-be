@@ -13,6 +13,7 @@ type DataInfo struct {
 	Plan_Name  string
 	PlanSize   string
 	Validity   string
+	TXN        string
 }
 
 type dontechAPIResponse struct {

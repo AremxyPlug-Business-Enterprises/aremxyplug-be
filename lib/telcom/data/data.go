@@ -260,7 +260,7 @@ func (d *DataConn) buyEasyaccessData(data DataInfo) (*telcom.DataResult, error) 
 		}
 		return nil, d.logAndReturnError("error while decoding json", err)
 	}
-	if apiResponse.Status != "success" {
+	if apiResponse.Status != "successful" {
 		d.logger.Error("failded to purchase data", zap.Any("apiresponse", apiResponse))
 		result.Status = "failed"
 		if err := d.saveTransaction(result); err != nil {

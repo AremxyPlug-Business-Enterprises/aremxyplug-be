@@ -52,7 +52,7 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 	}
 
 	// Collection setup
-	inflowCollections := []string{depositColl}
+	inflowCollections := []string{depositColl, pointRedeemColl}
 	outflowCollections := []string{airColl, dataColl, transferColl, eduColl, tvColl, electricColl}
 	collectionsToQuery := append(outflowCollections, inflowCollections...)
 	baseCollection := collectionsToQuery[0]
@@ -601,9 +601,17 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 
 	// Base pipeline (deposit = inflow)
 	basePipeline := mongo.Pipeline{
-		{{Key: "$match", Value: matchConditions}},
+		bson.D{{Key: "$match", Value: matchConditions}},
 		amountConversionStage,
-		{{Key: "$addFields", Value: bson.M{"flowType": "inflow"}}},
+		bson.D{{Key: "$addFields", Value: bson.M{"flowType": "inflow"}}},
+		projectStage,
+	}
+
+	// Add the point redeem collection as part of the inflow
+	pointRedeemUnionPipeline := bson.A{
+		bson.D{{Key: "$match", Value: matchConditions}},
+		amountConversionStage,
+		bson.D{{Key: "$addFields", Value: bson.M{"flowType": "inflow"}}},
 		projectStage,
 	}
 
@@ -617,6 +625,7 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 
 	// Data pipeline (with union + pagination)
 	dataPipeline := append(basePipeline,
+		bson.D{{Key: "$unionWith", Value: bson.M{"coll": pointRedeemColl, "pipeline": pointRedeemUnionPipeline}}},
 		bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
 		bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
 		bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
@@ -659,6 +668,7 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 
 	// Totals pipeline
 	totalsPipeline := append(totalsBasePipeline,
+		bson.D{{Key: "$unionWith", Value: bson.M{"coll": pointRedeemColl, "pipeline": pointRedeemUnionPipeline}}},
 		bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": totalsTransferUnionPipeline}}},
 		bson.D{{Key: "$group", Value: bson.M{
 			"_id":        nil,

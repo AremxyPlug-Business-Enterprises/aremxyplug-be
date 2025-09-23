@@ -183,22 +183,9 @@ func (handler *HttpHandler) processTransfer(p webhookPayload) error {
 		UserID string `json:"user_id"`
 		Amount int64  `json:"amount"`
 	}
-	metaVal, merr := handler.redisClient.Get(fmt.Sprintf("transfer:meta:%s", txID))
-	if merr != nil {
-		handler.logger.Warn("failed to read transfer meta from redis", zap.Error(merr), zap.String("txID", txID))
-	}
-	if metaVal != nil {
-		switch v := metaVal.(type) {
-		case string:
-			_ = json.Unmarshal([]byte(v), &meta)
-		case []byte:
-			_ = json.Unmarshal(v, &meta)
-		default:
-			// marshal then unmarshal into struct
-			if b, _ := json.Marshal(v); len(b) > 0 {
-				_ = json.Unmarshal(b, &meta)
-			}
-		}
+	found, err := handler.redisClient.GetMeta(txID, meta)
+	if !found || err != nil {
+		handler.logger.Warn("failed to read transfer meta from redis", zap.String("txID", txID))
 	} else {
 		// fallback to receipt values
 		meta.UserID = rec.UserID
