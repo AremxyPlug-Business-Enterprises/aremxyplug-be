@@ -104,14 +104,16 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		data.FullName = fullName
+		data.UserID = id
+
 		txnID, err := handler.placeRedisHoldAndMeta(w, id, amount, bal)
 		if err != nil {
 			return
 		}
 
-		data.FullName = fullName
-		data.UserID = id
 		data.TXN = txnID
+
 		res, err := handler.vtuClient.BuyAirtime(data)
 		if err != nil {
 			// Release hold on error
@@ -442,11 +444,6 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, data.Amount, bal)
-		if err != nil {
-			return
-		}
-
 		data.FullName = fullName
 		data.UserID = id
 		data.ProviderID = plan.ProviderID
@@ -455,6 +452,12 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		data.Plan_Name = plan.PlanType
 		data.PlanSize = plan.Size
 		data.Validity = plan.Validity
+
+		txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, data.Amount, bal)
+		if err != nil {
+			return
+		}
+
 		res, err := handler.dataClient.BuyData(data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
