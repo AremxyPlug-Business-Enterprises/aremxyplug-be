@@ -39,7 +39,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		userBalance, err := handler.getUserBalance(userDetails.ID)
+		userBalance, err := handler.getBalance(userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance: %s", err.Error())}}
@@ -47,15 +47,15 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		bal, err := userBalance.Decimal()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance decimal: %s", err.Error())}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
+		// bal, err := userBalance.Decimal()
+		// if err != nil {
+		// 	w.WriteHeader(http.StatusInternalServerError)
+		// 	response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance decimal: %s", err.Error())}}
+		// 	json.NewEncoder(w).Encode(response)
+		// 	return
+		// }
 
-		newBal, valid, err := handler.checkTransfer(bal, info.Amount)
+		newBal, valid, err := handler.checkTransfer(userBalance, info.Amount)
 		if !valid || err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not complete transfer: %s", err.Error())}}
@@ -64,7 +64,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// --- Create a txID (used for Redis hold) ---
-		txID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, info.Amount, bal)
+		txID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, info.Amount, userBalance)
 		if err != nil {
 			return
 		}
@@ -84,7 +84,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 
 		// should create a redis job to hold balance
 
-		info.UserID = userBalance.UserID
+		info.UserID = userDetails.ID
 		info.Source = "direct"
 		info.TXN = txID
 
@@ -294,7 +294,7 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 		return
 	}
 
-	userBalance, err := handler.getUserBalance(userDetails.ID)
+	userBalance, err := handler.getBalance(userDetails.ID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance: %s", err.Error())}}
@@ -302,15 +302,7 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 		return
 	}
 
-	bal, err := userBalance.Decimal()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance decimal: %s", err.Error())}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
-	newBal, valid, err := handler.checkTransfer(bal, info.Amount)
+	newBal, valid, err := handler.checkTransfer(userBalance, info.Amount)
 	if !valid || err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not complete transfer: %s", err.Error())}}
@@ -318,7 +310,7 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 		return
 	}
 
-	txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, info.Amount, bal)
+	txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, info.Amount, userBalance)
 	if err != nil {
 		return
 	}
@@ -562,27 +554,13 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get actual balance
-	bal, err := handler.getUserBalance(id)
+	bal, err := handler.getBalance(id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{
 			Status:  http.StatusInternalServerError,
 			Message: "error",
 			Data:    map[string]interface{}{"data": err.Error()},
-		}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
-	userBal, err := bal.Decimal()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{
-			Status:  http.StatusInternalServerError,
-			Message: "error",
-			Data: map[string]interface{}{
-				"data": fmt.Sprintf("failed to get user's balance: %s", err.Error()),
-			},
 		}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -596,7 +574,7 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// compute available balance
-	available := userBal.Sub(decimal.NewFromFloat(held))
+	available := bal.Sub(decimal.NewFromFloat(held))
 
 	// build response
 	userBalance := struct {
@@ -605,10 +583,10 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 		HeldFunds        float64 `json:"held_funds"`
 		UserID           string  `json:"user_id"`
 	}{
-		Balance:          userBal.StringFixed(2),
+		Balance:          bal.StringFixed(2),
 		AvailableBalance: available.StringFixed(2),
 		HeldFunds:        held,
-		UserID:           bal.UserID,
+		UserID:           id,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -697,21 +675,30 @@ func (handler *HttpHandler) refreshBalance(userID string) error {
 
 func (handler *HttpHandler) getBalance(userID string) (balance decimal.Decimal, err error) {
 
-	bal, err := handler.bankTranc.GetBalance(userID)
-	if err != nil {
-		return decimal.Decimal{}, err
+	// Get main balance from Redis
+	redisBal, err := handler.redisClient.GetBalance(userID)
+	if err != nil || redisBal == 0 {
+		// Fallback: get balance from MongoDB if Redis is empty or error
+		mongoBal, dbErr := handler.store.GetBalance(userID)
+		if dbErr != nil {
+			return decimal.Decimal{}, dbErr
+		}
+		balfloat, _ := mongoBal.Round(2).Float64()
+
+		redisBal = balfloat
+		// Optionally, update Redis for next time
+		_ = handler.redisClient.SetInitialBalance(userID, balfloat)
 	}
 
-	return bal, nil
-}
-
-func (handler *HttpHandler) getUserBalance(userID string) (models.Balance, error) {
-	bal, err := handler.store.GetBalanceDetails(userID)
+	// Get held funds from Redis
+	held, err := handler.redisClient.GetHeldFundsLua(userID)
 	if err != nil {
-		return models.Balance{}, err
+		held = 0 // fallback to 0 if error
 	}
 
-	return bal, nil
+	// Compute available balance
+	available := decimal.NewFromFloat(redisBal).Sub(decimal.NewFromFloat(held))
+	return available, nil
 }
 
 // with the username, or email, you should be able to get the full user's details
@@ -730,6 +717,26 @@ func (handler *HttpHandler) GetUserDetails(r *http.Request) (user *models.User, 
 	}
 
 	return userDetails, nil
+}
+
+// Call this after a successful deposit to update Redis balance
+func (handler *HttpHandler) updateBalanceOnDeposit(userID string, amount float64) error {
+	// Add to Redis balance
+	if err := handler.redisClient.AddToBalance(userID, amount); err != nil {
+		handler.logger.Error("Failed to update Redis balance on deposit", zap.Error(err), zap.String("userID", userID))
+		return err
+	}
+	return nil
+}
+
+// Call this after a successful point redeem to update Redis balance
+func (handler *HttpHandler) updateBalanceOnPointRedeem(userID string, amount float64) error {
+	// Add to Redis balance
+	if err := handler.redisClient.AddToBalance(userID, amount); err != nil {
+		handler.logger.Error("Failed to update Redis balance on point redeem", zap.Error(err), zap.String("userID", userID))
+		return err
+	}
+	return nil
 }
 
 // update the user balance using the UserID

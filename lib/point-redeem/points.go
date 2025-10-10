@@ -2,6 +2,7 @@ package pointredeem
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/aremxyplug-be/db"
@@ -35,13 +36,16 @@ func (p *PointConfig) RedeemPoints(userID string, points int) (models.PointRedee
 		return models.PointRedeem{}, err
 	}
 
+	amount_redeemed := strconv.Itoa(redeemedAmount)
+	point_redeemed := strconv.Itoa(points)
+
 	redeemDoc := models.PointRedeem{
 		UserID:                 userID,
-		Points_Redeemed:        points,
-		Amount_Redeemed:        float64(redeemedAmount),
+		Points_Redeemed:        point_redeemed,
+		Amount_Redeemed:        amount_redeemed,
 		Redeemed_Rate:          redeemRateStr,
 		TransactionProduct:     "Point Redeem",
-		TransactionDescription: "Points redeemed for rewards",
+		TransactionDescription: "NGN Wallet Top Up",
 		TransactionID:          transactionID,
 		OrderID:                orderID,
 		CreatedAt:              time.Now().UTC(),

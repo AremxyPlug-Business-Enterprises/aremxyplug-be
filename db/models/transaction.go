@@ -3,10 +3,16 @@ package models
 import "time"
 
 type TransactionResponse struct {
-	Transactions []TransactionItem `json:"transactions"`
-	TotalCount   int               `json:"total_count"`
-	TotalInflow  float64           `json:"total_inflow"`
-	TotalOutflow float64           `json:"total_outflow"`
+	Transactions  []TransactionItem        `json:"transactions"`
+	StatusMetrics map[string]StatusMetrics `json:"status_metrics"`
+	TotalCount    int                      `json:"total_count"`
+	TotalInflow   float64                  `json:"total_inflow"`
+	TotalOutflow  float64                  `json:"total_outflow"`
+}
+
+type StatusMetrics struct {
+	Volume int     `json:"volume"`
+	Value  float64 `json:"value"`
 }
 
 type TransactionItem struct {
