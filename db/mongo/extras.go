@@ -250,6 +250,19 @@ func (m *mongoStore) GetPointTransactions(userID string, page int) ([]models.Poi
 	return transactions, nil
 }
 
+func (m *mongoStore) GetPointRedeemDetails(orderID string) (models.PointRedeem, error) {
+	ctx := context.Background()
+	var redeem models.PointRedeem
+
+	filter := bson.M{"order_id": orderID}
+	err := m.col(pointRedeemColl).FindOne(ctx, filter).Decode(&redeem)
+	if err != nil {
+		return redeem, fmt.Errorf("failed to fetch point redeem details: %v", err)
+	}
+
+	return redeem, nil
+}
+
 func (m *mongoStore) RedeemPoints(userID string, pointsToRedeem int, redeemRate int) (amountRedeemed int, e error) {
 	ctx := context.Background()
 

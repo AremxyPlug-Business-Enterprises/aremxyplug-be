@@ -43,9 +43,9 @@ type PointSummary struct {
 
 type PointRedeem struct {
 	UserID                 string    `json:"user_id" bson:"user_id"`
-	Points_Redeemed        int       `json:"points_redeemed" bson:"points_redeemed"`
-	Amount_Redeemed        float64   `json:"amount_redeemed" bson:"amount_redeemed"` // e.g., 1000 Naira
-	Redeemed_Rate          string    `json:"redeemed_rate" bson:"redeemed_rate"`     // e.g., "1 point = 1 Naira"
+	Points_Redeemed        string    `json:"points_redeemed" bson:"points_redeemed"`
+	Amount_Redeemed        string    `json:"amount_redeemed" bson:"amount_redeemed"`
+	Redeemed_Rate          string    `json:"redeemed_rate" bson:"redeemed_rate"`
 	TransactionProduct     string    `json:"transaction_product" bson:"transaction_product"`
 	TransactionDescription string    `json:"transaction_description" bson:"transaction_description"`
 	OrderID                int       `json:"order_id" bson:"order_id"`

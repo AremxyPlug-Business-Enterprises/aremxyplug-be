@@ -97,11 +97,35 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		if slices.Contains(inflowCollections, coll) {
 			flowType = "inflow"
 		}
-		unionStages := bson.A{
-			bson.D{{Key: "$match", Value: matchConditions}},
-			projectStage,
-			bson.D{{Key: "$addFields", Value: bson.M{"flowType": flowType}}},
+		// unionStages := bson.A{
+		// 	bson.D{{Key: "$match", Value: matchConditions}},
+		// 	projectStage,
+		// 	bson.D{{Key: "$addFields", Value: bson.M{"flowType": flowType}}},
+		// }
+		var unionStages bson.A
+		if coll == pointRedeemColl {
+			// Special case for pointRedeemColl
+			unionStages = bson.A{
+				bson.D{{Key: "$match", Value: matchConditions}},
+				bson.D{{Key: "$project", Value: bson.D{
+					{Key: "product", Value: "$transaction_product"},
+					{Key: "description", Value: "$transaction_description"},
+					{Key: "order_id", Value: "$order_id"},
+					{Key: "created_at", Value: "$created_at"},
+					{Key: "status", Value: "$status"},
+					{Key: "amount", Value: "$amount_redeemed"}, // map amount_redeemed → amount
+				}}},
+				bson.D{{Key: "$addFields", Value: bson.M{"flowType": flowType}}},
+			}
+		} else {
+			// Normal collections
+			unionStages = bson.A{
+				bson.D{{Key: "$match", Value: matchConditions}},
+				projectStage,
+				bson.D{{Key: "$addFields", Value: bson.M{"flowType": flowType}}},
+			}
 		}
+
 		pipeline = append(pipeline, bson.D{{
 			Key:   "$unionWith",
 			Value: bson.M{"coll": coll, "pipeline": unionStages},
@@ -139,6 +163,57 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		return models.TransactionResponse{}, err
 	}
 
+	// New: Status-based aggregation pipeline - ensure all statuses are returned
+	statusPipeline := append(pipeline,
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":    "$status",
+			"value":  bson.M{"$sum": "$amountDecimal"},
+			"volume": bson.M{"$sum": 1},
+		}}},
+		bson.D{{Key: "$project", Value: bson.M{
+			"status": "$_id",
+			"value":  1,
+			"volume": 1,
+			"_id":    0,
+		}}},
+	)
+
+	statusCursor, err := m.col(baseCollection).Aggregate(ctx, statusPipeline)
+	if err != nil {
+		m.logger.Error("Status aggregation failed", zap.Error(err))
+		return models.TransactionResponse{}, err
+	}
+	defer statusCursor.Close(ctx)
+
+	var statusResults []struct {
+		Status string  `bson:"status"`
+		Value  float64 `bson:"value"`
+		Volume int     `bson:"volume"`
+	}
+	if err := statusCursor.All(ctx, &statusResults); err != nil {
+		return models.TransactionResponse{}, err
+	}
+
+	// Prepare status metrics - ensure all statuses are present with zero values if missing
+	expectedStatuses := []string{"success", "failed", "pending", "refunded"}
+	statusMetrics := make(map[string]models.StatusMetrics)
+
+	// Initialize all expected statuses with zero values
+	for _, status := range expectedStatuses {
+		statusMetrics[status] = models.StatusMetrics{
+			Value:  0,
+			Volume: 0,
+		}
+	}
+
+	// Update with actual data from aggregation
+	for _, result := range statusResults {
+		statusMetrics[result.Status] = models.StatusMetrics{
+			Value:  result.Value,
+			Volume: result.Volume,
+		}
+	}
+
 	// Totals pipeline: use all filters except status, and match status in ["success", "pending"]
 	totalsMatch := bson.D{}
 	for _, cond := range matchConditions {
@@ -161,11 +236,33 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		if slices.Contains(inflowCollections, coll) {
 			flowType = "inflow"
 		}
-		unionStages := mongo.Pipeline{
-			bson.D{{Key: "$match", Value: totalsMatch}},
-			projectStage,
-			bson.D{{Key: "$addFields", Value: bson.M{"flowType": flowType}}},
+		// unionStages := mongo.Pipeline{
+		// 	bson.D{{Key: "$match", Value: totalsMatch}},
+		// 	projectStage,
+		// 	bson.D{{Key: "$addFields", Value: bson.M{"flowType": flowType}}},
+		// }
+		var unionStages mongo.Pipeline
+		if coll == pointRedeemColl {
+			unionStages = mongo.Pipeline{
+				bson.D{{Key: "$match", Value: totalsMatch}},
+				bson.D{{Key: "$project", Value: bson.D{
+					{Key: "product", Value: "$transaction_product"},
+					{Key: "description", Value: "$transaction_description"},
+					{Key: "order_id", Value: "$order_id"},
+					{Key: "created_at", Value: "$created_at"},
+					{Key: "status", Value: "$status"},
+					{Key: "amount", Value: "$amount_redeemed"}, // remap for totals too
+				}}},
+				bson.D{{Key: "$addFields", Value: bson.M{"flowType": flowType}}},
+			}
+		} else {
+			unionStages = mongo.Pipeline{
+				bson.D{{Key: "$match", Value: totalsMatch}},
+				projectStage,
+				bson.D{{Key: "$addFields", Value: bson.M{"flowType": flowType}}},
+			}
 		}
+
 		totalsPipeline = append(totalsPipeline,
 			bson.D{{Key: "$unionWith", Value: bson.M{"coll": coll, "pipeline": unionStages}}},
 		)
@@ -208,7 +305,8 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 
 	// Prepare response
 	res := models.TransactionResponse{
-		Transactions: transactions,
+		Transactions:  transactions,
+		StatusMetrics: statusMetrics,
 	}
 	if len(totals) > 0 {
 		res.TotalCount = totals[0].TotalCount
@@ -221,6 +319,7 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		zap.Int("page", page),
 		zap.Int("pageSize", pageSize),
 		zap.Any("filter", filter),
+		zap.Any("statusMetrics", statusMetrics),
 	)
 
 	return res, nil
@@ -612,7 +711,14 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 		bson.D{{Key: "$match", Value: matchConditions}},
 		amountConversionStage,
 		bson.D{{Key: "$addFields", Value: bson.M{"flowType": "inflow"}}},
-		projectStage,
+		bson.D{{Key: "$project", Value: bson.D{
+			{Key: "product", Value: "$transaction_product"},
+			{Key: "description", Value: "$transaction_description"},
+			{Key: "order_id", Value: "$order_id"},
+			{Key: "created_at", Value: "$created_at"},
+			{Key: "status", Value: "$status"},
+			{Key: "amount", Value: "$amount_redeemed"},
+		}}},
 	}
 
 	// Transfer union pipeline (transfer = outflow)

@@ -4,7 +4,7 @@ import "time"
 
 type DataResult struct {
 	UserID                 string    `json:"user_id" bson:"user_id"`
-	Status                 string    `json:"Status" bson:"status"`
+	Status                 string    `json:"status" bson:"status"`
 	Network                string    `json:"network" bson:"network"`                 // "MTN"
 	NetworkProduct         string    `json:"network_product" bson:"network_product"` // "MTN SME"
 	PlanName               string    `json:"plan_name" bson:"plan_name"`

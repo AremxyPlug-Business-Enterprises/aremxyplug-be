@@ -365,6 +365,9 @@ func (handler *HttpHandler) fetchTransactionByProduct(orderID, product string) (
 	case "electric-sub":
 		return store.GetElectricSubDetails(orderID)
 
+	case "point":
+		return store.GetPointRedeemDetails(orderID)
+
 	default:
 		return nil, fmt.Errorf("invalid product type")
 	}

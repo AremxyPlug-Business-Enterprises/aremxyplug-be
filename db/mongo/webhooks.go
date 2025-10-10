@@ -10,6 +10,31 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// Transaction index model
+type TxnIndex struct {
+	TxnID      string `bson:"txn"`
+	Collection string `bson:"collection"`
+}
+
+// SaveTxnIndex inserts a mapping from TXNID to its source collection
+func (m *mongoStore) SaveTxnIndex(txID, collection string) error {
+	ctx := context.Background()
+	idx := TxnIndex{TxnID: txID, Collection: collection}
+	_, err := m.col("txn_index").InsertOne(ctx, idx)
+	return err
+}
+
+// GetTxnCollection returns the collection name for a given TXNID
+func (m *mongoStore) GetTxnCollection(txID string) (string, error) {
+	ctx := context.Background()
+	var idx TxnIndex
+	err := m.col("txn_index").FindOne(ctx, bson.M{"txn": txID}).Decode(&idx)
+	if err != nil {
+		return "", err
+	}
+	return idx.Collection, nil
+}
+
 func (m *mongoStore) GetReceiptByExternalRef(externalRef string) (models.TransferResponse, error) {
 	var receipt models.TransferResponse
 	err := m.col(transferColl).FindOne(context.Background(), bson.M{"reference": externalRef}).Decode(&receipt)
@@ -26,6 +51,31 @@ func (m *mongoStore) GetReceiptByTxID(txID string) (models.TransferResponse, err
 		return models.TransferResponse{}, err
 	}
 	return receipt, nil
+}
+
+func (m *mongoStore) UpdateRecieptByTxID(txnID string) error {
+	ctx := context.Background()
+	status := "failed"
+
+	// Fallback: scan all collections if not found in index
+	collections := []string{dataColl, airColl, tvColl, eduColl, electricColl} // add more as needed
+	var updateErr error
+	for _, coll := range collections {
+		filter := bson.M{"txn": txnID}
+		update := bson.M{"$set": bson.M{"status": status}}
+		result, err := m.col(coll).UpdateOne(ctx, filter, update)
+		if err != nil {
+			updateErr = err
+			continue
+		}
+		if result.ModifiedCount > 0 {
+			return nil // Updated successfully in this collection
+		}
+	}
+	if updateErr != nil {
+		return updateErr
+	}
+	return nil // Not found, but no error
 }
 
 func (m *mongoStore) UpdateReceiptFinal(txID, status, sessionID string) error {

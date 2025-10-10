@@ -73,7 +73,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		}
 		amtDecimal := decimal.NewFromFloatWithExponent(float64(amount), -2)
 
-		balance, err := handler.getUserBalance(id)
+		balance, err := handler.getBalance(id)
 		handler.logger.Info("fallback to DB for user balance", zap.String("userID", id), zap.Error(err))
 		if err != nil {
 			handler.logger.Error("Failed to retrieve user balance from DB", zap.Error(err))
@@ -86,12 +86,11 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(response)
 			return
 		}
-		bal, _ := balance.Decimal()
 
-		handler.logger.Info("User balance", zap.String("userID", id), zap.String("balance", bal.String()))
+		handler.logger.Info("User balance", zap.String("userID", id), zap.String("balance", balance.String()))
 
 		// Check payment validity
-		newBal, valid, err := handler.checkPayment(bal, amtDecimal)
+		newBal, valid, err := handler.checkPayment(balance, amtDecimal)
 		if !valid || err != nil {
 			handler.logger.Error("Payment validation failed", zap.Error(err))
 			w.WriteHeader(http.StatusBadRequest)
@@ -107,7 +106,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		data.FullName = fullName
 		data.UserID = id
 
-		txnID, err := handler.placeRedisHoldAndMeta(w, id, amount, bal)
+		txnID, err := handler.placeRedisHoldAndMeta(w, id, amount, balance)
 		if err != nil {
 			return
 		}
@@ -392,7 +391,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		userBalance, err := handler.getUserBalance(id)
+		userBalance, err := handler.getBalance(id)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Failed to retrieve user balance", zap.Error(err))
@@ -418,20 +417,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		bal, err := userBalance.Decimal()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Failed to convert balance to decimal", zap.Error(err))
-			response := responseFormat.CustomResponse{
-				Status:  http.StatusInternalServerError,
-				Message: "error",
-				Data:    map[string]interface{}{"data": err.Error()},
-			}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-
-		newBal, valid, err := handler.checkPayment(bal, decimal.NewFromFloat(plan.Amount))
+		newBal, valid, err := handler.checkPayment(userBalance, decimal.NewFromFloat(plan.Amount))
 		if !valid || err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Payment validation failed", zap.Error(err))
@@ -453,7 +439,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		data.PlanSize = plan.Size
 		data.Validity = plan.Validity
 
-		txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, data.Amount, bal)
+		txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, data.Amount, userBalance)
 		if err != nil {
 			return
 		}
@@ -637,7 +623,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		userBalance, err := handler.getUserBalance(id)
+		userBalance, err := handler.getBalance(id)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Failed to retrieve user balance", zap.Error(err))
@@ -650,20 +636,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		balance, err := userBalance.Decimal()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Failed to convert balance to decimal", zap.Error(err))
-			response := responseFormat.CustomResponse{
-				Status:  http.StatusInternalServerError,
-				Message: "error",
-				Data:    map[string]interface{}{"data": err.Error()},
-			}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-
-		newBal, valid, err := handler.checkPayment(balance, decimal.NewFromFloatWithExponent(float64(data.Amount), -2))
+		newBal, valid, err := handler.checkPayment(userBalance, decimal.NewFromFloatWithExponent(float64(data.Amount), -2))
 		if !valid || err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Payment validation failed", zap.Error(err))
