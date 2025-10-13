@@ -320,7 +320,7 @@ func (handler *HttpHandler) GetSalesSummary(w http.ResponseWriter, r *http.Reque
 		"page_size":   50,
 		"total":       summary.TotalCount,
 		"total_pages": totalPages,
-		"data":        summary.Summary,
+		"data":        summary,
 	}
 
 	handler.logger.Info("Sales summary fetched successfully", zap.Int("total", summary.TotalCount), zap.Int("page", page))
@@ -328,6 +328,42 @@ func (handler *HttpHandler) GetSalesSummary(w http.ResponseWriter, r *http.Reque
 		Status:  http.StatusOK,
 		Message: "success",
 		Data:    map[string]interface{}{"data": result},
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) GetSalesOverview(w http.ResponseWriter, r *http.Request) {
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	filter := map[string]interface{}{
+		"user_id": userDetails.ID,
+	}
+
+	overview, err := handler.store.GetSalesOverview(filter)
+	if err != nil {
+		handler.logger.Error("Error fetching sales overview", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Error fetching sales overview"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	handler.logger.Info("Sales overview fetched successfully", zap.Int("total_product", overview.TotalProduct))
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": overview},
 	}
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
