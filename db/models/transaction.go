@@ -32,10 +32,11 @@ type TotalsAggregation struct {
 }
 
 type SalesSummary struct {
-	Summary      []SalesSummaryItem `json:"summary"`
-	TotalCount   int                `json:"total"`
-	TotalInflow  float64            `json:"total_inflow"`
-	TotalOutflow float64            `json:"total_outflow"`
+	Summary       []SalesSummaryItem `json:"summary"`
+	TotalCount    int                `json:"total"`
+	TotalProduct  int                `json:"total_product"`
+	TotalAmount   float64            `json:"total_amount"`
+	TotalQuantity float64            `json:"total_quantity"`
 }
 
 type SalesSummaryItem struct {
@@ -43,4 +44,18 @@ type SalesSummaryItem struct {
 	CreatedAt   time.Time `bson:"created_at" json:"created_at"`
 	Quantity    float64   `bson:"quantity" json:"quantity"`
 	TotalAmount float64   `bson:"totalAmount" json:"total_amount"`
+}
+
+type SalesOverviewCategory struct {
+	Category string  `json:"category"`
+	Amount   float64 `json:"amount"`
+	Product  int     `json:"product"`
+	Quantity int     `json:"quantity"`
+}
+
+type SalesOverview struct {
+	Categories    []SalesOverviewCategory `json:"categories"`
+	TotalAmount   float64                 `json:"total_amount"`
+	TotalProduct  int                     `json:"total_product"`
+	TotalQuantity int                     `json:"total_quantity"`
 }

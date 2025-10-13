@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/aremxyplug-be/db/models"
@@ -221,10 +220,11 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 			totalsMatch = append(totalsMatch, cond)
 		}
 	}
-	totalsMatch = append(totalsMatch,
-		bson.E{Key: "status", Value: bson.M{"$in": bson.A{"success", "pending"}}},
-	)
-
+	/*
+		totalsMatch = append(totalsMatch,
+			bson.E{Key: "status", Value: bson.M{"$in": bson.A{"success", "pending"}}},
+		)
+	*/
 	totalsPipeline := mongo.Pipeline{
 		bson.D{{Key: "$match", Value: totalsMatch}},
 		projectStage,
@@ -283,10 +283,18 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 			"_id":        nil,
 			"totalCount": bson.M{"$sum": 1},
 			"totalInflow": bson.M{"$sum": bson.M{"$cond": bson.A{
-				bson.M{"$eq": bson.A{"$flowType", "inflow"}}, "$amountDecimal", 0,
+				bson.M{"$and": bson.A{
+					bson.M{"$eq": bson.A{"$flowType", "inflow"}},
+					bson.M{"$in": bson.A{"$status", bson.A{"success", "pending"}}},
+				}},
+				"$amountDecimal", 0,
 			}}},
 			"totalOutflow": bson.M{"$sum": bson.M{"$cond": bson.A{
-				bson.M{"$eq": bson.A{"$flowType", "outflow"}}, "$amountDecimal", 0,
+				bson.M{"$and": bson.A{
+					bson.M{"$eq": bson.A{"$flowType", "outflow"}},
+					bson.M{"$in": bson.A{"$status", bson.A{"success", "pending"}}},
+				}},
+				"$amountDecimal", 0,
 			}}},
 		}}},
 	)
@@ -329,13 +337,6 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	// Validate pagination
-	if page < 1 {
-		page = 1
-	}
-
-	pageSize := 50
-
 	// Build match conditions
 	matchConditions := bson.D{
 		bson.E{Key: "status", Value: "success"},
@@ -351,36 +352,280 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 	}
 
 	// Define collections based on category
-	var collections []string
+	collection := ""
 	switch category {
 	case "airtime":
-		collections = []string{"airtime"}
+		collection = airColl
 	case "data":
-		collections = []string{"data"}
-	case "bills":
-		collections = []string{"edu", "tv-sub", "electric-sub"}
+		collection = dataColl
+	case "edu":
+		collection = eduColl
+	case "tv":
+		collection = tvColl
+	case "electric":
+		collection = electricColl
 	default:
 		return models.SalesSummary{}, errors.New("invalid category")
 	}
 
-	// Create channels for parallel processing
-	summaryChan := make(chan []models.SalesSummaryItem, len(collections))
-	errChan := make(chan error, len(collections))
-	var wg sync.WaitGroup
+	pipeline := mongo.Pipeline{}
+	if len(matchConditions) > 0 {
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: matchConditions}})
+	}
 
-	// Process each collection in parallel
-	for _, coll := range collections {
-		wg.Add(1)
-		go func(collection string) {
-			defer wg.Done()
+	// Common stages
+	pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+		"amountDecimal": bson.M{
+			"$cond": bson.A{
+				bson.M{"$eq": bson.A{bson.M{"$type": "$amount"}, "double"}},
+				"$amount",
+				bson.M{"$convert": bson.M{
+					"input": "$amount", "to": "double",
+					"onError": 0, "onNull": 0,
+				}},
+			},
+		},
+		"product": "$transaction_description", // Use transaction_description for all
+	}}})
 
-			pipeline := mongo.Pipeline{}
-			if len(matchConditions) > 0 {
-				pipeline = append(pipeline, bson.D{{Key: "$match", Value: matchConditions}})
-			}
+	// Category-specific quantity handling
+	switch {
+	case category == "data":
+		// Split the transaction_description into words
+		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+			"words": bson.M{"$split": bson.A{"$transaction_description", " "}},
+		}}})
 
-			// Common stages
-			pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+		// Filter out words that contain numbers followed by GB/MB
+		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+			"filteredWords": bson.M{
+				"$filter": bson.M{
+					"input": "$words",
+					"as":    "word",
+					"cond": bson.M{
+						"$not": bson.M{
+							"$regexMatch": bson.M{
+								"input":   "$$word",
+								"regex":   "^[0-9.]+(GB|MB|gb|mb)?$",
+								"options": "i",
+							},
+						},
+					},
+				},
+			},
+		}}})
+
+		// Reconstruct the product type from filtered words
+		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+			"productType": bson.M{
+				"$reduce": bson.M{
+					"input":        "$filteredWords",
+					"initialValue": "",
+					"in": bson.M{
+						"$cond": bson.A{
+							bson.M{"$eq": bson.A{"$$value", ""}},
+							"$$this",
+							bson.M{"$concat": bson.A{"$$value", " ", "$$this"}},
+						},
+					},
+				},
+			},
+		}}})
+
+		// Extract numeric data value from product string
+		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+			"dataInfo": bson.M{
+				"$regexFind": bson.M{
+					"input":   "$transaction_description",
+					"regex":   "([0-9.]+)\\s*(GB|MB|gb|mb)",
+					"options": "i",
+				},
+			},
+		}}})
+
+		// Extract value and unit with error handling
+		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+			"dataValue": bson.M{
+				"$cond": bson.A{
+					bson.M{"$ne": bson.A{"$dataInfo", nil}},
+					bson.M{"$toDouble": bson.M{
+						"$arrayElemAt": bson.A{"$dataInfo.captures", 0},
+					}},
+					0, // Default value if no match
+				},
+			},
+			"dataUnit": bson.M{
+				"$cond": bson.A{
+					bson.M{"$ne": bson.A{"$dataInfo", nil}},
+					bson.M{"$toLower": bson.M{
+						"$arrayElemAt": bson.A{"$dataInfo.captures", 1},
+					}},
+					"gb", // Default unit if no match
+				},
+			},
+		}}})
+
+		// Convert all quantities to GB
+		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+			"quantityInGB": bson.M{
+				"$cond": bson.A{
+					bson.M{"$eq": bson.A{"$dataUnit", "mb"}},
+					bson.M{"$divide": bson.A{"$dataValue", 1000}},
+					"$dataValue",
+				},
+			},
+		}}})
+
+		// Group by the extracted product type
+		groupStage := bson.D{{Key: "$group", Value: bson.M{
+			"_id": bson.M{
+				"product_type": "$productType",
+			},
+			"quantity":        bson.M{"$sum": "$quantityInGB"},
+			"totalAmount":     bson.M{"$sum": "$amountDecimal"},
+			"lastTransaction": bson.M{"$max": "$created_at"},
+			"count":           bson.M{"$sum": 1},
+		}}}
+		pipeline = append(pipeline, groupStage)
+
+		// Project to final format
+		projectStage := bson.D{{Key: "$project", Value: bson.M{
+			"product":     "$_id.product_type",
+			"quantity":    1,
+			"totalAmount": 1,
+			"created_at":  "$lastTransaction",
+			"count":       1,
+			"_id":         0,
+		}}}
+		pipeline = append(pipeline, projectStage)
+
+		// Clean up temporary fields
+		pipeline = append(pipeline, bson.D{{Key: "$project", Value: bson.M{
+			"words":         0,
+			"filteredWords": 0,
+		}}})
+	case collection == "edu":
+		// Use existing quantity field for education
+		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+			"quantity": "$quantity",
+		}}})
+
+	default:
+		// Default to document count as quantity
+		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+			"quantity": 1,
+		}}})
+	}
+
+	// Only apply generic grouping for non-data categories
+	if category != "data" {
+		// Group by product
+		groupStage := bson.D{{Key: "$group", Value: bson.M{
+			"_id":             "$product",
+			"quantity":        bson.M{"$sum": "$quantity"},
+			"totalAmount":     bson.M{"$sum": "$amountDecimal"},
+			"lastTransaction": bson.M{"$max": "$created_at"},
+		}}}
+		pipeline = append(pipeline, groupStage)
+
+		// Project to final format
+		projectStage := bson.D{{Key: "$project", Value: bson.M{
+			"product":     "$_id",
+			"quantity":    1,
+			"totalAmount": 1,
+			"created_at":  "$lastTransaction",
+			"_id":         0,
+		}}}
+		pipeline = append(pipeline, projectStage)
+	}
+
+	// Execute aggregation
+	cursor, err := m.col(collection).Aggregate(ctx, pipeline)
+	if err != nil {
+		return models.SalesSummary{}, fmt.Errorf("aggregation error in %s: %w", collection, err)
+	}
+	defer cursor.Close(ctx)
+
+	var results []models.SalesSummaryItem
+	if err := cursor.All(ctx, &results); err != nil {
+
+		return models.SalesSummary{}, err
+	}
+
+	// Use aggregation results directly
+	finalSummary := results
+
+	totalProduct := len(finalSummary)
+	//totalQuantity := 0.0
+	totalAmount := 0.0
+	totalOutflow := 0.0
+	for _, item := range finalSummary {
+		//totalQuantity += item.Quantity
+		totalAmount += item.TotalAmount
+		totalOutflow += item.TotalAmount
+	}
+	// Sort by created_at DESC (newest first)
+	sort.Slice(finalSummary, func(i, j int) bool {
+		return finalSummary[i].CreatedAt.After(finalSummary[j].CreatedAt)
+	})
+
+	// Paginate results
+	totalItems := len(finalSummary)
+
+	totalQuantity, err := m.col(collection).CountDocuments(ctx, matchConditions)
+	if err != nil {
+		return models.SalesSummary{}, fmt.Errorf("count error in %s: %w", collection, err)
+	}
+
+	return models.SalesSummary{
+		Summary:       finalSummary,
+		TotalCount:    totalItems,             // Total distinct products
+		TotalProduct:  totalProduct,           // <-- Add this field to your model
+		TotalQuantity: float64(totalQuantity), // <-- Add this field to your model
+		TotalAmount:   totalAmount,            // <-- Add this field to your model
+	}, nil
+
+}
+
+func (m *mongoStore) GetSalesOverview(filter map[string]interface{}) (models.SalesOverview, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	categories := map[string]string{
+		"airtime":      airColl,
+		"data":         dataColl,
+		"edu":          eduColl,
+		"tv-sub":       tvColl,
+		"electric-sub": electricColl,
+	}
+
+	overview := models.SalesOverview{
+		Categories: make([]models.SalesOverviewCategory, 0),
+	}
+
+	var overallTotalAmount float64
+	var overallTotalProduct int
+	var overallTotalQuantity int
+
+	for cat, coll := range categories {
+		// Build match conditions
+		matchConditions := bson.D{
+			bson.E{Key: "status", Value: "success"},
+		}
+		if userID, ok := filter["user_id"].(string); ok && userID != "" {
+			matchConditions = append(matchConditions, bson.E{Key: "user_id", Value: userID})
+		}
+		if start, ok := filter["start_date"].(time.Time); ok {
+			matchConditions = append(matchConditions, bson.E{Key: "created_at", Value: bson.M{"$gte": start}})
+		}
+		if end, ok := filter["end_date"].(time.Time); ok {
+			matchConditions = append(matchConditions, bson.E{Key: "created_at", Value: bson.M{"$lte": end}})
+		}
+
+		// Pipeline to group by product and sum amounts
+		pipeline := mongo.Pipeline{
+			bson.D{{Key: "$match", Value: matchConditions}},
+			bson.D{{Key: "$addFields", Value: bson.M{
 				"amountDecimal": bson.M{
 					"$cond": bson.A{
 						bson.M{"$eq": bson.A{bson.M{"$type": "$amount"}, "double"}},
@@ -391,251 +636,57 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 						}},
 					},
 				},
-				"product": "$transaction_description", // Use transaction_description for all
-			}}})
-
-			// Category-specific quantity handling
-			switch {
-			case category == "data":
-				// Split the transaction_description into words
-				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-					"words": bson.M{"$split": bson.A{"$transaction_description", " "}},
-				}}})
-
-				// Filter out words that contain numbers followed by GB/MB
-				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-					"filteredWords": bson.M{
-						"$filter": bson.M{
-							"input": "$words",
-							"as":    "word",
-							"cond": bson.M{
-								"$not": bson.M{
-									"$regexMatch": bson.M{
-										"input":   "$$word",
-										"regex":   "^[0-9.]+(GB|MB|gb|mb)?$",
-										"options": "i",
-									},
-								},
-							},
-						},
-					},
-				}}})
-
-				// Reconstruct the product type from filtered words
-				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-					"productType": bson.M{
-						"$reduce": bson.M{
-							"input":        "$filteredWords",
-							"initialValue": "",
-							"in": bson.M{
-								"$cond": bson.A{
-									bson.M{"$eq": bson.A{"$$value", ""}},
-									"$$this",
-									bson.M{"$concat": bson.A{"$$value", " ", "$$this"}},
-								},
-							},
-						},
-					},
-				}}})
-
-				// Extract numeric data value from product string
-				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-					"dataInfo": bson.M{
-						"$regexFind": bson.M{
-							"input":   "$transaction_description",
-							"regex":   "([0-9.]+)\\s*(GB|MB|gb|mb)",
-							"options": "i",
-						},
-					},
-				}}})
-
-				// Extract value and unit with error handling
-				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-					"dataValue": bson.M{
-						"$cond": bson.A{
-							bson.M{"$ne": bson.A{"$dataInfo", nil}},
-							bson.M{"$toDouble": bson.M{
-								"$arrayElemAt": bson.A{"$dataInfo.captures", 0},
-							}},
-							0, // Default value if no match
-						},
-					},
-					"dataUnit": bson.M{
-						"$cond": bson.A{
-							bson.M{"$ne": bson.A{"$dataInfo", nil}},
-							bson.M{"$toLower": bson.M{
-								"$arrayElemAt": bson.A{"$dataInfo.captures", 1},
-							}},
-							"gb", // Default unit if no match
-						},
-					},
-				}}})
-
-				// Convert all quantities to GB
-				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-					"quantityInGB": bson.M{
-						"$cond": bson.A{
-							bson.M{"$eq": bson.A{"$dataUnit", "mb"}},
-							bson.M{"$divide": bson.A{"$dataValue", 1000}},
-							"$dataValue",
-						},
-					},
-				}}})
-
-				// Group by the extracted product type
-				groupStage := bson.D{{Key: "$group", Value: bson.M{
-					"_id": bson.M{
-						"product_type": "$productType",
-					},
-					"quantity":        bson.M{"$sum": "$quantityInGB"},
-					"totalAmount":     bson.M{"$sum": "$amountDecimal"},
-					"lastTransaction": bson.M{"$max": "$created_at"},
-					"count":           bson.M{"$sum": 1},
-				}}}
-				pipeline = append(pipeline, groupStage)
-
-				// Project to final format
-				projectStage := bson.D{{Key: "$project", Value: bson.M{
-					"product":     "$_id.product_type",
-					"quantity":    1,
-					"totalAmount": 1,
-					"created_at":  "$lastTransaction",
-					"count":       1,
-					"_id":         0,
-				}}}
-				pipeline = append(pipeline, projectStage)
-
-				// Clean up temporary fields
-				pipeline = append(pipeline, bson.D{{Key: "$project", Value: bson.M{
-					"words":         0,
-					"filteredWords": 0,
-				}}})
-			case collection == "edu":
-				// Use existing quantity field for education
-				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-					"quantity": "$quantity",
-				}}})
-
-			default:
-				// Default to document count as quantity
-				pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-					"quantity": 1,
-				}}})
-			}
-
-			// Only apply generic grouping for non-data categories
-			if category != "data" {
-				// Group by product
-				groupStage := bson.D{{Key: "$group", Value: bson.M{
-					"_id":             "$product",
-					"quantity":        bson.M{"$sum": "$quantity"},
-					"totalAmount":     bson.M{"$sum": "$amountDecimal"},
-					"lastTransaction": bson.M{"$max": "$created_at"},
-				}}}
-				pipeline = append(pipeline, groupStage)
-
-				// Project to final format
-				projectStage := bson.D{{Key: "$project", Value: bson.M{
-					"product":     "$_id",
-					"quantity":    1,
-					"totalAmount": 1,
-					"created_at":  "$lastTransaction",
-					"_id":         0,
-				}}}
-				pipeline = append(pipeline, projectStage)
-			}
-
-			// Execute aggregation
-			cursor, err := m.col(collection).Aggregate(ctx, pipeline)
-			if err != nil {
-				errChan <- fmt.Errorf("%s aggregation failed: %w", collection, err)
-				return
-			}
-			defer cursor.Close(ctx)
-
-			var results []models.SalesSummaryItem
-			if err := cursor.All(ctx, &results); err != nil {
-				errChan <- err
-				return
-			}
-
-			summaryChan <- results
-		}(coll)
-	}
-
-	// Wait for all goroutines to complete
-	go func() {
-		wg.Wait()
-		close(summaryChan)
-		close(errChan)
-	}()
-
-	// Collect results
-	allSummaries := []models.SalesSummaryItem{}
-	totalOutflow := 0.0
-
-	for i := 0; i < len(collections); i++ {
-		select {
-		case err := <-errChan:
-			return models.SalesSummary{}, err
-		case summaries := <-summaryChan:
-			allSummaries = append(allSummaries, summaries...)
+				"product": "$transaction_description",
+			}}},
+			bson.D{{Key: "$group", Value: bson.M{
+				"_id":         "$product",
+				"totalAmount": bson.M{"$sum": "$amountDecimal"},
+			}}},
 		}
-	}
 
-	// Merge duplicate products
-	summaryMap := make(map[string]models.SalesSummaryItem)
-	for _, item := range allSummaries {
-		if existing, exists := summaryMap[item.Product]; exists {
-			existing.Quantity += item.Quantity
-			existing.TotalAmount += item.TotalAmount
-			// Keep earliest created_at
-			if item.CreatedAt.Before(existing.CreatedAt) {
-				existing.CreatedAt = item.CreatedAt
-			}
-			summaryMap[item.Product] = existing
-		} else {
-			summaryMap[item.Product] = item
+		cursor, err := m.col(coll).Aggregate(ctx, pipeline)
+		if err != nil {
+			return models.SalesOverview{}, fmt.Errorf("aggregation error in %s: %w", coll, err)
 		}
+		var groupResults []struct {
+			Product     string  `bson:"_id"`
+			TotalAmount float64 `bson:"totalAmount"`
+		}
+		if err := cursor.All(ctx, &groupResults); err != nil {
+			return models.SalesOverview{}, err
+		}
+		cursor.Close(ctx)
+
+		// Count total documents for this category
+		totalQuantity, err := m.col(coll).CountDocuments(ctx, matchConditions)
+		if err != nil {
+			return models.SalesOverview{}, fmt.Errorf("count error in %s: %w", coll, err)
+		}
+
+		// Calculate totals for this category
+		categoryTotalAmount := 0.0
+		for _, g := range groupResults {
+			categoryTotalAmount += g.TotalAmount
+		}
+		categoryTotalProduct := len(groupResults)
+
+		overview.Categories = append(overview.Categories, models.SalesOverviewCategory{
+			Category: cat,
+			Amount:   categoryTotalAmount,
+			Product:  categoryTotalProduct,
+			Quantity: int(totalQuantity),
+		})
+
+		overallTotalAmount += categoryTotalAmount
+		overallTotalProduct += categoryTotalProduct
+		overallTotalQuantity += int(totalQuantity)
 	}
 
-	// Convert map to slice
-	finalSummary := make([]models.SalesSummaryItem, 0, len(summaryMap))
-	for _, item := range summaryMap {
-		finalSummary = append(finalSummary, item)
-		totalOutflow += item.TotalAmount
-	}
+	overview.TotalAmount = overallTotalAmount
+	overview.TotalProduct = overallTotalProduct
+	overview.TotalQuantity = overallTotalQuantity
 
-	// Sort by created_at DESC (newest first)
-	sort.Slice(finalSummary, func(i, j int) bool {
-		// Newest first (descending order)
-		return finalSummary[i].CreatedAt.After(finalSummary[j].CreatedAt)
-	})
-
-	// Paginate results
-	totalItems := len(finalSummary)
-	start := (page - 1) * pageSize
-	if start > totalItems || totalItems == 0 {
-		return models.SalesSummary{
-			Summary:      []models.SalesSummaryItem{},
-			TotalCount:   totalItems,
-			TotalOutflow: totalOutflow,
-		}, nil
-	}
-	end := start + pageSize
-	if end > totalItems {
-		end = totalItems
-	}
-
-	// paginatedSummary := finalSummary[start:end]
-
-	return models.SalesSummary{
-		Summary:      finalSummary,
-		TotalCount:   totalItems, // Total distinct products
-		TotalInflow:  0,          // Always 0 for these categories
-		TotalOutflow: totalOutflow,
-	}, nil
-
+	return overview, nil
 }
 
 func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (models.TransactionResponse, error) {
