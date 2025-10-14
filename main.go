@@ -23,6 +23,7 @@ import (
 	zapLogger "github.com/aremxyplug-be/lib/logger"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
+	"github.com/aremxyplug-be/lib/scheduler"
 	"github.com/aremxyplug-be/lib/smsclient/termii"
 	vtu "github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
@@ -80,6 +81,7 @@ func main() {
 	pin := auth_pin.NewPinConfig(logger, store)
 	sms := termii.NewSMSConn(store, logger)
 	redisClient := redis.NewRedisConn(logger)
+	scheduler := scheduler.NewScheduler(redisClient, store, logger)
 
 	config := httpSrv.ServerConfig{
 		Store:        store,
@@ -106,11 +108,12 @@ func main() {
 	}
 
 	// Initialize bank list if needed
-	if err := bankTrf.ListBanks(); err != nil {
+	if err := scheduler.ListBanks(); err != nil {
 		logger.Fatal("failed to initialize bank list", zap.Error(err))
 	}
 
-	go bankTrf.StartBankListScheduler(24 * time.Hour)
+	go scheduler.StartBankListScheduler(24 * time.Hour)
+	go scheduler.HarmonizeHoldsWithDB(10 * time.Minute)
 
 	httpRouter := httpSrv.MountServer(config)
 	// Start HTTP server

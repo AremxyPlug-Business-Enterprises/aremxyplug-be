@@ -58,7 +58,7 @@ func (m *mongoStore) UpdateRecieptByTxID(txnID string) error {
 	status := "failed"
 
 	// Fallback: scan all collections if not found in index
-	collections := []string{dataColl, airColl, tvColl, eduColl, electricColl} // add more as needed
+	collections := []string{dataColl, airColl, tvColl, eduColl, electricColl, transferColl} // add more as needed
 	var updateErr error
 	for _, coll := range collections {
 		filter := bson.M{"txn": txnID}

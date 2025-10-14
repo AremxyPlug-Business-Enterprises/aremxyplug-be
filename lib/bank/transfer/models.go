@@ -124,21 +124,6 @@ type accountData struct {
 	ID   string `json:"id"`
 }
 
-type bankLists struct {
-	BanksData []bankData `json:"data"`
-}
-
-type bankAttributes struct {
-	NIPCode string `json:"nipCode"`
-	Name    string `json:"name"`
-}
-
-type bankData struct {
-	ID         string         `json:"id"`
-	Type       string         `json:"type"`
-	Atrributes bankAttributes `json:"attributes"`
-}
-
 type AremxyPlugTransfer struct {
 	UserID   string
 	Username string  `json:"username,omitempty"`
