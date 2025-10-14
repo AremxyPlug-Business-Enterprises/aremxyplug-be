@@ -50,6 +50,11 @@ func NewRedisConn(logger *zap.Logger) *RedisConn {
 	}
 }
 
+// Client returns the underlying *redis.Client.
+func (r *RedisConn) Client() *redis.Client {
+	return r.client
+}
+
 // Set key without TTL (keeps existing behaviour)
 func (r *RedisConn) Set(key string, value interface{}) error {
 	ctx := context.Background()
@@ -416,51 +421,4 @@ func (r *RedisConn) AddToBalance(userID string, amount float64) error {
 	ctx := context.Background()
 	key := fmt.Sprintf("balance:%s", userID)
 	return r.client.IncrByFloat(ctx, key, amount).Err()
-}
-
-// HarmonizeHoldsWithDB scans Redis hold keys, checks for near-expiry, and updates MongoDB if needed.
-// mongoUpdateFunc should be a function that takes (userID, txID string) and returns (wasHarmonized bool, err error)
-func (r *RedisConn) HarmonizeHoldsWithDB(threshold time.Duration, mongoUpdateFunc func(userID, txID string) (bool, error)) error {
-	ctx := context.Background()
-	pattern := "hold:*:*"
-	var cursor uint64
-	for {
-		keys, nextCursor, err := r.client.Scan(ctx, cursor, pattern, 100).Result()
-		if err != nil {
-			r.logger.Error("Failed to scan Redis for hold keys", zap.Error(err))
-			return err
-		}
-		for _, key := range keys {
-			ttl, err := r.client.TTL(ctx, key).Result()
-			if err != nil {
-				r.logger.Warn("Failed to get TTL for hold key", zap.String("key", key), zap.Error(err))
-				continue
-			}
-			if ttl > 0 && ttl <= threshold {
-				// Parse userID and txID from key: hold:{userID}:{txID}
-				var userID, txID string
-				n, _ := fmt.Sscanf(key, "hold:%[^:]:%s", &userID, &txID)
-				if n == 2 {
-					harmonized, err := mongoUpdateFunc(userID, txID)
-					if err != nil {
-						r.logger.Error("Failed to harmonize transaction in DB", zap.String("userID", userID), zap.String("txID", txID), zap.Error(err))
-					} else if harmonized {
-						// Release the hold in Redis after harmonization
-						_, relErr := r.ReleaseHold(userID, txID)
-						if relErr != nil {
-							r.logger.Warn("Failed to release hold after harmonization", zap.String("userID", userID), zap.String("txID", txID), zap.Error(relErr))
-						}
-						r.logger.Info("Harmonized pending transaction to failed and updated balance", zap.String("userID", userID), zap.String("txID", txID))
-					}
-				} else {
-					r.logger.Warn("Could not parse hold key for harmonization", zap.String("key", key))
-				}
-			}
-		}
-		if nextCursor == 0 {
-			break
-		}
-		cursor = nextCursor
-	}
-	return nil
 }

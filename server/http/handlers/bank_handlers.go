@@ -493,7 +493,7 @@ func (handler *HttpHandler) GetAllDepositHistory(w http.ResponseWriter, r *http.
 
 func (handler *HttpHandler) GetBanks(w http.ResponseWriter, r *http.Request) {
 
-	err := handler.bankTrf.ListBanks()
+	_, err := handler.store.GetAllBanks()
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

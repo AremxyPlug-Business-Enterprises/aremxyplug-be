@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -524,94 +523,4 @@ func (c *Config) getCounterParty(accountname, bankname string) (models.CounterPa
 	}
 
 	return counterparty, nil
-}
-
-// this endpoint should auto automatically initialize
-func (c *Config) ListBanks() error {
-	url := fmt.Sprintf("%s/%s", api, "banks")
-	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Add("accept", "application/json")
-	req.Header.Add("x-anchor-key", apikey)
-
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		c.logger.Error(err.Error())
-		return ErrCreatingHTTPRequest
-	}
-	defer res.Body.Close()
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		c.logger.Error(err.Error())
-		return err
-	}
-
-	apiResponse := bankLists{}
-	if err := json.Unmarshal(body, &apiResponse); err != nil {
-		c.logger.Error(err.Error())
-		return JSONError(err)
-	}
-
-	// Track all NIP codes from API
-	apiNIPCodes := make(map[string]bool)
-
-	for _, bank := range apiResponse.BanksData {
-		bankData := models.BankDetails{
-			Name:    bank.Atrributes.Name,
-			NIPCode: bank.Atrributes.NIPCode,
-		}
-		apiNIPCodes[bankData.NIPCode] = true
-
-		// Use Upsert to prevent duplicate key issues and race conditions
-		if err := c.db.UpsertBankByNIPCode(bankData); err != nil {
-			if mongo.IsDuplicateKeyError(err) {
-				c.logger.Warn("Bank already exists (race condition), skipping insert",
-					zap.String("nip_code", bankData.NIPCode))
-				continue
-			}
-			return DBConnectionError(err)
-		}
-	}
-
-	// Remove banks not present in API anymore
-	dbBanks, err := c.db.GetAllBanks()
-	if err != nil {
-		return DBConnectionError(err)
-	}
-
-	for _, bank := range dbBanks {
-		if !apiNIPCodes[bank.NIPCode] {
-			if err := c.db.DeleteBankByNIPCode(bank.NIPCode); err != nil {
-				return DBConnectionError(err)
-			}
-			c.logger.Info("Removed outdated bank", zap.String("nip_code", bank.NIPCode))
-		}
-	}
-
-	c.logger.Info("Bank list full sync completed.")
-	return nil
-}
-
-func (c *Config) StartBankListScheduler(interval time.Duration) {
-	rand.Seed(time.Now().UnixNano()) // Seed RNG once
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		<-ticker.C
-
-		// Random jitter between 0 and 10 minutes
-		jitter := time.Duration(rand.Intn(10*60)) * time.Second
-		c.logger.Info("Scheduled bank list sync will run after jitter", zap.Duration("delay", jitter))
-
-		time.Sleep(jitter)
-
-		c.logger.Info("Starting scheduled bank list sync...")
-		if err := c.ListBanks(); err != nil {
-			c.logger.Error("Scheduled bank list sync failed", zap.Error(err))
-		} else {
-			c.logger.Info("Scheduled bank list sync completed successfully")
-		}
-	}
 }

@@ -130,6 +130,7 @@ type WebhookStore interface {
 	GetReceiptByExternalRef(externalRef string) (models.TransferResponse, error)
 	GetReceiptByTxID(txID string) (models.TransferResponse, error)
 	UpdateReceiptFinal(txID, status, sessionID string) error
+	UpdateRecieptByTxID(txnID string) error
 	UpdateUserBalanceFromRedis(userID string, balance float64) error
 	UpdateReceiptStatus(txID, status string) error
 	UpdateReceiptExternalRef(externalRef, status string) error
