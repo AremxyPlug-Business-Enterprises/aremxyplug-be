@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/aremxyplug-be/db/models"
@@ -253,10 +254,19 @@ func (m *mongoStore) GetPointTransactions(userID string, page int) ([]models.Poi
 func (m *mongoStore) GetPointRedeemDetails(orderID string) (models.PointRedeem, error) {
 	ctx := context.Background()
 	var redeem models.PointRedeem
-
-	filter := bson.M{"order_id": orderID}
-	err := m.col(pointRedeemColl).FindOne(ctx, filter).Decode(&redeem)
+	oID, err := strconv.Atoi(orderID)
 	if err != nil {
+		return redeem, err
+	}
+
+	filter := bson.D{primitive.E{Key: "order_id", Value: oID}}
+	err = m.col(pointRedeemColl).FindOne(ctx, filter).Decode(&redeem)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			e := fmt.Sprintf("point redeem details not found for order_id: %s", orderID)
+			m.logger.Error(e)
+			return redeem, nil
+		}
 		return redeem, fmt.Errorf("failed to fetch point redeem details: %v", err)
 	}
 
