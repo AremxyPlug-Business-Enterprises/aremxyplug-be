@@ -758,10 +758,10 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 	}
 
 	// Add the point redeem collection as part of the inflow
+	// ...existing code...
 	pointRedeemUnionPipeline := bson.A{
 		bson.D{{Key: "$match", Value: matchConditions}},
-		amountConversionStage,
-		bson.D{{Key: "$addFields", Value: bson.M{"flowType": "inflow"}}},
+		// map amount_redeemed -> amount so the convert stage can see it
 		bson.D{{Key: "$project", Value: bson.D{
 			{Key: "product", Value: "$transaction_product"},
 			{Key: "description", Value: "$transaction_description"},
@@ -770,8 +770,22 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 			{Key: "status", Value: "$status"},
 			{Key: "amount", Value: "$amount_redeemed"},
 		}}},
+		// convert the mapped amount to a numeric field
+		amountConversionStage,
+		// mark flowType
+		bson.D{{Key: "$addFields", Value: bson.M{"flowType": "inflow"}}},
+		// keep expected output fields (amountDecimal produced by conversion)
+		bson.D{{Key: "$project", Value: bson.D{
+			{Key: "product", Value: 1},
+			{Key: "description", Value: 1},
+			{Key: "order_id", Value: 1},
+			{Key: "created_at", Value: 1},
+			{Key: "status", Value: 1},
+			{Key: "amountDecimal", Value: 1},
+			{Key: "flowType", Value: 1},
+		}}},
 	}
-
+	// ...existing code...
 	// Transfer union pipeline (transfer = outflow)
 	transferUnionPipeline := bson.A{
 		bson.D{{Key: "$match", Value: matchConditions}},
