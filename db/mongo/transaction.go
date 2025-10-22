@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/aremxyplug-be/db/models"
@@ -26,34 +28,103 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 	ctx := context.Background()
 	matchConditions := bson.D{}
 
+	// Filter by user_id
 	if userID, ok := filter["user_id"].(string); ok && userID != "" {
 		matchConditions = append(matchConditions, bson.E{Key: "user_id", Value: userID})
 	}
-	if product, ok := filter["product"].(string); ok && product != "" {
-		matchConditions = append(matchConditions, bson.E{Key: "product", Value: product})
+
+	// Filter by flow (inflow, outflow, etc.)
+	if flow, ok := filter["flow"].(string); ok && flow != "" {
+		matchConditions = append(matchConditions, bson.E{Key: "flow", Value: flow})
 	}
-	if searchTerm, ok := filter["search"].(string); ok && searchTerm != "" {
-		regex := bson.M{"$regex": searchTerm, "$options": "i"}
-		matchConditions = append(matchConditions, bson.E{Key: "$or", Value: bson.A{
-			bson.M{"description": regex},
-			bson.M{"product": regex},
-		}})
+
+	// Filter by category (Telecom, Payments, etc.)
+	if category, ok := filter["category"].(string); ok && category != "" {
+		matchConditions = append(matchConditions, bson.E{Key: "category", Value: category})
 	}
-	dateRange := bson.M{}
+
+	// Filter by subcategory (Airtime Top-up, Card Transfer, etc.)
+	if subcategory, ok := filter["subcategory"].(string); ok && subcategory != "" {
+		matchConditions = append(matchConditions, bson.E{Key: "subcategory", Value: subcategory})
+	}
+
+	// Handle date range
 	if start, ok := filter["start_date"].(time.Time); ok {
-		dateRange["$gte"] = start
+		start = start.UTC()
+		end, hasEnd := filter["end_date"].(time.Time)
+
+		if !hasEnd {
+			// Default to end of start day
+			end = time.Date(start.Year(), start.Month(), start.Day(), 23, 59, 59, 999000000, time.UTC)
+		}
+
+		matchConditions = append(matchConditions, bson.E{
+			Key:   "created_at",
+			Value: bson.M{"$gte": start, "$lte": end},
+		})
+	} else if end, ok := filter["end_date"].(time.Time); ok {
+		// Handle case where only end_date is provided (no start_date)
+		matchConditions = append(matchConditions, bson.E{
+			Key:   "created_at",
+			Value: bson.M{"$lte": end.UTC()},
+		})
+	} else {
+		// No date filters → return all time (no restriction)
+		// ❌ Don't append anything for created_at here
 	}
-	if end, ok := filter["end_date"].(time.Time); ok {
-		dateRange["$lte"] = end
-	}
-	if len(dateRange) > 0 {
-		matchConditions = append(matchConditions, bson.E{Key: "created_at", Value: dateRange})
+
+	if status, ok := filter["status"].(string); ok && status != "" {
+		matchConditions = append(matchConditions, bson.E{Key: "status", Value: status})
 	}
 
 	// Collection setup
 	inflowCollections := []string{depositColl, pointRedeemColl}
 	outflowCollections := []string{airColl, dataColl, transferColl, eduColl, tvColl, electricColl}
 	collectionsToQuery := append(outflowCollections, inflowCollections...)
+
+	if flow, ok := filter["flow"].(string); ok && flow != "" {
+		switch flow {
+		case "inflow":
+			collectionsToQuery = inflowCollections
+		case "outflow":
+			collectionsToQuery = outflowCollections
+		}
+	}
+
+	// Apply CATEGORY logic
+	if category, ok := filter["category"].(string); ok && category != "" {
+		switch strings.ToLower(category) {
+		case "telecoms":
+			collectionsToQuery = []string{airColl, dataColl, eduColl, tvColl, electricColl}
+		case "payments":
+			collectionsToQuery = []string{depositColl, transferColl, pointRedeemColl}
+		}
+	}
+
+	// Apply SUBCATEGORY logic
+	if subcategory, ok := filter["subcategory"].(string); ok && subcategory != "" {
+		switch strings.ToLower(subcategory) {
+		case "airtime":
+			collectionsToQuery = []string{airColl}
+		case "data":
+			collectionsToQuery = []string{dataColl}
+		case "edu":
+			collectionsToQuery = []string{eduColl}
+		case "tv-sub":
+			collectionsToQuery = []string{tvColl}
+		case "elect":
+			collectionsToQuery = []string{electricColl}
+		case "internal transfer", "money transfer":
+			collectionsToQuery = []string{transferColl}
+		case "points":
+			collectionsToQuery = []string{pointRedeemColl}
+		case "internal deposit", "virtual accounts":
+			collectionsToQuery = []string{depositColl}
+		default:
+
+		}
+	}
+
 	baseCollection := collectionsToQuery[0]
 	remainingCollections := collectionsToQuery[1:]
 
@@ -344,37 +415,53 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 	if userID, ok := filter["user_id"].(string); ok && userID != "" {
 		matchConditions = append(matchConditions, bson.E{Key: "user_id", Value: userID})
 	}
+
+	// Determine start and end times
 	if start, ok := filter["start_date"].(time.Time); ok {
-		matchConditions = append(matchConditions, bson.E{Key: "created_at", Value: bson.M{"$gte": start}})
-	}
-	if end, ok := filter["end_date"].(time.Time); ok {
-		matchConditions = append(matchConditions, bson.E{Key: "created_at", Value: bson.M{"$lte": end}})
+		start = start.UTC()
+		end, hasEnd := filter["end_date"].(time.Time)
+
+		if !hasEnd {
+			// Default end to end of the same start day (23:59:59)
+			end = time.Date(start.Year(), start.Month(), start.Day(), 23, 59, 59, 999000000, time.UTC)
+		}
+
+		matchConditions = append(matchConditions, bson.E{
+			Key:   "created_at",
+			Value: bson.M{"$gte": start, "$lte": end},
+		})
+	} else {
+		// Default to today’s start
+		now := time.Now().UTC()
+		dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		dayEnd := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999000000, time.UTC)
+
+		matchConditions = append(matchConditions, bson.E{
+			Key:   "created_at",
+			Value: bson.M{"$gte": dayStart, "$lte": dayEnd},
+		})
 	}
 
 	// Define collections based on category
-	collection := ""
+	var collections []string
 	switch category {
 	case "airtime":
-		collection = airColl
+		collections = []string{airColl}
 	case "data":
-		collection = dataColl
-	case "edu":
-		collection = eduColl
-	case "tv":
-		collection = tvColl
-	case "electric":
-		collection = electricColl
+		collections = []string{dataColl}
+	case "bills":
+		collections = []string{eduColl, tvColl, electricColl}
 	default:
 		return models.SalesSummary{}, errors.New("invalid category")
 	}
 
-	pipeline := mongo.Pipeline{}
-	if len(matchConditions) > 0 {
-		pipeline = append(pipeline, bson.D{{Key: "$match", Value: matchConditions}})
-	}
+	// channels & sync
+	summaryCh := make(chan []models.SalesSummaryItem, len(collections))
+	errCh := make(chan error, len(collections))
+	var wg sync.WaitGroup
 
-	// Common stages
-	pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
+	// common addFields stage for amountDecimal + product field
+	commonAdd := bson.D{{Key: "$addFields", Value: bson.M{
 		"amountDecimal": bson.M{
 			"$cond": bson.A{
 				bson.M{"$eq": bson.A{bson.M{"$type": "$amount"}, "double"}},
@@ -385,212 +472,243 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 				}},
 			},
 		},
-		"product": "$transaction_description", // Use transaction_description for all
-	}}})
+		"product": "$transaction_description",
+	}}}
 
-	// Category-specific quantity handling
-	switch {
-	case category == "data":
-		// Split the transaction_description into words
-		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-			"words": bson.M{"$split": bson.A{"$transaction_description", " "}},
-		}}})
+	// per-collection worker
+	for _, coll := range collections {
+		wg.Add(1)
+		go func(collection string) {
+			defer wg.Done()
 
-		// Filter out words that contain numbers followed by GB/MB
-		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-			"filteredWords": bson.M{
-				"$filter": bson.M{
-					"input": "$words",
-					"as":    "word",
-					"cond": bson.M{
-						"$not": bson.M{
-							"$regexMatch": bson.M{
-								"input":   "$$word",
-								"regex":   "^[0-9.]+(GB|MB|gb|mb)?$",
-								"options": "i",
+			pipeline := mongo.Pipeline{}
+			if len(matchConditions) > 0 {
+				pipeline = append(pipeline, bson.D{{Key: "$match", Value: matchConditions}})
+			}
+			// add common fields
+			pipeline = append(pipeline, commonAdd)
+
+			// category-specific handling
+			if category == "data" {
+				// data parsing -> produce productType, quantityInGB, group by productType
+				pipeline = append(pipeline,
+					bson.D{{Key: "$addFields", Value: bson.M{"words": bson.M{"$split": bson.A{"$transaction_description", " "}}}}},
+					bson.D{{Key: "$addFields", Value: bson.M{"filteredWords": bson.M{
+						"$filter": bson.M{
+							"input": "$words",
+							"as":    "word",
+							"cond": bson.M{
+								"$not": bson.M{
+									"$regexMatch": bson.M{
+										"input":   "$$word",
+										"regex":   "^[0-9.]+(GB|MB|gb|mb)?$",
+										"options": "i",
+									},
+								},
 							},
 						},
-					},
-				},
-			},
-		}}})
-
-		// Reconstruct the product type from filtered words
-		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-			"productType": bson.M{
-				"$reduce": bson.M{
-					"input":        "$filteredWords",
-					"initialValue": "",
-					"in": bson.M{
-						"$cond": bson.A{
-							bson.M{"$eq": bson.A{"$$value", ""}},
-							"$$this",
-							bson.M{"$concat": bson.A{"$$value", " ", "$$this"}},
+					}}}},
+					bson.D{{Key: "$addFields", Value: bson.M{"productType": bson.M{
+						"$reduce": bson.M{
+							"input":        "$filteredWords",
+							"initialValue": "",
+							"in": bson.M{
+								"$cond": bson.A{
+									bson.M{"$eq": bson.A{"$$value", ""}},
+									"$$this",
+									bson.M{"$concat": bson.A{"$$value", " ", "$$this"}},
+								},
+							},
 						},
-					},
-				},
-			},
-		}}})
+					}}}},
+					bson.D{{Key: "$addFields", Value: bson.M{"dataInfo": bson.M{
+						"$regexFind": bson.M{
+							"input":   "$transaction_description",
+							"regex":   "([0-9.]+)\\s*(GB|MB|gb|mb)",
+							"options": "i",
+						},
+					}}}},
+					bson.D{{Key: "$addFields", Value: bson.M{
+						"dataValue": bson.M{
+							"$cond": bson.A{
+								bson.M{"$ne": bson.A{"$dataInfo", nil}},
+								bson.M{"$toDouble": bson.M{"$arrayElemAt": bson.A{"$dataInfo.captures", 0}}},
+								0,
+							},
+						},
+						"dataUnit": bson.M{
+							"$cond": bson.A{
+								bson.M{"$ne": bson.A{"$dataInfo", nil}},
+								bson.M{"$toLower": bson.M{"$arrayElemAt": bson.A{"$dataInfo.captures", 1}}},
+								"gb",
+							},
+						},
+					}}},
 
-		// Extract numeric data value from product string
-		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-			"dataInfo": bson.M{
-				"$regexFind": bson.M{
-					"input":   "$transaction_description",
-					"regex":   "([0-9.]+)\\s*(GB|MB|gb|mb)",
-					"options": "i",
-				},
-			},
-		}}})
+					bson.D{{Key: "$addFields", Value: bson.M{
+						"quantityInGB": bson.M{
+							"$cond": bson.A{
+								bson.M{"$eq": bson.A{"$dataUnit", "mb"}},
+								bson.M{"$divide": bson.A{"$dataValue", 1000}},
+								"$dataValue",
+							},
+						},
+					}}},
 
-		// Extract value and unit with error handling
-		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-			"dataValue": bson.M{
-				"$cond": bson.A{
-					bson.M{"$ne": bson.A{"$dataInfo", nil}},
-					bson.M{"$toDouble": bson.M{
-						"$arrayElemAt": bson.A{"$dataInfo.captures", 0},
-					}},
-					0, // Default value if no match
-				},
-			},
-			"dataUnit": bson.M{
-				"$cond": bson.A{
-					bson.M{"$ne": bson.A{"$dataInfo", nil}},
-					bson.M{"$toLower": bson.M{
-						"$arrayElemAt": bson.A{"$dataInfo.captures", 1},
-					}},
-					"gb", // Default unit if no match
-				},
-			},
-		}}})
+					// group by productType
+					bson.D{{Key: "$group", Value: bson.M{
+						"_id":             bson.M{"product": "$productType"},
+						"quantity":        bson.M{"$sum": "$quantityInGB"},
+						"totalAmount":     bson.M{"$sum": "$amountDecimal"},
+						"lastTransaction": bson.M{"$max": "$created_at"},
+					}}},
+					bson.D{{Key: "$project", Value: bson.M{
+						"product":     "$_id.product",
+						"quantity":    1,
+						"totalAmount": 1,
+						"created_at":  "$lastTransaction",
+						"_id":         0,
+					}}},
+				)
+			} else {
+				// non-data: use quantity field for edu, default quantity=1 otherwise
+				if collection == eduColl {
+					pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{"quantity": "$quantity"}}})
+				} else {
+					pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{"quantity": 1}}})
+				}
 
-		// Convert all quantities to GB
-		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-			"quantityInGB": bson.M{
-				"$cond": bson.A{
-					bson.M{"$eq": bson.A{"$dataUnit", "mb"}},
-					bson.M{"$divide": bson.A{"$dataValue", 1000}},
-					"$dataValue",
-				},
-			},
-		}}})
+				pipeline = append(pipeline,
+					// group by product
+					bson.D{{Key: "$group", Value: bson.M{
+						"_id":             bson.M{"product": "$product"},
+						"quantity":        bson.M{"$sum": "$quantity"},
+						"totalAmount":     bson.M{"$sum": "$amountDecimal"},
+						"lastTransaction": bson.M{"$max": "$created_at"},
+					}}},
+					bson.D{{Key: "$project", Value: bson.M{
+						"product":     "$_id.product",
+						"quantity":    1,
+						"totalAmount": 1,
+						"created_at":  "$lastTransaction",
+						"_id":         0,
+					}}},
+				)
+			}
 
-		// Group by the extracted product type
-		groupStage := bson.D{{Key: "$group", Value: bson.M{
-			"_id": bson.M{
-				"product_type": "$productType",
-			},
-			"quantity":        bson.M{"$sum": "$quantityInGB"},
-			"totalAmount":     bson.M{"$sum": "$amountDecimal"},
-			"lastTransaction": bson.M{"$max": "$created_at"},
-			"count":           bson.M{"$sum": 1},
-		}}}
-		pipeline = append(pipeline, groupStage)
+			cur, err := m.col(collection).Aggregate(ctx, pipeline)
+			if err != nil {
+				errCh <- fmt.Errorf("aggregation error in %s: %w", collection, err)
+				return
+			}
+			defer cur.Close(ctx)
 
-		// Project to final format
-		projectStage := bson.D{{Key: "$project", Value: bson.M{
-			"product":     "$_id.product_type",
-			"quantity":    1,
-			"totalAmount": 1,
-			"created_at":  "$lastTransaction",
-			"count":       1,
-			"_id":         0,
-		}}}
-		pipeline = append(pipeline, projectStage)
-
-		// Clean up temporary fields
-		pipeline = append(pipeline, bson.D{{Key: "$project", Value: bson.M{
-			"words":         0,
-			"filteredWords": 0,
-		}}})
-	case collection == "edu":
-		// Use existing quantity field for education
-		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-			"quantity": "$quantity",
-		}}})
-
-	default:
-		// Default to document count as quantity
-		pipeline = append(pipeline, bson.D{{Key: "$addFields", Value: bson.M{
-			"quantity": 1,
-		}}})
+			var items []models.SalesSummaryItem
+			if err := cur.All(ctx, &items); err != nil {
+				errCh <- fmt.Errorf("decode error in %s: %w", collection, err)
+				return
+			}
+			summaryCh <- items
+		}(coll)
 	}
 
-	// Only apply generic grouping for non-data categories
-	if category != "data" {
-		// Group by product
-		groupStage := bson.D{{Key: "$group", Value: bson.M{
-			"_id":             "$product",
-			"quantity":        bson.M{"$sum": "$quantity"},
-			"totalAmount":     bson.M{"$sum": "$amountDecimal"},
-			"lastTransaction": bson.M{"$max": "$created_at"},
-		}}}
-		pipeline = append(pipeline, groupStage)
+	// wait and close channels
+	go func() {
+		wg.Wait()
+		close(summaryCh)
+		close(errCh)
+	}()
 
-		// Project to final format
-		projectStage := bson.D{{Key: "$project", Value: bson.M{
-			"product":     "$_id",
-			"quantity":    1,
-			"totalAmount": 1,
-			"created_at":  "$lastTransaction",
-			"_id":         0,
-		}}}
-		pipeline = append(pipeline, projectStage)
+	// collect errors if any
+	if len(errCh) > 0 {
+		// drain errors to return first one (non-blocking)
+		select {
+		case e := <-errCh:
+			return models.SalesSummary{}, e
+		default:
+			// continue
+		}
 	}
 
-	// Execute aggregation
-	cursor, err := m.col(collection).Aggregate(ctx, pipeline)
-	if err != nil {
-		return models.SalesSummary{}, fmt.Errorf("aggregation error in %s: %w", collection, err)
+	// merge results
+	mergedMap := make(map[string]models.SalesSummaryItem)
+	for res := range summaryCh {
+		for _, it := range res {
+			existing, ok := mergedMap[it.Product]
+			if !ok {
+				mergedMap[it.Product] = it
+			} else {
+				// sum quantities and amounts, pick latest created_at
+				existing.Quantity += it.Quantity
+				existing.TotalAmount += it.TotalAmount
+				if it.CreatedAt.After(existing.CreatedAt) {
+					existing.CreatedAt = it.CreatedAt
+				}
+				mergedMap[it.Product] = existing
+			}
+		}
 	}
-	defer cursor.Close(ctx)
 
-	var results []models.SalesSummaryItem
-	if err := cursor.All(ctx, &results); err != nil {
-
-		return models.SalesSummary{}, err
+	// build final slice
+	finalSummary := make([]models.SalesSummaryItem, 0, len(mergedMap))
+	for _, v := range mergedMap {
+		finalSummary = append(finalSummary, v)
 	}
 
-	// Use aggregation results directly
-	finalSummary := results
-
-	totalProduct := len(finalSummary)
-	//totalQuantity := 0.0
-	totalAmount := 0.0
-	totalOutflow := 0.0
-	for _, item := range finalSummary {
-		//totalQuantity += item.Quantity
-		totalAmount += item.TotalAmount
-		totalOutflow += item.TotalAmount
-	}
-	// Sort by created_at DESC (newest first)
+	// sort by created_at DESC
 	sort.Slice(finalSummary, func(i, j int) bool {
 		return finalSummary[i].CreatedAt.After(finalSummary[j].CreatedAt)
 	})
 
-	// Paginate results
-	totalItems := len(finalSummary)
+	// pagination (page param present in signature; apply simple pagination)
+	pageSize := 50
+	if page < 1 {
+		page = 1
+	}
+	start := (page - 1) * pageSize
+	if start > len(finalSummary) {
+		start = len(finalSummary)
+	}
+	end := start + pageSize
+	if end > len(finalSummary) {
+		end = len(finalSummary)
+	}
+	paged := finalSummary[start:end]
 
-	totalQuantity, err := m.col(collection).CountDocuments(ctx, matchConditions)
-	if err != nil {
-		return models.SalesSummary{}, fmt.Errorf("count error in %s: %w", collection, err)
+	// totals
+	totalProduct := len(mergedMap)
+	totalAmount := 0.0
+	for _, it := range finalSummary {
+		totalAmount += it.TotalAmount
+	}
+
+	// totalQuantity (transaction count across the selected collections / match conditions)
+	totalQuantity := 0.0
+	for _, coll := range collections {
+		count, err := m.col(coll).CountDocuments(ctx, matchConditions)
+		if err != nil {
+			// log and continue; prefer returning error if desired
+			m.logger.Error("count documents failed", zap.String("coll", coll), zap.Error(err))
+			continue
+		}
+		totalQuantity += float64(count)
 	}
 
 	return models.SalesSummary{
-		Summary:       finalSummary,
-		TotalCount:    totalItems,             // Total distinct products
-		TotalProduct:  totalProduct,           // <-- Add this field to your model
-		TotalQuantity: float64(totalQuantity), // <-- Add this field to your model
-		TotalAmount:   totalAmount,            // <-- Add this field to your model
+		Summary:       paged,
+		TotalCount:    len(finalSummary),
+		TotalProduct:  totalProduct,
+		TotalQuantity: totalQuantity,
+		TotalAmount:   totalAmount,
 	}, nil
-
 }
 
-func (m *mongoStore) GetSalesOverview(filter map[string]interface{}) (models.SalesOverview, error) {
+// ...existing code...
+func (m *mongoStore) GetSalesOverview(filter map[string]interface{}) (models.SalesSummary, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
+	// categories => collection name
 	categories := map[string]string{
 		"airtime":      airColl,
 		"data":         dataColl,
@@ -599,94 +717,296 @@ func (m *mongoStore) GetSalesOverview(filter map[string]interface{}) (models.Sal
 		"electric-sub": electricColl,
 	}
 
-	overview := models.SalesOverview{
-		Categories: make([]models.SalesOverviewCategory, 0),
+	// Build match conditions; default start = today 00:00:00 UTC when no start_date provided
+	matchConditions := bson.D{
+		bson.E{Key: "status", Value: "success"},
+	}
+	if userID, ok := filter["user_id"].(string); ok && userID != "" {
+		matchConditions = append(matchConditions, bson.E{Key: "user_id", Value: userID})
 	}
 
-	var overallTotalAmount float64
-	var overallTotalProduct int
-	var overallTotalQuantity int
+	// Determine start and end times
+	if start, ok := filter["start_date"].(time.Time); ok {
+		start = start.UTC()
+		end, hasEnd := filter["end_date"].(time.Time)
+
+		if !hasEnd {
+			// Default end to end of the same start day (23:59:59)
+			end = time.Date(start.Year(), start.Month(), start.Day(), 23, 59, 59, 999000000, time.UTC)
+		}
+
+		matchConditions = append(matchConditions, bson.E{
+			Key:   "created_at",
+			Value: bson.M{"$gte": start, "$lte": end},
+		})
+	} else {
+		// Default to today’s start
+		now := time.Now().UTC()
+		dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		dayEnd := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999000000, time.UTC)
+
+		matchConditions = append(matchConditions, bson.E{
+			Key:   "created_at",
+			Value: bson.M{"$gte": dayStart, "$lte": dayEnd},
+		})
+	}
+
+	// helper: amount conversion stage (cond type-check then convert)
+	amountConversion := bson.D{{Key: "$addFields", Value: bson.M{
+		"amountDecimal": bson.M{
+			"$cond": bson.A{
+				bson.M{"$eq": bson.A{bson.M{"$type": "$amount"}, "double"}},
+				"$amount",
+				bson.M{"$convert": bson.M{
+					"input": "$amount", "to": "double",
+					"onError": 0, "onNull": 0,
+				}},
+			},
+		},
+	}}}
+
+	// Build per-collection pipelines that emit documents of shape:
+	// { product, quantity, totalAmount, created_at, txnCount }
+	var baseColl string
+	first := true
+	var combinedPipeline mongo.Pipeline
 
 	for cat, coll := range categories {
-		// Build match conditions
-		matchConditions := bson.D{
-			bson.E{Key: "status", Value: "success"},
-		}
-		if userID, ok := filter["user_id"].(string); ok && userID != "" {
-			matchConditions = append(matchConditions, bson.E{Key: "user_id", Value: userID})
-		}
-		if start, ok := filter["start_date"].(time.Time); ok {
-			matchConditions = append(matchConditions, bson.E{Key: "created_at", Value: bson.M{"$gte": start}})
-		}
-		if end, ok := filter["end_date"].(time.Time); ok {
-			matchConditions = append(matchConditions, bson.E{Key: "created_at", Value: bson.M{"$lte": end}})
-		}
+		per := mongo.Pipeline{}
+		per = append(per, bson.D{{Key: "$match", Value: matchConditions}})
 
-		// Pipeline to group by product and sum amounts
-		pipeline := mongo.Pipeline{
-			bson.D{{Key: "$match", Value: matchConditions}},
-			bson.D{{Key: "$addFields", Value: bson.M{
-				"amountDecimal": bson.M{
-					"$cond": bson.A{
-						bson.M{"$eq": bson.A{bson.M{"$type": "$amount"}, "double"}},
-						"$amount",
-						bson.M{"$convert": bson.M{
-							"input": "$amount", "to": "double",
-							"onError": 0, "onNull": 0,
-						}},
+		per = append(per, bson.D{{Key: "$addFields", Value: bson.M{
+			"product":                "$transaction_description",
+			"transaction_created_at": "$created_at",
+			"amount":                 "$amount",
+		}}})
+
+		switch cat {
+		case "data":
+			per = append(per, bson.D{{Key: "$addFields", Value: bson.M{
+				"words": bson.M{"$split": bson.A{"$transaction_description", " "}},
+			}}})
+			per = append(per, bson.D{{Key: "$addFields", Value: bson.M{
+				"filteredWords": bson.M{
+					"$filter": bson.M{
+						"input": "$words",
+						"as":    "word",
+						"cond": bson.M{
+							"$not": bson.M{
+								"$regexMatch": bson.M{
+									"input":   "$$word",
+									"regex":   "^[0-9.]+(GB|MB|gb|mb)?$",
+									"options": "i",
+								},
+							},
+						},
 					},
 				},
-				"product": "$transaction_description",
-			}}},
-			bson.D{{Key: "$group", Value: bson.M{
-				"_id":         "$product",
-				"totalAmount": bson.M{"$sum": "$amountDecimal"},
-			}}},
+			}}})
+			per = append(per, bson.D{{Key: "$addFields", Value: bson.M{
+				"productType": bson.M{
+					"$reduce": bson.M{
+						"input":        "$filteredWords",
+						"initialValue": "",
+						"in": bson.M{
+							"$cond": bson.A{
+								bson.M{"$eq": bson.A{"$$value", ""}},
+								"$$this",
+								bson.M{"$concat": bson.A{"$$value", " ", "$$this"}},
+							},
+						},
+					},
+				},
+			}}})
+			per = append(per, bson.D{{Key: "$addFields", Value: bson.M{
+				"dataInfo": bson.M{
+					"$regexFind": bson.M{
+						"input":   "$transaction_description",
+						"regex":   "([0-9.]+)\\s*(GB|MB|gb|mb)",
+						"options": "i",
+					},
+				},
+			}}})
+			per = append(per, bson.D{{Key: "$addFields", Value: bson.M{
+				"dataValue": bson.M{
+					"$cond": bson.A{
+						bson.M{"$ne": bson.A{"$dataInfo", nil}},
+						bson.M{"$toDouble": bson.M{
+							"$arrayElemAt": bson.A{"$dataInfo.captures", 0},
+						}},
+						0,
+					},
+				},
+				"dataUnit": bson.M{
+					"$cond": bson.A{
+						bson.M{"$ne": bson.A{"$dataInfo", nil}},
+						bson.M{"$toLower": bson.M{
+							"$arrayElemAt": bson.A{"$dataInfo.captures", 1},
+						}},
+						"gb",
+					},
+				},
+			}}})
+			per = append(per, bson.D{{Key: "$addFields", Value: bson.M{
+				"quantityInGB": bson.M{
+					"$cond": bson.A{
+						bson.M{"$eq": bson.A{"$dataUnit", "mb"}},
+						bson.M{"$divide": bson.A{"$dataValue", 1000}},
+						"$dataValue",
+					},
+				},
+				"product":    "$productType",
+				"amount":     "$amount",
+				"created_at": "$transaction_created_at",
+			}}})
+
+			per = append(per, amountConversion)
+
+			// include txnCount in group
+			per = append(per, bson.D{{Key: "$group", Value: bson.M{
+				"_id":             "$product",
+				"quantity":        bson.M{"$sum": "$quantityInGB"},
+				"totalAmount":     bson.M{"$sum": "$amountDecimal"},
+				"lastTransaction": bson.M{"$max": "$created_at"},
+				"txnCount":        bson.M{"$sum": 1},
+			}}})
+
+			per = append(per, bson.D{{Key: "$project", Value: bson.M{
+				"product":     "$_id",
+				"quantity":    1,
+				"totalAmount": 1,
+				"created_at":  "$lastTransaction",
+				"txnCount":    1,
+				"_id":         0,
+			}}})
+
+		case "edu":
+			per = append(per, bson.D{{Key: "$addFields", Value: bson.M{
+				"quantity":   "$quantity",
+				"created_at": "$transaction_created_at",
+			}}})
+			per = append(per, amountConversion)
+
+			per = append(per, bson.D{{Key: "$group", Value: bson.M{
+				"_id":             "$product",
+				"quantity":        bson.M{"$sum": "$quantity"},
+				"totalAmount":     bson.M{"$sum": "$amountDecimal"},
+				"lastTransaction": bson.M{"$max": "$created_at"},
+				"txnCount":        bson.M{"$sum": 1},
+			}}})
+
+			per = append(per, bson.D{{Key: "$project", Value: bson.M{
+				"product":     "$_id",
+				"quantity":    1,
+				"totalAmount": 1,
+				"created_at":  "$lastTransaction",
+				"txnCount":    1,
+				"_id":         0,
+			}}})
+
+		default:
+			per = append(per, bson.D{{Key: "$addFields", Value: bson.M{
+				"quantity":   1,
+				"created_at": "$transaction_created_at",
+			}}})
+			per = append(per, amountConversion)
+
+			per = append(per, bson.D{{Key: "$group", Value: bson.M{
+				"_id":             "$product",
+				"quantity":        bson.M{"$sum": "$quantity"},
+				"totalAmount":     bson.M{"$sum": "$amountDecimal"},
+				"lastTransaction": bson.M{"$max": "$created_at"},
+				"txnCount":        bson.M{"$sum": 1},
+			}}})
+
+			per = append(per, bson.D{{Key: "$project", Value: bson.M{
+				"product":     "$_id",
+				"quantity":    1,
+				"totalAmount": 1,
+				"created_at":  "$lastTransaction",
+				"txnCount":    1,
+				"_id":         0,
+			}}})
 		}
 
-		cursor, err := m.col(coll).Aggregate(ctx, pipeline)
-		if err != nil {
-			return models.SalesOverview{}, fmt.Errorf("aggregation error in %s: %w", coll, err)
+		if first {
+			combinedPipeline = per
+			baseColl = coll
+			first = false
+		} else {
+			unionWithStage := bson.D{{Key: "$unionWith", Value: bson.M{"coll": coll, "pipeline": per}}}
+			combinedPipeline = append(combinedPipeline, unionWithStage)
 		}
-		var groupResults []struct {
-			Product     string  `bson:"_id"`
-			TotalAmount float64 `bson:"totalAmount"`
-		}
-		if err := cursor.All(ctx, &groupResults); err != nil {
-			return models.SalesOverview{}, err
-		}
-		cursor.Close(ctx)
-
-		// Count total documents for this category
-		totalQuantity, err := m.col(coll).CountDocuments(ctx, matchConditions)
-		if err != nil {
-			return models.SalesOverview{}, fmt.Errorf("count error in %s: %w", coll, err)
-		}
-
-		// Calculate totals for this category
-		categoryTotalAmount := 0.0
-		for _, g := range groupResults {
-			categoryTotalAmount += g.TotalAmount
-		}
-		categoryTotalProduct := len(groupResults)
-
-		overview.Categories = append(overview.Categories, models.SalesOverviewCategory{
-			Category: cat,
-			Amount:   categoryTotalAmount,
-			Product:  categoryTotalProduct,
-			Quantity: int(totalQuantity),
-		})
-
-		overallTotalAmount += categoryTotalAmount
-		overallTotalProduct += categoryTotalProduct
-		overallTotalQuantity += int(totalQuantity)
 	}
 
-	overview.TotalAmount = overallTotalAmount
-	overview.TotalProduct = overallTotalProduct
-	overview.TotalQuantity = overallTotalQuantity
+	// Merge same products across collections and sum txnCount
+	combinedPipeline = append(combinedPipeline,
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":             "$product",
+			"quantity":        bson.M{"$sum": "$quantity"},
+			"totalAmount":     bson.M{"$sum": "$totalAmount"},
+			"lastTransaction": bson.M{"$max": "$created_at"},
+			"txnCount":        bson.M{"$sum": "$txnCount"},
+		}}},
 
-	return overview, nil
+		bson.D{{Key: "$project", Value: bson.M{
+			"product":     "$_id",
+			"quantity":    1,
+			"totalAmount": 1,
+			"created_at":  "$lastTransaction",
+			"txnCount":    1,
+			"_id":         0,
+		}}},
+
+		bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
+	)
+
+	// Execute aggregation on baseColl
+	cursor, err := m.col(baseColl).Aggregate(ctx, combinedPipeline)
+	if err != nil {
+		return models.SalesSummary{}, fmt.Errorf("sales overview aggregation failed: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	// decode into local struct that includes txnCount
+	type mergedItem struct {
+		Product     string    `bson:"product"`
+		Quantity    float64   `bson:"quantity"`
+		TotalAmount float64   `bson:"totalAmount"`
+		CreatedAt   time.Time `bson:"created_at"`
+		TxnCount    float64   `bson:"txnCount"`
+	}
+	var items []mergedItem
+	if err := cursor.All(ctx, &items); err != nil {
+		return models.SalesSummary{}, err
+	}
+
+	// map to models.SalesSummaryItem and compute totals.
+	var merged []models.SalesSummaryItem
+	totalAmount := 0.0
+	totalTxnCount := 0.0
+	for _, it := range items {
+		merged = append(merged, models.SalesSummaryItem{
+			Product:     it.Product,
+			Quantity:    it.Quantity,
+			TotalAmount: it.TotalAmount,
+			CreatedAt:   it.CreatedAt,
+		})
+		totalAmount += it.TotalAmount
+		totalTxnCount += it.TxnCount
+	}
+
+	totalProduct := len(merged)
+
+	// Return as SalesSummary (merged product level).
+	// TotalQuantity now represents transaction count across the merged results.
+	return models.SalesSummary{
+		Summary:       merged,
+		TotalCount:    totalProduct,
+		TotalProduct:  totalProduct,
+		TotalQuantity: totalTxnCount,
+		TotalAmount:   totalAmount,
+	}, nil
 }
 
 func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (models.TransactionResponse, error) {
@@ -703,25 +1023,34 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 	if userID, ok := filter["user_id"].(string); ok && userID != "" {
 		matchConditions = append(matchConditions, bson.E{Key: "user_id", Value: userID})
 	}
-	if product, ok := filter["product"].(string); ok && product != "" {
-		matchConditions = append(matchConditions, bson.E{Key: "product", Value: product})
-	}
-	if searchTerm, ok := filter["search"].(string); ok && searchTerm != "" {
-		regex := bson.M{"$regex": searchTerm, "$options": "i"}
-		matchConditions = append(matchConditions, bson.E{Key: "$or", Value: bson.A{
-			bson.M{"description": regex},
-			bson.M{"product": regex},
-		}})
-	}
-	dateRange := bson.M{}
+
+	// Handle date range
 	if start, ok := filter["start_date"].(time.Time); ok {
-		dateRange["$gte"] = start
+		start = start.UTC()
+		end, hasEnd := filter["end_date"].(time.Time)
+
+		if !hasEnd {
+			// Default to end of start day
+			end = time.Date(start.Year(), start.Month(), start.Day(), 23, 59, 59, 999000000, time.UTC)
+		}
+
+		matchConditions = append(matchConditions, bson.E{
+			Key:   "created_at",
+			Value: bson.M{"$gte": start, "$lte": end},
+		})
+	} else if end, ok := filter["end_date"].(time.Time); ok {
+		// Handle case where only end_date is provided (no start_date)
+		matchConditions = append(matchConditions, bson.E{
+			Key:   "created_at",
+			Value: bson.M{"$lte": end.UTC()},
+		})
+	} else {
+		// No date filters → return all time (no restriction)
+		// ❌ Don't append anything for created_at here
 	}
-	if end, ok := filter["end_date"].(time.Time); ok {
-		dateRange["$lte"] = end
-	}
-	if len(dateRange) > 0 {
-		matchConditions = append(matchConditions, bson.E{Key: "created_at", Value: dateRange})
+
+	if status, ok := filter["status"].(string); ok && status != "" {
+		matchConditions = append(matchConditions, bson.E{Key: "status", Value: status})
 	}
 
 	// Conversion for amountDecimal
@@ -794,16 +1123,52 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 		projectStage,
 	}
 
-	// Data pipeline (with union + pagination)
-	dataPipeline := append(basePipeline,
-		bson.D{{Key: "$unionWith", Value: bson.M{"coll": pointRedeemColl, "pipeline": pointRedeemUnionPipeline}}},
-		bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
-		bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
-		bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
-		bson.D{{Key: "$limit", Value: int64(pageSize)}},
-	)
+	// allow filtering by record type: "inflow" | "outflow" (deposit/pointRedeem => inflow, transfer => outflow)
+	record := ""
+	if r, ok := filter["record"].(string); ok {
+		record = strings.ToLower(strings.TrimSpace(r))
+	}
 
-	cursor, err := m.col(depositColl).Aggregate(ctx, dataPipeline)
+	// build dataPipeline and pick which collection to run Aggregate on (base)
+	dataBaseColl := depositColl
+	var dataPipeline mongo.Pipeline
+
+	switch record {
+	case "inflow":
+		// only deposit + pointRedeem (both inflow)
+		dataPipeline = append(basePipeline,
+			bson.D{{Key: "$unionWith", Value: bson.M{"coll": pointRedeemColl, "pipeline": pointRedeemUnionPipeline}}},
+			bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
+			bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
+			bson.D{{Key: "$limit", Value: int64(pageSize)}},
+		)
+		dataBaseColl = depositColl
+
+	case "outflow":
+		// only transfer collection (outflow)
+		dataPipeline = mongo.Pipeline{
+			bson.D{{Key: "$match", Value: matchConditions}},
+			amountConversionStage,
+			bson.D{{Key: "$addFields", Value: bson.M{"flowType": "outflow"}}},
+			projectStage,
+			bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
+			bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
+			bson.D{{Key: "$limit", Value: int64(pageSize)}},
+		}
+		dataBaseColl = transferColl
+
+	default:
+		// both inflow and outflow (original behaviour)
+		dataPipeline = append(basePipeline,
+			bson.D{{Key: "$unionWith", Value: bson.M{"coll": pointRedeemColl, "pipeline": pointRedeemUnionPipeline}}},
+			bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
+			bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
+			bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
+			bson.D{{Key: "$limit", Value: int64(pageSize)}},
+		)
+	}
+
+	cursor, err := m.col(dataBaseColl).Aggregate(ctx, dataPipeline)
 	if err != nil {
 		m.logger.Error("Wallet inflow+outflow data aggregation failed", zap.Error(err))
 		return models.TransactionResponse{}, err

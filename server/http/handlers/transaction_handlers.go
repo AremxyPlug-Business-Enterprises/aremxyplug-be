@@ -32,19 +32,25 @@ func (handler *HttpHandler) GetTransactions(w http.ResponseWriter, r *http.Reque
 		query := r.URL.Query()
 
 		// Filters
+		// Filters
 		filter := make(map[string]interface{})
-
 		filter["user_id"] = id
 
-		if product := query.Get("product"); product != "" {
-			filter["product"] = product
+		// Basic filters
+		if flow := query.Get("flow"); flow != "" {
+			filter["flow"] = flow
 		}
-		if search := query.Get("search"); search != "" {
-			filter["search"] = search
+		if category := query.Get("category"); category != "" {
+			filter["category"] = category
 		}
+		if subcategory := query.Get("subcategory"); subcategory != "" {
+			filter["subcategory"] = subcategory
+		}
+
 		if status := query.Get("status"); status != "" {
 			filter["status"] = status
 		}
+
 		if start := query.Get("start_date"); start != "" {
 			if t, err := time.Parse("2006-01-02", start); err == nil {
 				filter["start_date"] = t
@@ -227,9 +233,14 @@ func (handler *HttpHandler) GetWalletSummary(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	filter := map[string]interface{}{
-		"user_id": id,
+	filter := make(map[string]interface{})
+
+	record := query.Get("record")
+	if record != "" {
+		filter["record"] = record
 	}
+
+	filter["user_id"] = id
 
 	summary, err := handler.store.GetWalletSummary(filter, page)
 	if err != nil {

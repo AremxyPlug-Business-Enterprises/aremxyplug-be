@@ -123,7 +123,7 @@ type TransactionStore interface {
 	GetTransactions(filter map[string]interface{}, page, pageSize int) (models.TransactionResponse, error)
 	GetSalesSummary(category string, filter map[string]interface{}, page int) (models.SalesSummary, error)
 	GetWalletSummary(filter map[string]interface{}, page int) (models.TransactionResponse, error)
-	GetSalesOverview(filter map[string]interface{}) (models.SalesOverview, error)
+	GetSalesOverview(filter map[string]interface{}) (models.SalesSummary, error)
 }
 
 type WebhookStore interface {
