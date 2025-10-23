@@ -127,7 +127,7 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 		Bank_Name:              senderBank.Bank_Name,
 		Account_Name:           senderBank.Account_Name,
 		Account_No:             senderBank.Account_No,
-		TransactionProduct:     "Internal Transfer",
+		TransactionProduct:     "Internal Deposit",
 		TransactionDescription: "NGN Wallet Top Up",
 		Message:                data.Reason,
 		Reference:              trfTransactionID,
