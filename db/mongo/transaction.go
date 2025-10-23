@@ -33,21 +33,6 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		matchConditions = append(matchConditions, bson.E{Key: "user_id", Value: userID})
 	}
 
-	// Filter by flow (inflow, outflow, etc.)
-	if flow, ok := filter["flow"].(string); ok && flow != "" {
-		matchConditions = append(matchConditions, bson.E{Key: "flow", Value: flow})
-	}
-
-	// Filter by category (Telecom, Payments, etc.)
-	if category, ok := filter["category"].(string); ok && category != "" {
-		matchConditions = append(matchConditions, bson.E{Key: "category", Value: category})
-	}
-
-	// Filter by subcategory (Airtime Top-up, Card Transfer, etc.)
-	if subcategory, ok := filter["subcategory"].(string); ok && subcategory != "" {
-		matchConditions = append(matchConditions, bson.E{Key: "subcategory", Value: subcategory})
-	}
-
 	// Handle date range
 	if start, ok := filter["start_date"].(time.Time); ok {
 		start = start.UTC()
