@@ -49,6 +49,7 @@ func (p *PointConfig) RedeemPoints(userID string, points int) (models.PointRedee
 		TransactionID:          transactionID,
 		OrderID:                orderID,
 		CreatedAt:              time.Now().UTC(),
+		Status:                 "success",
 	}
 
 	if err := p.db.CreatePointRedeemDoc(redeemDoc); err != nil {
