@@ -50,5 +50,6 @@ type PointRedeem struct {
 	TransactionDescription string    `json:"transaction_description" bson:"transaction_description"`
 	OrderID                int       `json:"order_id" bson:"order_id"`
 	TransactionID          string    `json:"transaction_id" bson:"transaction_id"`
+	Status                 string    `json:"status" bson:"status"`
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
 }
