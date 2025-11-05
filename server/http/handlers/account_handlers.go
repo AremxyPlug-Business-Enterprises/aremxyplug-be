@@ -116,6 +116,21 @@ func (handler *HttpHandler) CheckVerification(w http.ResponseWriter, r *http.Req
 			data["nin"] = user.NIN
 		}
 
+		if user.Gender != "" {
+			data["gender"] = user.Gender
+		}
+
+		if user.Address != "" {
+			data["address"] = user.Address
+		}
+
+		if user.DOB != (time.Time{}) {
+			data["dob"] = user.DOB.Format("2006-01-02")
+		}
+
+		data["phone"] = user.PhoneNumber
+		data["email"] = user.Email
+
 		w.WriteHeader(http.StatusBadRequest)
 		response := responseFormat.CustomResponse{
 			Status:  http.StatusBadRequest,
