@@ -1119,7 +1119,7 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 	var dataPipeline mongo.Pipeline
 
 	switch record {
-	case "inflow":
+	case "deposit":
 		// only deposit + pointRedeem (both inflow)
 		dataPipeline = append(basePipeline,
 			bson.D{{Key: "$unionWith", Value: bson.M{"coll": pointRedeemColl, "pipeline": pointRedeemUnionPipeline}}},
@@ -1129,7 +1129,7 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 		)
 		dataBaseColl = depositColl
 
-	case "outflow":
+	case "transfer":
 		// only transfer collection (outflow)
 		dataPipeline = mongo.Pipeline{
 			bson.D{{Key: "$match", Value: matchConditions}},
