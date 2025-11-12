@@ -67,8 +67,20 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 	outflowCollections := []string{airColl, dataColl, transferColl, eduColl, tvColl, electricColl}
 	collectionsToQuery := append(outflowCollections, inflowCollections...)
 
-	if flow, ok := filter["flow"].(string); ok && flow != "" {
-		switch flow {
+	// Normalize filter strings
+	getLower := func(key string) string {
+		if v, ok := filter[key].(string); ok {
+			return strings.ToLower(strings.TrimSpace(v))
+		}
+		return ""
+	}
+	flowVal := getLower("flow")
+	categoryVal := getLower("category")
+	subcategoryVal := getLower("subcategory")
+
+	// Flow filter
+	if flowVal != "" {
+		switch flowVal {
 		case "inflow":
 			collectionsToQuery = inflowCollections
 		case "outflow":
@@ -76,37 +88,45 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		}
 	}
 
-	// Apply CATEGORY logic
-	if category, ok := filter["category"].(string); ok && category != "" {
-		switch strings.ToLower(category) {
-		case "telecoms":
-			collectionsToQuery = []string{airColl, dataColl, eduColl, tvColl, electricColl}
-		case "payments":
-			collectionsToQuery = []string{depositColl, transferColl, pointRedeemColl}
+	// Subcategory has highest precedence: if valid subcategory provided, apply and skip category logic
+	appliedSubcategory := false
+	if subcategoryVal != "" {
+		switch subcategoryVal {
+		case "airtime":
+			collectionsToQuery = []string{airColl}
+			appliedSubcategory = true
+		case "data":
+			collectionsToQuery = []string{dataColl}
+			appliedSubcategory = true
+		case "edu":
+			collectionsToQuery = []string{eduColl}
+			appliedSubcategory = true
+		case "tv-sub":
+			collectionsToQuery = []string{tvColl}
+			appliedSubcategory = true
+		case "elect", "electric", "electricity":
+			collectionsToQuery = []string{electricColl}
+			appliedSubcategory = true
+		case "internal transfer", "money transfer", "transfer":
+			collectionsToQuery = []string{transferColl}
+			appliedSubcategory = true
+		case "points", "point", "redeem":
+			collectionsToQuery = []string{pointRedeemColl}
+			appliedSubcategory = true
+		case "internal deposit", "virtual accounts", "deposit":
+			collectionsToQuery = []string{depositColl}
+			appliedSubcategory = true
 		}
 	}
 
-	// Apply SUBCATEGORY logic
-	if subcategory, ok := filter["subcategory"].(string); ok && subcategory != "" {
-		switch strings.ToLower(subcategory) {
-		case "airtime":
-			collectionsToQuery = []string{airColl}
-		case "data":
-			collectionsToQuery = []string{dataColl}
-		case "edu":
-			collectionsToQuery = []string{eduColl}
-		case "tv-sub":
-			collectionsToQuery = []string{tvColl}
-		case "elect":
-			collectionsToQuery = []string{electricColl}
-		case "internal transfer", "money transfer":
-			collectionsToQuery = []string{transferColl}
-		case "points":
-			collectionsToQuery = []string{pointRedeemColl}
-		case "internal deposit", "virtual accounts":
-			collectionsToQuery = []string{depositColl}
-		default:
-
+	// Category logic (only if subcategory not applied)
+	if !appliedSubcategory && categoryVal != "" {
+		switch categoryVal {
+		case "telecoms":
+			// telecoms excludes deposit, transfer, points
+			collectionsToQuery = []string{airColl, dataColl, eduColl, tvColl, electricColl}
+		case "payments":
+			collectionsToQuery = []string{depositColl, transferColl, pointRedeemColl}
 		}
 	}
 
@@ -1110,8 +1130,8 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 
 	// allow filtering by record type: "inflow" | "outflow" (deposit/pointRedeem => inflow, transfer => outflow)
 	record := ""
-	if r, ok := filter["record"].(string); ok {
-		record = strings.ToLower(strings.TrimSpace(r))
+	if r, ok := filter["record"].(string); ok && r != "" {
+		record = r
 	}
 
 	// build dataPipeline and pick which collection to run Aggregate on (base)
