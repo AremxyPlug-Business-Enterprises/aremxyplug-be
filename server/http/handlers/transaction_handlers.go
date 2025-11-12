@@ -217,6 +217,37 @@ func (handler *HttpHandler) GetWalletSummary(w http.ResponseWriter, r *http.Requ
 	page := 1
 	pageSize := 50
 
+	filter := make(map[string]interface{})
+
+	if start := query.Get("start_date"); start != "" {
+		if t, err := time.Parse("2006-01-02", start); err == nil {
+			filter["start_date"] = t
+		} else {
+			handler.logger.Error("Invalid start_date format", zap.Error(err))
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Invalid start_date format"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+	}
+	if end := query.Get("end_date"); end != "" {
+		if t, err := time.Parse("2006-01-02", end); err == nil {
+			filter["end_date"] = t
+		} else {
+			handler.logger.Error("Invalid end_date format", zap.Error(err))
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Invalid end_date format"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+	}
+
 	if val := query.Get("page"); val != "" {
 		if p, err := strconv.Atoi(val); err == nil && p > 0 {
 			page = p
@@ -233,12 +264,9 @@ func (handler *HttpHandler) GetWalletSummary(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	filter := make(map[string]interface{})
-
 	record := query.Get("record")
-	if record != "" {
-		filter["record"] = record
-	}
+
+	filter["record"] = record
 
 	filter["user_id"] = id
 
