@@ -239,9 +239,13 @@ func (handler *HttpHandler) GetWalletSummary(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	record := query.Get("record")
+	if record := query.Get("record"); record != "" {
+		filter["record"] = record
+	}
 
-	filter["record"] = record
+	if status := query.Get("status"); status != "" {
+		filter["status"] = status
+	}
 
 	filter["user_id"] = id
 
