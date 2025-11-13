@@ -2,12 +2,11 @@ package mongo
 
 import (
 	"context"
+	"fmt"
 	"log"
-	"sort"
 
 	"github.com/aremxyplug-be/db/models/telcom"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -192,169 +191,173 @@ func (m *mongoStore) GetAllAirtimeTransactions(userID string) ([]telcom.AirtimeR
 }
 
 func (m *mongoStore) SaveTelcomRecipient(userID string, data telcom.Recipient) error {
-
 	ctx := context.Background()
 	coll := m.col("telcom-recipient")
 
-	filter := bson.D{primitive.E{Key: "userID", Value: userID}}
-	projection := bson.M{"recipients.id": 1}
-	telcomRecipient := telcom.TelcomRecipient{}
-
-	err := coll.FindOne(ctx, filter, options.FindOne().SetProjection(projection)).Decode(&telcomRecipient)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			data.ID = 0
-			telcomRecipient = telcom.TelcomRecipient{
-				UserID:    userID,
-				Recipient: append(telcomRecipient.Recipient, data),
-			}
-
-			_, err := coll.InsertOne(ctx, telcomRecipient)
-			if err != nil {
-				return err
-			}
-			return nil
-		}
+	// 1) Check if active recipient with same phone exists -> reject
+	activeFilter := bson.M{
+		"user_id": userID,
+		"recipients": bson.M{
+			"$elemMatch": bson.M{
+				"phone":  data.Phone_no,
+				"active": true,
+			},
+		},
 	}
-
-	maxID := 0
-	for _, recipient := range telcomRecipient.Recipient {
-		if recipient.ID > 0 {
-			maxID = recipient.ID
-		}
-	}
-
-	data.ID = maxID + 1
-
-	updateFilter := bson.D{{Key: "$push", Value: bson.D{primitive.E{Key: "recipients", Value: data}}}}
-
-	_, err = coll.UpdateOne(ctx, filter, updateFilter)
-	if err != nil {
+	if err := coll.FindOne(ctx, activeFilter).Err(); err == nil {
+		return fmt.Errorf("recipient with phone %s already exists", data.Phone_no)
+	} else if err != mongo.ErrNoDocuments {
 		return err
 	}
 
-	return nil
+	// 2) Check if inactive recipient exists -> reactivate & update fields (reuse ID)
+	inactiveFilter := bson.M{
+		"user_id": userID,
+		"recipients": bson.M{
+			"$elemMatch": bson.M{
+				"phone":  data.Phone_no,
+				"active": false,
+			},
+		},
+	}
+	// Build set to update fields on the matched array slot
+	setFields := bson.M{
+		"recipients.$.active":  true,
+		"recipients.$.name":    data.Name,
+		"recipients.$.network": data.Network,
+	}
+	res, err := coll.UpdateOne(ctx, inactiveFilter, bson.M{"$set": setFields})
+	if err != nil {
+		return err
+	}
+	if res.ModifiedCount > 0 {
+		// Reactivated successfully — done
+		return nil
+	}
+
+	// 3) No existing entry — allocate new ID then push
+	id, err := m.nextRecipientID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to generate recipient id: %w", err)
+	}
+	data.ID = id
+	data.Active = true // ensure active set
+
+	upsertFilter := bson.M{"user_id": userID}
+	update := bson.M{
+		"$setOnInsert": bson.M{"user_id": userID},
+		"$push":        bson.M{"recipients": data},
+	}
+	opts := options.Update().SetUpsert(true)
+	_, err = coll.UpdateOne(ctx, upsertFilter, update, opts)
+	return err
+}
+
+func (m *mongoStore) nextRecipientID(ctx context.Context, userID string) (int, error) {
+
+	counterColl := m.col("recipient_counters")
+	filter := bson.M{"_id": "recipient_" + userID}
+	update := bson.M{"$inc": bson.M{"seq": 1}}
+	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
+
+	var result struct {
+		Seq int `bson:"seq"`
+	}
+	err := counterColl.FindOneAndUpdate(ctx, filter, update, opts).Decode(&result)
+	if err != nil {
+		return 0, err
+	}
+	return result.Seq, nil
 }
 
 func (m *mongoStore) GetTelcomRecipients(userID string) (telcom.TelcomRecipient, error) {
-
 	ctx := context.Background()
-	recipients := telcom.TelcomRecipient{}
 	coll := m.col("telcom-recipient")
 
-	filter := bson.D{primitive.E{Key: "userID", Value: userID}}
-	res := coll.FindOne(ctx, filter)
-
-	if err := res.Decode(&recipients); err != nil {
+	// fetch full doc
+	filter := bson.M{"user_id": userID}
+	doc := telcom.TelcomRecipient{}
+	err := coll.FindOne(ctx, filter).Decode(&doc)
+	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return telcom.TelcomRecipient{}, nil
+			return telcom.TelcomRecipient{UserID: userID}, nil
 		}
 		return telcom.TelcomRecipient{}, err
 	}
 
-	return recipients, nil
-
+	// Filter active recipients in Go
+	active := make([]telcom.Recipient, 0, len(doc.Recipient))
+	for _, r := range doc.Recipient {
+		if r.Active {
+			active = append(active, r)
+		}
+	}
+	doc.Recipient = active
+	return doc, nil
 }
 
 func (m *mongoStore) EditTelcomRecipient(userID string, data telcom.Recipient) error {
-
 	ctx := context.Background()
 	coll := m.col("telcom-recipient")
-	telcomRecipient := telcom.TelcomRecipient{}
 
-	filter := bson.D{primitive.E{Key: "userID", Value: userID}}
-
-	findResult := coll.FindOne(ctx, filter)
-	if err := findResult.Decode(&telcomRecipient); err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil
+	// If changing phone, ensure another active recipient does not already use it
+	if data.Phone_no != "" {
+		conflictFilter := bson.M{
+			"user_id": userID,
+			"recipients": bson.M{
+				"$elemMatch": bson.M{
+					"phone":  data.Phone_no,
+					"active": true,
+					"id":     bson.M{"$ne": data.ID}, // not the same recipient
+				},
+			},
 		}
-		return err
-	}
-
-	recipientToUpdate := telcom.Recipient{}
-	for i := range telcomRecipient.Recipient {
-		if telcomRecipient.Recipient[i].ID == data.ID {
-			recipientToUpdate = telcomRecipient.Recipient[i]
-			break
-		}
-	}
-
-	// Define update fields based on what is provided
-	updateFields := bson.M{}
-	if data.Name != "" && recipientToUpdate.Name != data.Name {
-		updateFields["recipients.$.name"] = data.Name
-	}
-	if data.Phone_no != "" && recipientToUpdate.Phone_no != data.Phone_no {
-		updateFields["recipients.$.phone"] = data.Phone_no
-	}
-
-	if len(updateFields) > 0 {
-		// Prepare the update statement
-		updateFilter := bson.M{"$set": updateFields}
-
-		filter := bson.M{
-			"userID":        userID,
-			"recipients.id": data.ID,
-		}
-
-		_, err := coll.UpdateOne(ctx, filter, updateFilter)
-		if err != nil {
+		if err := coll.FindOne(ctx, conflictFilter).Err(); err == nil {
+			return fmt.Errorf("another active recipient already uses phone %s", data.Phone_no)
+		} else if err != mongo.ErrNoDocuments {
 			return err
 		}
 	}
 
-	return nil
+	// Build update set
+	set := bson.M{}
+	if data.Name != "" {
+		set["recipients.$.name"] = data.Name
+	}
+	if data.Phone_no != "" {
+		set["recipients.$.phone"] = data.Phone_no
+	}
+	if data.Network != "" {
+		set["recipients.$.network"] = data.Network
+	}
+
+	if len(set) == 0 {
+		return nil
+	}
+
+	filter := bson.M{
+		"user_id":       userID,
+		"recipients.id": data.ID,
+	}
+	_, err := coll.UpdateOne(ctx, filter, bson.M{"$set": set})
+	return err
 }
 
 func (m *mongoStore) DeleteTelcomRecipient(recipientID int, userID string) error {
-
 	ctx := context.Background()
 	coll := m.col("telcom-recipient")
 
 	filter := bson.M{
-		"userID": userID,
+		"user_id":       userID,
+		"recipients.id": recipientID,
 	}
-	projection := bson.M{"recipients": 1}
-	telcomRecipient := telcom.TelcomRecipient{}
-
-	delResult := coll.FindOne(ctx, filter, options.FindOne().SetProjection(projection))
-	if err := delResult.Decode(&telcomRecipient); err != nil {
-		return err
-	}
-
-	updatedRecipients := []telcom.Recipient{}
-	for _, recipient := range telcomRecipient.Recipient {
-		if recipient.ID != recipientID {
-			updatedRecipients = append(updatedRecipients, recipient)
-		}
-	}
-
-	sort.SliceStable(updatedRecipients, func(i, j int) bool {
-		return updatedRecipients[i].ID < updatedRecipients[j].ID
-	})
-	for i := range updatedRecipients {
-		updatedRecipients[i].ID = i
-	}
-
-	updateFilter := bson.D{primitive.E{Key: "$set", Value: bson.D{primitive.E{Key: "recipients", Value: updatedRecipients}}}}
-	_, err := coll.UpdateOne(ctx, filter, updateFilter)
+	update := bson.M{"$set": bson.M{"recipients.$.active": false}}
+	res, err := coll.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
 	}
-
+	if res.MatchedCount == 0 {
+		return fmt.Errorf("recipient id %d not found for user %s", recipientID, userID)
+	}
 	return nil
-
-}
-
-func (m *mongoStore) getRecipientRecords() (*mongo.Cursor, error) {
-	ctx := context.Background()
-
-	filter := bson.D{}
-	cur, err := m.col("").Find(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	return cur, nil
-
 }

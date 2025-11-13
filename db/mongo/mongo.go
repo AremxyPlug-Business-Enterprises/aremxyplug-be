@@ -117,6 +117,24 @@ func (m *mongoStore) InitIndexes() error {
 		return fmt.Errorf("failed to create department index: %w", err)
 	}
 
+	telecomRecipientIndex := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "user_id", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		},
+		{
+			Keys: bson.D{
+				{Key: "user_id", Value: 1},
+				{Key: "recipients.active", Value: 1},
+			},
+			Options: options.Index().SetSparse(true),
+		},
+	}
+
+	if _, err := db.Collection("telcom-recipient").Indexes().CreateMany(ctx, telecomRecipientIndex); err != nil {
+		return fmt.Errorf("failed to create telcom recipient index: %w", err)
+	}
+
 	return nil
 }
 
