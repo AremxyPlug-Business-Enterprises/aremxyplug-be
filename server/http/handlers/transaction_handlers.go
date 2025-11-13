@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -51,33 +52,20 @@ func (handler *HttpHandler) GetTransactions(w http.ResponseWriter, r *http.Reque
 			filter["status"] = status
 		}
 
-		if start := query.Get("start_date"); start != "" {
-			if t, err := time.Parse("2006-01-02", start); err == nil {
-				filter["start_date"] = t
-			} else {
-				handler.logger.Error("Invalid start_date format", zap.Error(err))
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{
-					Status:  http.StatusBadRequest,
-					Message: "error",
-					Data:    map[string]interface{}{"data": "Invalid start_date format"}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
+		datefilter, err := addDateFilters(query)
+		if err != nil {
+			handler.logger.Error("Invalid date format", zap.Error(err))
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusBadRequest,
+				Message: "error",
+				Data:    map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
 		}
-		if end := query.Get("end_date"); end != "" {
-			if t, err := time.Parse("2006-01-02", end); err == nil {
-				filter["end_date"] = t
-			} else {
-				handler.logger.Error("Invalid end_date format", zap.Error(err))
-				w.WriteHeader(http.StatusBadRequest)
-				response := responseFormat.CustomResponse{
-					Status:  http.StatusBadRequest,
-					Message: "error",
-					Data:    map[string]interface{}{"data": "Invalid end_date format"}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
+
+		for k, v := range datefilter {
+			filter[k] = v
 		}
 
 		// Pagination
@@ -219,33 +207,20 @@ func (handler *HttpHandler) GetWalletSummary(w http.ResponseWriter, r *http.Requ
 
 	filter := make(map[string]interface{})
 
-	if start := query.Get("start_date"); start != "" {
-		if t, err := time.Parse("2006-01-02", start); err == nil {
-			filter["start_date"] = t
-		} else {
-			handler.logger.Error("Invalid start_date format", zap.Error(err))
-			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{
-				Status:  http.StatusBadRequest,
-				Message: "error",
-				Data:    map[string]interface{}{"data": "Invalid start_date format"}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
+	datefilter, err := addDateFilters(query)
+	if err != nil {
+		handler.logger.Error("Invalid date format", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
 	}
-	if end := query.Get("end_date"); end != "" {
-		if t, err := time.Parse("2006-01-02", end); err == nil {
-			filter["end_date"] = t
-		} else {
-			handler.logger.Error("Invalid end_date format", zap.Error(err))
-			w.WriteHeader(http.StatusBadRequest)
-			response := responseFormat.CustomResponse{
-				Status:  http.StatusBadRequest,
-				Message: "error",
-				Data:    map[string]interface{}{"data": "Invalid end_date format"}}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
+
+	for k, v := range datefilter {
+		filter[k] = v
 	}
 
 	if val := query.Get("page"); val != "" {
@@ -264,9 +239,13 @@ func (handler *HttpHandler) GetWalletSummary(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	record := query.Get("record")
+	if record := query.Get("record"); record != "" {
+		filter["record"] = record
+	}
 
-	filter["record"] = record
+	if status := query.Get("status"); status != "" {
+		filter["status"] = status
+	}
 
 	filter["user_id"] = id
 
@@ -319,6 +298,10 @@ func (handler *HttpHandler) GetSalesSummary(w http.ResponseWriter, r *http.Reque
 	category := query.Get("category")
 	page := 1
 
+	filter := map[string]interface{}{
+		"user_id": id,
+	}
+
 	if val := query.Get("page"); val != "" {
 		if p, err := strconv.Atoi(val); err == nil && p > 0 {
 			page = p
@@ -335,8 +318,20 @@ func (handler *HttpHandler) GetSalesSummary(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	filter := map[string]interface{}{
-		"user_id": id,
+	datefilter, err := addDateFilters(query)
+	if err != nil {
+		handler.logger.Error("Invalid date format", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	for k, v := range datefilter {
+		filter[k] = v
 	}
 
 	summary, err := handler.store.GetSalesSummary(category, filter, page)
@@ -385,6 +380,23 @@ func (handler *HttpHandler) GetSalesOverview(w http.ResponseWriter, r *http.Requ
 		"user_id": userDetails.ID,
 	}
 
+	query := r.URL.Query()
+	datefilter, err := addDateFilters(query)
+	if err != nil {
+		handler.logger.Error("Invalid date format", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	for k, v := range datefilter {
+		filter[k] = v
+	}
+
 	overview, err := handler.store.GetSalesOverview(filter)
 	if err != nil {
 		handler.logger.Error("Error fetching sales overview", zap.Error(err))
@@ -406,6 +418,26 @@ func (handler *HttpHandler) GetSalesOverview(w http.ResponseWriter, r *http.Requ
 	}
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
+}
+
+func addDateFilters(q url.Values) (filter map[string]interface{}, err error) {
+	filter = make(map[string]interface{})
+	if start := q.Get("start_date"); start != "" {
+		if t, err := time.Parse("2006-01-02", start); err == nil {
+			filter["start_date"] = t
+		} else {
+			return nil, fmt.Errorf("invalid start_date format")
+		}
+	}
+
+	if end := q.Get("end_date"); end != "" {
+		if t, err := time.Parse("2006-01-02", end); err == nil {
+			filter["end_date"] = t
+		} else {
+			return nil, fmt.Errorf("invalid end_date format")
+		}
+	}
+	return filter, nil
 }
 
 func (handler *HttpHandler) fetchTransactionByProduct(orderID, product string) (interface{}, error) {
