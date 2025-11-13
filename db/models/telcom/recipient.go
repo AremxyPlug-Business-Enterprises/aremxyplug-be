@@ -10,4 +10,5 @@ type Recipient struct {
 	Network  string `json:"network" bson:"network"`
 	Phone_no string `json:"phone" bson:"phone"`
 	Name     string `json:"name,omitempty" bson:"name"`
+	Active   bool   `json:"active" bson:"active"`
 }
