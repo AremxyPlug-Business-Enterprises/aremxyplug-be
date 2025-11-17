@@ -282,11 +282,13 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 	}
 
 	// Update with actual data from aggregation
+	totalValue := 0.0
 	for _, result := range statusResults {
 		statusMetrics[result.Status] = models.StatusMetrics{
 			Value:  result.Value,
 			Volume: result.Volume,
 		}
+		totalValue += result.Value
 	}
 
 	// Totals pipeline: use all filters except status, and match status in ["success", "pending"]
@@ -396,6 +398,7 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		res.TotalCount = totals[0].TotalCount
 		res.TotalInflow = totals[0].TotalInflow
 		res.TotalOutflow = totals[0].TotalOutflow
+		res.TotalValue = totalValue
 	}
 
 	m.logger.Info("Transactions fetched successfully",

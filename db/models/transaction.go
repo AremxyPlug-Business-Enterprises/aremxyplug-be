@@ -6,6 +6,7 @@ type TransactionResponse struct {
 	Transactions  []TransactionItem        `json:"transactions"`
 	StatusMetrics map[string]StatusMetrics `json:"status_metrics"`
 	TotalCount    int                      `json:"total_count"`
+	TotalValue    float64                  `json:"total_value"`
 	TotalInflow   float64                  `json:"total_inflow"`
 	TotalOutflow  float64                  `json:"total_outflow"`
 }
