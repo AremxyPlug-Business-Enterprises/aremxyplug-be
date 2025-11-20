@@ -72,7 +72,6 @@ func main() {
 	vtu := vtu.NewAirtimeConn(store, logger)
 	tvSub := tvsub.NewTvConn(store, logger)
 	electSub := elect.NewElectricConn(store, logger)
-	auth := auth.NewAuthConn(secrets)
 	virtualAcc := bankacc.NewBankConfig(store, logger)
 	bankTransc := transactions.NewTransaction(store)
 	bankTrf := transfer.NewConfig(store, logger)
@@ -81,6 +80,7 @@ func main() {
 	pin := auth_pin.NewPinConfig(logger, store)
 	sms := termii.NewSMSConn(store, logger)
 	redisClient := redis.NewRedisConn(logger)
+	auth := auth.NewAuthConn(secrets, redisClient)
 	scheduler := scheduler.NewScheduler(redisClient, store, logger)
 
 	config := httpSrv.ServerConfig{

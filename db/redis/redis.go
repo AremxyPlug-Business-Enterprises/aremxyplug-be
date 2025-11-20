@@ -422,3 +422,18 @@ func (r *RedisConn) AddToBalance(userID string, amount float64) error {
 	key := fmt.Sprintf("balance:%s", userID)
 	return r.client.IncrByFloat(ctx, key, amount).Err()
 }
+
+func (r *RedisConn) Allow(ctx context.Context, key string, limit int, window time.Duration) (bool, int64, error) {
+	// increment counter
+	count, err := r.client.Incr(ctx, key).Result()
+	if err != nil {
+		return false, 0, err
+	}
+
+	if count == 1 {
+		r.client.Expire(ctx, key, window)
+	}
+
+	allowed := count <= int64(limit)
+	return allowed, count, nil
+}

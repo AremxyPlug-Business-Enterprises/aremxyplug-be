@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/lib/encryption"
 	"github.com/aremxyplug-be/lib/responseFormat"
+	"go.uber.org/zap"
 )
 
 func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Request) {
@@ -109,11 +111,27 @@ func (handler *HttpHandler) CheckVerification(w http.ResponseWriter, r *http.Req
 		data["message"] = "please generate a virtual account"
 
 		if user.HasBVN {
-			data["bvn"] = user.BVN
+			bvn, err := encryption.DecryptString(user.BVN)
+			if err != nil {
+				handler.logger.Error("Failed to decrypt BVN", zap.Error(err))
+				w.WriteHeader(http.StatusInternalServerError)
+				response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "decryption error"}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+			data["bvn"] = bvn
 		}
 
 		if user.HasNIN {
-			data["nin"] = user.NIN
+			nin, err := encryption.DecryptString(user.NIN)
+			if err != nil {
+				handler.logger.Error("Failed to decrypt NIN", zap.Error(err))
+				w.WriteHeader(http.StatusInternalServerError)
+				response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "decryption error"}}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+			data["nin"] = nin
 		}
 
 		if user.Gender != "" {
@@ -146,11 +164,27 @@ func (handler *HttpHandler) CheckVerification(w http.ResponseWriter, r *http.Req
 	data["message"] = "user fully verified, with virtual Nuban account"
 
 	if user.HasBVN {
-		data["bvn"] = user.BVN
+		bvn, err := encryption.DecryptString(user.BVN)
+		if err != nil {
+			handler.logger.Error("Failed to decrypt BVN", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "decryption error"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		data["bvn"] = bvn
 	}
 
 	if user.HasNIN {
-		data["nin"] = user.NIN
+		nin, err := encryption.DecryptString(user.NIN)
+		if err != nil {
+			handler.logger.Error("Failed to decrypt NIN", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "decryption error"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		data["nin"] = nin
 	}
 
 	if user.Gender != "" {

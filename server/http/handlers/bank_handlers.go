@@ -701,10 +701,14 @@ func (handler *HttpHandler) getBalance(userID string) (balance decimal.Decimal, 
 	return available, nil
 }
 
-// with the username, or email, you should be able to get the full user's details
 func (handler *HttpHandler) GetUserDetails(r *http.Request) (user *models.User, err error) {
 
-	token := r.Header.Get("Authorization")
+	accessToken, err := r.Cookie("access_token")
+	if err != nil {
+		return nil, fmt.Errorf("could not get access token: %v", err)
+	}
+
+	token := accessToken.Value
 
 	claim, err := handler.jwt.ValidateToken(token)
 	if err != nil {

@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	api = os.Getenv("VTPASS_SANDBOX")
+	api = os.Getenv("VTPASS")
 	pk  = os.Getenv("APIKey")
 	sk  = os.Getenv("SK")
 )
