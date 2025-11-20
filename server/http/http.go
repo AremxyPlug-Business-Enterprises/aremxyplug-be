@@ -140,6 +140,8 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		authRouter := router.With(config.Auth.Authorize)
 
+		authRouter.Post("/logout", httpHandler.Logout)
+
 		authRouter.Patch("/update-password", httpHandler.UpdatePassword)
 		// Data Routes
 		dataRoutes(authRouter, httpHandler)
