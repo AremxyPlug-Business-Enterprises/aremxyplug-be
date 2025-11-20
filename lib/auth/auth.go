@@ -54,7 +54,7 @@ func (auth *AuthConn) Authorize(next http.Handler) http.Handler {
 
 		// update idle timeout
 		sessionKey := fmt.Sprintf("session:%s", claims.ID)
-		auth.redisClient.Client().Expire(context.Background(), sessionKey, 10*time.Minute)
+		auth.redisClient.Client().Expire(context.Background(), sessionKey, 20*time.Minute)
 
 		next.ServeHTTP(w, r)
 	})
