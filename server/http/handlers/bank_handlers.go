@@ -674,31 +674,45 @@ func (handler *HttpHandler) refreshBalance(userID string) error {
 }
 
 func (handler *HttpHandler) getBalance(userID string) (balance decimal.Decimal, err error) {
-
-	// Get main balance from Redis
-	redisBal, err := handler.redisClient.GetBalance(userID)
-	if err != nil || redisBal == 0 {
-		// Fallback: get balance from MongoDB if Redis is empty or error
+	// Try Redis first; only fallback on error (not on zero value).
+	redisBalFloat, err := handler.redisClient.GetBalance(userID)
+	if err != nil {
+		// Redis read failed — fallback to MongoDB
 		mongoBal, dbErr := handler.store.GetBalance(userID)
 		if dbErr != nil {
 			return decimal.Decimal{}, dbErr
 		}
-		balfloat, _ := mongoBal.Round(2).Float64()
-
-		redisBal = balfloat
-		// Optionally, update Redis for next time
-		_ = handler.redisClient.SetInitialBalance(userID, balfloat)
+		// Use decimal from Mongo value and attempt to seed Redis in background
+		redisBalDec := mongoBal.Round(2)
+		if setErr := handler.redisClient.SetInitialBalance(userID, mustFloat64(redisBalDec)); setErr != nil {
+			handler.logger.Warn("failed to seed redis initial balance", zap.Error(setErr), zap.String("userID", userID))
+		}
+		// get held funds
+		heldFloat, heldErr := handler.redisClient.GetHeldFundsLua(userID)
+		if heldErr != nil {
+			handler.logger.Warn("failed to get held funds from redis", zap.Error(heldErr), zap.String("userID", userID))
+			heldFloat = 0
+		}
+		return redisBalDec.Sub(decimal.NewFromFloat(heldFloat)), nil
 	}
 
-	// Get held funds from Redis
-	held, err := handler.redisClient.GetHeldFundsLua(userID)
-	if err != nil {
-		held = 0 // fallback to 0 if error
+	// Redis succeeded — treat the returned value as authoritative (even if zero)
+	redisBalDec := decimal.NewFromFloat(redisBalFloat).Round(2)
+
+	heldFloat, heldErr := handler.redisClient.GetHeldFundsLua(userID)
+	if heldErr != nil {
+		handler.logger.Warn("failed to get held funds from redis", zap.Error(heldErr), zap.String("userID", userID))
+		heldFloat = 0
 	}
 
-	// Compute available balance
-	available := decimal.NewFromFloat(redisBal).Sub(decimal.NewFromFloat(held))
+	available := redisBalDec.Sub(decimal.NewFromFloat(heldFloat))
 	return available, nil
+}
+
+// helper: convert decimal.Decimal to float64 for SetInitialBalance calls (handles error ignored here)
+func mustFloat64(d decimal.Decimal) float64 {
+	f, _ := d.Float64()
+	return f
 }
 
 func (handler *HttpHandler) GetUserDetails(r *http.Request) (user *models.User, err error) {
