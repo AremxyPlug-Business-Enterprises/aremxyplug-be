@@ -16,8 +16,8 @@ var (
 )
 
 const (
-	AuthTokenDuration    = 15 * time.Minute
-	RefreshTokenDuration = 30 * time.Minute
+	AuthTokenDuration    = 5 * time.Minute
+	RefreshTokenDuration = 25 * time.Minute
 )
 
 type TokenGenerator interface {

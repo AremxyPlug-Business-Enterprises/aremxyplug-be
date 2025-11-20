@@ -81,6 +81,7 @@ type UserStore interface {
 	GetUserByID(id string) (*models.User, error)
 	CreateMessage(message *models.Message) error
 	UpdateUserPassword(email string, password string) error
+	UpdateUserPasswordByID(id string, password string) error
 	UpdateBVNField(user models.User) error
 	UpdateNINField(user models.User) error
 	VerifyUser(identifier string) (*models.User, error)

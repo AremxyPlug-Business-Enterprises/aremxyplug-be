@@ -267,10 +267,14 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	hasPin := user.HasPin
 
-	cookie := &http.Cookie{
-		Name:        "refresh_token",
-		Value:       refreshToken,
-		MaxAge:      1800,
+	// Store refresh token session in Redis (session model)
+	sessionKey := fmt.Sprintf("session:%s", user.ID)
+	handler.redisClient.SetWithTTL(sessionKey, refreshToken, handler.refreshTokenDuration)
+
+	accessCookie := &http.Cookie{
+		Name:        "access_token",
+		Value:       jwtToken,
+		MaxAge:      500,
 		HttpOnly:    true,
 		Secure:      true,
 		Path:        "/",
@@ -279,11 +283,23 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Partitioned: true,
 	}
 
-	http.SetCookie(w, cookie)
+	refreshCookie := &http.Cookie{
+		Name:        "refresh_token",
+		Value:       refreshToken,
+		MaxAge:      1800,
+		HttpOnly:    true,
+		Secure:      true,
+		Path:        "/api/v1/refresh-token",
+		SameSite:    http.SameSiteNoneMode,
+		Domain:      "aremxyplug.onrender.com",
+		Partitioned: true,
+	}
+
+	http.SetCookie(w, accessCookie)
+	http.SetCookie(w, refreshCookie)
 
 	if !hasPin {
 		handler.logger.Warn("pin not yet set", zap.Any("userID", user.ID))
-		w.Header().Set("Authorization", jwtToken)
 		w.WriteHeader(http.StatusAccepted)
 		response := responseFormat.CustomResponse{Status: http.StatusAccepted, Message: "success", Data: map[string]interface{}{
 			"msg":      "user's pin not set",
@@ -293,9 +309,8 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Authorization", jwtToken)
 	w.WriteHeader(http.StatusOK)
-	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"refresh_token": refreshToken, "customer": userResponse}}
+	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"customer": userResponse}}
 	json.NewEncoder(w).Encode(response)
 
 }
@@ -328,8 +343,17 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 		respondWithError(w, http.StatusInternalServerError, "error", err)
 		return
 	}
+
+	storeKey := fmt.Sprintf("pwdreset:%s", token)
+	ttl := 15 * time.Minute
+	if err := handler.redisClient.SetWithTTL(storeKey, "arm", ttl); err != nil {
+		handler.logger.Error("failed to persist reset token", zap.Error(err))
+		respondWithError(w, http.StatusInternalServerError, "error", err)
+		return
+	}
+
 	//var uri string
-	uri := "/api/v1/verify-token?token="
+	uri := "/api/v1/reset-password?token="
 	Scheme := "https"
 	host := "test.aremxyplug.com"
 	link := fmt.Sprintf("%s://%s%s%s", Scheme, host, uri, token)
@@ -366,13 +390,34 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 
 }
 
-func (handler *HttpHandler) ValidateToken(w http.ResponseWriter, r *http.Request) {
+func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+
 	token := r.URL.Query().Get("token")
-	log.Print(token)
 
-	//validate the token
+	storeKey := fmt.Sprintf("pwdreset:%s", token)
 
-	_, err := handler.jwt.ValidateToken(token)
+	// lookup token in redis
+	val, err := handler.redisClient.Get(storeKey)
+	if err != nil || val == nil {
+		respondWithError(w, http.StatusBadRequest, "error", errors.New("link either invalid or expired, request for a new link"))
+		return
+	}
+
+	userID, ok := val.(string)
+	if !ok || userID != "arm" {
+		// unexpected value type; delete key and error
+		_ = handler.redisClient.Del(storeKey)
+		respondWithError(w, http.StatusBadRequest, "error", errors.New("invalid reset token"))
+		return
+	}
+
+	// delete key to enforce one-time use (best effort)
+	if err := handler.redisClient.Del(storeKey); err != nil {
+		// log but continue
+		handler.logger.Warn("failed to delete reset token from redis", zap.Error(err), zap.String("key", storeKey))
+	}
+
+	claims, err := handler.jwt.ValidateToken(token)
 	if err != nil {
 		handler.logger.Error("failed to validate token", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -381,28 +426,13 @@ func (handler *HttpHandler) ValidateToken(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	w.Header().Set("Authorization", token)
-	w.WriteHeader(http.StatusOK)
-	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": "proceed to reset page"}}
-	json.NewEncoder(w).Encode(response)
-}
-
-// ResetPassword
-func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
-	//params := chi.URLParam(r, "token")
-	//token := chi.URLParam(r, "token")
-	//log.Print(token, params)
-
-	//validate the token
-	email := r.URL.Query().Get("email")
-
-	//	hashing and updating user's password
 	type NewPassword struct {
 		Password string `json:"password"`
 	}
-	newPassword := NewPassword{}
 
+	newPassword := NewPassword{}
 	json.NewDecoder(r.Body).Decode(&newPassword)
+
 	hashedPassword, err := handler.encrypt.GenerateFromPassword(newPassword.Password)
 	if err != nil {
 		handler.logger.Error("error hashing password", zap.Error(err))
@@ -413,7 +443,7 @@ func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request
 	}
 	newPassword.Password = string(hashedPassword)
 
-	err = handler.store.UpdateUserPassword(email, newPassword.Password)
+	err = handler.store.UpdateUserPasswordByID(claims.ID, newPassword.Password)
 	if err != nil {
 		handler.logger.Error("failed to update password", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -421,6 +451,7 @@ func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+
 	w.WriteHeader(http.StatusCreated)
 	response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{"data": "Password updated successfully"}}
 	json.NewEncoder(w).Encode(response)
@@ -660,7 +691,7 @@ func (handler *HttpHandler) UpdatePassword(w http.ResponseWriter, r *http.Reques
 
 	ok := handler.encrypt.ComparePasscode(payload.Old_password, hashedPassword)
 	if !ok {
-		handler.logger.Error("store validating password")
+		handler.logger.Error("incorrect password")
 		w.WriteHeader(http.StatusBadRequest)
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "incorrect password"}}
 		json.NewEncoder(w).Encode(response)
@@ -1155,5 +1186,137 @@ func respondWithSuccess(w http.ResponseWriter, statusCode int, message string, d
 	}
 
 	// Encode the response as JSON and send it to the client
+	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		http.Error(w, "refresh token missing", http.StatusUnauthorized)
+		return
+	}
+
+	refresh := cookie.Value
+	claims, err := handler.jwt.ValidateToken(refresh)
+	if err != nil {
+		http.Error(w, "invalid refresh token", http.StatusUnauthorized)
+		return
+	}
+
+	userID := claims.ID
+	sessionKey := fmt.Sprintf("session:%s", userID)
+
+	storedRefresh, err := handler.redisClient.Get(sessionKey)
+	if err != nil || storedRefresh == nil {
+		http.Error(w, "session expired", http.StatusUnauthorized)
+		return
+	}
+
+	// Compare stored token (rotation protection)
+	if storedRefresh.(string) != refresh {
+		http.Error(w, "refresh token rotated or invalid", http.StatusUnauthorized)
+		return
+	}
+
+	// ROTATE refresh token
+	newClaims := dto.Claims{PersonId: userID}
+	newRefresh, err := handler.jwt.GenerateTokenWithExpiration(newClaims, handler.refreshTokenDuration)
+	if err != nil {
+		http.Error(w, "cannot refresh token", http.StatusInternalServerError)
+		return
+	}
+
+	// Update session in Redis
+	handler.redisClient.SetWithTTL(sessionKey, newRefresh, handler.refreshTokenDuration)
+
+	// New access token
+	newAccess, err := handler.jwt.GenerateTokenWithExpiration(newClaims, handler.authTokenDuration)
+	if err != nil {
+		http.Error(w, "cannot refresh token", http.StatusInternalServerError)
+		return
+	}
+
+	// Set cookies again
+	http.SetCookie(w, &http.Cookie{
+		Name:     "access_token",
+		Value:    newAccess,
+		HttpOnly: true,
+		Secure:   true,
+		Path:     "/",
+		SameSite: http.SameSiteNoneMode,
+		MaxAge:   600,
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    newRefresh,
+		HttpOnly: true,
+		Secure:   true,
+		Path:     "/api/v1/refresh-token",
+		SameSite: http.SameSiteNoneMode,
+		MaxAge:   86400,
+	})
+
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"message": "session refreshed"},
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) Logout(w http.ResponseWriter, r *http.Request) {
+
+	user, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	access := &http.Cookie{
+		Name:     "access_token",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteNoneMode,
+	}
+
+	refresh := &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/api/v1/refresh-token",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteNoneMode,
+	}
+
+	http.SetCookie(w, access)
+	http.SetCookie(w, refresh)
+
+	// delete redis session
+	userID := user.ID
+	sessionKey := fmt.Sprintf("session:%s", userID)
+	if err := handler.redisClient.Del(sessionKey); err != nil {
+		handler.logger.Error("error deleting user session from redis", zap.String("userID", userID), zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "error logging out, please try again"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"message": "logged out successfully"},
+	}
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }

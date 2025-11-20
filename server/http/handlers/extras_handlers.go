@@ -8,6 +8,7 @@ import (
 
 	"github.com/aremxyplug-be/db/models"
 	auth_pin "github.com/aremxyplug-be/lib/auth/pin"
+	"github.com/aremxyplug-be/lib/encryption"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"go.uber.org/zap"
 	"golang.org/x/text/cases"
@@ -517,7 +518,16 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		user.BVN = req.BVN
+		encBVN, err := encryption.EncryptString(req.BVN)
+		if err != nil {
+			handler.logger.Error("Failed to encrypt BVN", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "encryption error"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		user.BVN = encBVN
 		if err := handler.store.UpdateBVNField(*user); err != nil {
 			handler.logger.Error("Failed to update BVN field", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -577,7 +587,16 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		user.NIN = req.NIN
+		encNIN, err := encryption.EncryptString(req.NIN)
+		if err != nil {
+			handler.logger.Error("Failed to encrypt NIN", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "encryption error"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		user.NIN = encNIN
 		if err := handler.store.UpdateNINField(*user); err != nil {
 			handler.logger.Error("Failed to update NIN field", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)

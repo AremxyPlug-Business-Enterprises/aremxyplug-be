@@ -301,6 +301,18 @@ func (m *mongoStore) UpdateUserPassword(email string, password string) error {
 	return nil
 }
 
+func (m *mongoStore) UpdateUserPasswordByID(id string, password string) error {
+	ctx := context.Background()
+	filter := bson.M{"id": id}
+	update := bson.M{"$set": bson.M{"password": password}}
+	_, err := m.col(userColl).
+		UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (m *mongoStore) UpdateBVNField(user models.User) error {
 	ctx := context.Background()
 	filter := bson.M{"id": user.ID}

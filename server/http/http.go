@@ -2,6 +2,7 @@ package http
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/aremxyplug-be/db/redis"
 	"github.com/aremxyplug-be/db/sqlstore"
@@ -99,6 +100,17 @@ func MountServer(config ServerConfig) *chi.Mux {
 		RedisClient:  config.RedisClient,
 	})
 
+	RateLimitMiddleware(RateLimitConfig{
+		Limiter:    config.RedisClient,
+		MaxPerIP:   100,
+		IPWindow:   time.Minute * 1,
+		MaxPerUser: 60,
+		UserWindow: time.Minute * 1,
+		PerRouteLimit: map[string]PerRouteConfig{
+			"/api/v1/login": {Limit: 10, Window: time.Minute},
+		},
+	})
+
 	// Routes
 	// Health check
 	router.Head("/", healthCheck)
@@ -107,6 +119,9 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		router.Post("/webhook", httpHandler.WebhookHandler)
 
+		// refresh token
+		router.Post("/refresh-token", httpHandler.RefreshToken)
+
 		// SignUp
 		router.Post("/signup", httpHandler.SignUp)
 		// Login
@@ -114,7 +129,8 @@ func MountServer(config ServerConfig) *chi.Mux {
 		// forgot password
 		router.Post("/forgot-password", httpHandler.ForgotPassword)
 
-		router.Get("/verify-token", httpHandler.ValidateToken)
+		// reset password
+		router.Post("/reset-password", httpHandler.ResetPassword)
 
 		sendOTPRoutes(router, httpHandler)
 
@@ -123,8 +139,6 @@ func MountServer(config ServerConfig) *chi.Mux {
 		verifyOTPRoutes(router, httpHandler)
 
 		authRouter := router.With(config.Auth.Authorize)
-		// reset password
-		authRouter.Patch("/reset-password", httpHandler.ResetPassword)
 
 		authRouter.Patch("/update-password", httpHandler.UpdatePassword)
 		// Data Routes
