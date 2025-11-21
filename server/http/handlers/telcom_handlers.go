@@ -73,7 +73,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		}
 		amtDecimal := decimal.NewFromFloatWithExponent(float64(amount), -2)
 
-		balance, err := handler.getBalance(id)
+		_, balance, _, err := handler.getBalance(id)
 		handler.logger.Info("fallback to DB for user balance", zap.String("userID", id), zap.Error(err))
 		if err != nil {
 			handler.logger.Error("Failed to retrieve user balance from DB", zap.Error(err))
@@ -395,7 +395,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		userBalance, err := handler.getBalance(id)
+		_, userBalance, _, err := handler.getBalance(userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Failed to retrieve user balance", zap.Error(err))
@@ -631,7 +631,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		userBalance, err := handler.getBalance(id)
+		_, userBalance, _, err := handler.getBalance(userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Failed to retrieve user balance", zap.Error(err))

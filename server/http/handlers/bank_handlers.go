@@ -39,7 +39,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		userBalance, err := handler.getBalance(userDetails.ID)
+		_, userBalance, _, err := handler.getBalance(userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance: %s", err.Error())}}
@@ -298,7 +298,7 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 		return
 	}
 
-	userBalance, err := handler.getBalance(userDetails.ID)
+	_, userBalance, _, err := handler.getBalance(userDetails.ID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance: %s", err.Error())}}
@@ -548,7 +548,8 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	id := userDetails.ID
 
 	// refresh balance from DB/external
-	if err := handler.refreshBalance(id); err != nil {
+	updatedBalance, err := handler.refreshBalance(id)
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{
 			Status:  http.StatusInternalServerError,
@@ -561,8 +562,14 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if updatedBalance {
+		if err := handler.reconcileRedisWithMongo(id); err != nil {
+			handler.logger.Warn("could not reconcile redis with mongo after balance refresh", zap.Error(err), zap.String("userID", id))
+		}
+	}
+
 	// get actual balance
-	bal, err := handler.getBalance(id)
+	bal, available, held, err := handler.getBalance(id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{
@@ -574,15 +581,7 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// get held funds from redis
-	held, err := handler.redisClient.GetHeldFundsLua(id)
-	if err != nil {
-		handler.logger.Warn("could not fetch held funds", zap.Error(err))
-		held = 0
-	}
-
-	// compute available balance
-	available := bal.Sub(decimal.NewFromFloat(held))
+	heldFloat, _ := held.Float64()
 
 	// build response
 	userBalance := struct {
@@ -593,7 +592,7 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	}{
 		Balance:          bal.StringFixed(2),
 		AvailableBalance: available.StringFixed(2),
-		HeldFunds:        held,
+		HeldFunds:        heldFloat,
 		UserID:           id,
 	}
 
@@ -604,6 +603,37 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 		Data:    map[string]interface{}{"data": userBalance},
 	}
 	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) reconcileRedisWithMongo(userID string) error {
+
+	mongoBal, err := handler.store.GetBalance(userID)
+	if err != nil {
+		handler.logger.Error("failed to get mongo balance for reconciliation", zap.Error(err), zap.String("userID", userID))
+		return err
+	}
+
+	redisBal, err := handler.redisClient.GetBalance(userID)
+	if err != nil {
+		handler.logger.Error("failed to get redis balance for reconciliation", zap.Error(err), zap.String("userID", userID))
+		return err
+	}
+
+	if !mongoBal.Equal(redisBal) {
+		// need to first add to balance if it exists in redis
+		if err := handler.redisClient.AddToBalance(userID, mongoBal.Sub(redisBal)); err != nil {
+
+		}
+		// update redis to match mongo
+		if err := handler.redisClient.InitializeBalance(userID, mongoBal); err != nil {
+			handler.logger.Warn("failed to reconcile redis balance with mongo", zap.Error(err), zap.String("userID", userID))
+			return err
+		}
+		handler.logger.Info("successfully reconciled redis balance with mongo", zap.String("userID", userID), zap.String("mongoBalance", mongoBal.String()), zap.String("redisBalance", redisBal.String()))
+	}
+
+	return nil
+
 }
 
 // Call this fucction before payments.
@@ -672,55 +702,50 @@ func (handler *HttpHandler) getVirtualNuban(id string) (string, error) {
 	return acc_details.VirtualAccountID, nil
 }
 
-func (handler *HttpHandler) refreshBalance(userID string) error {
+func (handler *HttpHandler) refreshBalance(userID string) (bool, error) {
 	virtualNubanID, err := handler.getVirtualNuban(userID)
 	if err != nil {
 		handler.logger.Error(err.Error())
-		return err
+		return false, err
 	}
 
-	if err := handler.bankDep.Deposit(virtualNubanID, userID); err != nil {
+	updatedBalance, err := handler.bankDep.Deposit(virtualNubanID, userID)
+	if err != nil {
 		handler.logger.Error(err.Error())
-		return err
+		return false, err
 	}
 
-	return nil
+	return updatedBalance, nil
 }
 
-func (handler *HttpHandler) getBalance(userID string) (balance decimal.Decimal, err error) {
+func (handler *HttpHandler) getBalance(userID string) (balance decimal.Decimal, available decimal.Decimal, held decimal.Decimal, err error) {
 	// Try Redis first; only fallback on error (not on zero value).
-	redisBalFloat, err := handler.redisClient.GetBalance(userID)
+	redisBal, err := handler.redisClient.GetBalance(userID)
 	if err != nil {
 		// Redis read failed — fallback to MongoDB
 		mongoBal, dbErr := handler.store.GetBalance(userID)
 		if dbErr != nil {
-			return decimal.Decimal{}, dbErr
+			return decimal.Decimal{}, decimal.Decimal{}, decimal.Decimal{}, dbErr
 		}
 		// Use decimal from Mongo value and attempt to seed Redis in background
-		redisBalDec := mongoBal.Round(2)
-		if setErr := handler.redisClient.InitializeBalance(userID, redisBalDec); setErr != nil {
+		redisBal = mongoBal.Round(2)
+		if setErr := handler.redisClient.InitializeBalance(userID, redisBal); setErr != nil {
 			handler.logger.Warn("failed to seed redis initial balance", zap.Error(setErr), zap.String("userID", userID))
 		}
-		// get held funds
-		heldFloat, heldErr := handler.redisClient.GetHeldFundsLua(userID)
-		if heldErr != nil {
-			handler.logger.Warn("failed to get held funds from redis", zap.Error(heldErr), zap.String("userID", userID))
-			heldFloat = 0
-		}
-		return redisBalDec.Sub(decimal.NewFromFloat(heldFloat)), nil
 	}
 
-	// Redis succeeded — treat the returned value as authoritative (even if zero)
-	redisBalDec := redisBalFloat.Round(2)
-
+	// get held funds as decimal (best-effort)
 	heldFloat, heldErr := handler.redisClient.GetHeldFundsLua(userID)
 	if heldErr != nil {
 		handler.logger.Warn("failed to get held funds from redis", zap.Error(heldErr), zap.String("userID", userID))
-		heldFloat = 0
+		held = decimal.Zero
+	} else {
+		held = decimal.NewFromFloat(heldFloat)
 	}
 
-	available := redisBalDec.Sub(decimal.NewFromFloat(heldFloat))
-	return available, nil
+	available = redisBal.Sub(held)
+
+	return redisBal, available, held, nil
 }
 
 func (handler *HttpHandler) GetUserDetails(r *http.Request) (user *models.User, err error) {
