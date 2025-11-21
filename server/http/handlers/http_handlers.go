@@ -1237,26 +1237,32 @@ func (handler *HttpHandler) RefreshToken(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Set cookies again
-	http.SetCookie(w, &http.Cookie{
-		Name:     "access_token",
-		Value:    newAccess,
-		HttpOnly: true,
-		Secure:   true,
-		Path:     "/",
-		SameSite: http.SameSiteNoneMode,
-		MaxAge:   600,
-	})
+	accessCookie := &http.Cookie{
+		Name:        "access_token",
+		Value:       newAccess,
+		MaxAge:      600,
+		HttpOnly:    true,
+		Secure:      true,
+		Path:        "/",
+		SameSite:    http.SameSiteNoneMode,
+		Domain:      "aremxyplug.onrender.com",
+		Partitioned: true,
+	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
-		Value:    newRefresh,
-		HttpOnly: true,
-		Secure:   true,
-		Path:     "/api/v1/refresh-token",
-		SameSite: http.SameSiteNoneMode,
-		MaxAge:   86400,
-	})
+	refreshCookie := &http.Cookie{
+		Name:        "refresh_token",
+		Value:       newRefresh,
+		MaxAge:      1800,
+		HttpOnly:    true,
+		Secure:      true,
+		Path:        "/api/v1/refresh-token",
+		SameSite:    http.SameSiteNoneMode,
+		Domain:      "aremxyplug.onrender.com",
+		Partitioned: true,
+	}
+
+	http.SetCookie(w, accessCookie)
+	http.SetCookie(w, refreshCookie)
 
 	response := responseFormat.CustomResponse{
 		Status:  http.StatusOK,

@@ -122,17 +122,12 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 				handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
 
 			}
-			// persist DB balance (idempotent) — this preserves your original behaviour
-			if err := handler.updateBalance(userDetails.ID, newBal); err != nil {
-				handler.logger.Error("Failed to update user balance", zap.Error(err))
-				// keep behavior: return NotModified if persistence fails (as your original did)
-				w.WriteHeader(http.StatusInternalServerError)
-				response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-				json.NewEncoder(w).Encode(response)
-				return
-			}
 
 			if err := handler.updateBalance(id, newBal); err != nil {
+				if err == ErrorRedisBalanceUpdate {
+					// Log and continue
+					handler.logger.Warn("Balance update failed in Redis", zap.Error(err))
+				}
 				w.WriteHeader(http.StatusInternalServerError)
 				handler.logger.Error("Balance update failed after purchase", zap.Error(err))
 				response := responseFormat.CustomResponse{
@@ -378,6 +373,10 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			}
 
 			if err := handler.updateBalance(id, newBal); err != nil {
+				if err == ErrorRedisBalanceUpdate {
+					// Log and continue
+					handler.logger.Warn("Balance update failed in Redis", zap.Error(err))
+				}
 				w.WriteHeader(http.StatusInternalServerError)
 				handler.logger.Error("TV balance update failed", zap.Error(err))
 				response := responseFormat.CustomResponse{
@@ -600,6 +599,10 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			}
 
 			if err := handler.updateBalance(id, newBal); err != nil {
+				if err == ErrorRedisBalanceUpdate {
+					// Log and continue
+					handler.logger.Warn("Balance update failed in Redis", zap.Error(err))
+				}
 				w.WriteHeader(http.StatusInternalServerError)
 				handler.logger.Error("Electricity balance update failed", zap.Error(err))
 				response := responseFormat.CustomResponse{

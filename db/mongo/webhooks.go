@@ -2,10 +2,10 @@ package mongo
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"github.com/aremxyplug-be/db/models"
+	"github.com/shopspring/decimal"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -96,13 +96,11 @@ func (m *mongoStore) UpdateReceiptFinal(txID, status, sessionID string) error {
 	return err
 }
 
-func (m *mongoStore) UpdateUserBalanceFromRedis(userID string, balance float64) error {
+func (m *mongoStore) UpdateUserBalanceFromRedis(userID string, balance decimal.Decimal) error {
 	ctx := context.Background()
 	filter := bson.M{"user_id": userID}
 
-	balanceToParse := strconv.FormatFloat(balance, 'f', 2, 64)
-
-	bal, err := primitive.ParseDecimal128(balanceToParse)
+	bal, err := primitive.ParseDecimal128(balance.String())
 	if err != nil {
 		m.logger.Error(err.Error())
 		return err

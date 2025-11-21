@@ -51,9 +51,9 @@ func (handler *HttpHandler) placeRedisHoldAndMeta(w http.ResponseWriter, userID 
 		json.NewEncoder(w).Encode(response)
 		return "", nil
 	}
-	currentBalance, _ := bal.Float64()
 	holdTTL := 48 * time.Hour
-	if _, err := handler.redisClient.HoldFunds(userID, txnID, currentBalance, amount, holdTTL); err != nil {
+	amountDec := decimal.NewFromFloat(amount)
+	if _, err := handler.redisClient.HoldFunds(userID, txnID, bal, amountDec, holdTTL); err != nil {
 		handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userID))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{

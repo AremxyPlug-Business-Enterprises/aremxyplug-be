@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
@@ -25,7 +26,7 @@ type RedisConn struct {
 	logger *zap.Logger
 }
 
-func NewRedisConn(logger *zap.Logger) *RedisConn {
+func NewRedisConn(logger *zap.Logger) (*RedisConn, error) {
 	db, _ := strconv.Atoi(redisDB)
 
 	client := redis.NewClient(&redis.Options{
@@ -39,7 +40,8 @@ func NewRedisConn(logger *zap.Logger) *RedisConn {
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		logger.Fatal("Failed to connect to Redis", zap.Error(err))
+		logger.Error("Failed to connect to Redis", zap.Error(err))
+		return nil, err
 	} else {
 		logger.Info("Redis connected successfully")
 	}
@@ -47,7 +49,7 @@ func NewRedisConn(logger *zap.Logger) *RedisConn {
 	return &RedisConn{
 		client: client,
 		logger: logger,
-	}
+	}, nil
 }
 
 // Client returns the underlying *redis.Client.
@@ -203,41 +205,25 @@ func (r *RedisConn) Close() error {
 	return r.client.Close()
 }
 
-// SetInitialBalance sets the user's balance in Redis (lowest unit)
-func (r *RedisConn) SetInitialBalance(userID string, amount float64) error {
+// InitializeBalance sets the user's balance in Redis (lowest unit)
+func (r *RedisConn) InitializeBalance(userID string, amount decimal.Decimal) error {
 	ctx := context.Background()
 	key := fmt.Sprintf("balance:%s", userID)
-	return r.client.Set(ctx, key, amount, 0).Err()
+	return r.client.Set(ctx, key, amount.String(), time.Hour*1).Err()
 }
 
 // GetBalance returns integer balance (available balance; holds are separate)
-func (r *RedisConn) GetBalance(userID string) (float64, error) {
+func (r *RedisConn) GetBalance(userID string) (decimal.Decimal, error) {
 	ctx := context.Background()
 	key := fmt.Sprintf("balance:%s", userID)
-	return r.client.Get(ctx, key).Float64()
-}
-
-// InitializeBalance sets a user's balance if it doesn't exist
-func (r *RedisConn) InitializeBalance(userID string, initialBalance float64) error {
-	ctx := context.Background()
-	balanceKey := fmt.Sprintf("balance:%s", userID)
-
-	// Use SET with NX (Only set if not exists) to avoid overwriting existing balances
-	result, err := r.client.SetNX(ctx, balanceKey, initialBalance, 0).Result()
+	val, err := r.client.Get(ctx, key).Result()
 	if err != nil {
-		return err
+		return decimal.Zero, err
 	}
-
-	if result {
-		r.logger.Info("Initialized balance for user",
-			zap.String("userID", userID),
-			zap.Float64("balance", initialBalance))
-	}
-
-	return nil
+	return decimal.NewFromString(val)
 }
 
-func (r *RedisConn) HoldFunds(userID, txID string, currentBalance, amount float64, ttl time.Duration) (float64, error) {
+func (r *RedisConn) HoldFunds(userID, txID string, currentBalance decimal.Decimal, amount decimal.Decimal, ttl time.Duration) (decimal.Decimal, error) {
 	ctx := context.Background()
 	balanceKey := fmt.Sprintf("balance:%s", userID)
 	holdKey := fmt.Sprintf("hold:%s:%s", userID, txID)
@@ -246,51 +232,55 @@ func (r *RedisConn) HoldFunds(userID, txID string, currentBalance, amount float6
 	exists, err := r.client.Exists(ctx, balanceKey).Result()
 	if err != nil {
 		r.logger.Error("Failed to check balance existence in Redis", zap.Error(err))
-		return 0, err
+		return decimal.Zero, err
 	}
 
 	// Initialize with 0 if balance doesn't exist
 	if exists == 0 {
 		r.logger.Warn("Balance key does not exist, initializing to balance", zap.String("userID", userID))
 		if err := r.InitializeBalance(userID, currentBalance); err != nil {
-			return 0, err
+			return decimal.Zero, err
 		}
 	}
 
 	res, err := holdScript.Run(ctx, r.client, []string{balanceKey, holdKey}, amount, int(ttl.Seconds())).Result()
 	if err != nil {
 		r.logger.Error("Failed to hold funds in Redis", zap.Error(err))
-		return 0, err
+		return decimal.Zero, err
 	}
 
 	switch v := res.(type) {
 	case float64:
 		if v < 0 {
 			if v == -1 {
-				return 0, errors.New("insufficient funds")
+				return decimal.Zero, errors.New("insufficient funds")
 			}
-			return 0, fmt.Errorf("script returned error code: %f", v)
+			return decimal.Zero, fmt.Errorf("script returned error code: %f", v)
 		}
-		return v, nil
+		return decimal.NewFromFloat(v), nil
 	case int64:
 		if v < 0 {
 			if v == -1 {
-				return 0, errors.New("insufficient funds")
+				return decimal.Zero, errors.New("insufficient funds")
 			}
-			return 0, fmt.Errorf("script returned error code: %d", v)
+			return decimal.Zero, fmt.Errorf("script returned error code: %d", v)
 		}
-		return float64(v), nil
+		return decimal.NewFromInt(v), nil
 	case string:
 		// Try to parse as float
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			return f, nil
+			return decimal.NewFromFloat(f), nil
 		}
 		// If parsing fails, try to get balance directly
-		return r.client.Get(ctx, balanceKey).Float64()
+		valStr, err := r.client.Get(ctx, balanceKey).Result()
+		if err != nil {
+			return decimal.Zero, err
+		}
+		return decimal.NewFromString(valStr)
 	case nil:
-		return 0, errors.New("script returned nil")
+		return decimal.Zero, errors.New("script returned nil")
 	default:
-		return 0, fmt.Errorf("invalid return type from script: %T", v)
+		return decimal.Zero, fmt.Errorf("invalid return type from script: %T", v)
 	}
 }
 
@@ -417,10 +407,15 @@ func (r *RedisConn) GetMeta(txID string, dest interface{}) (bool, error) {
 	return true, nil
 }
 
-func (r *RedisConn) AddToBalance(userID string, amount float64) error {
+func (r *RedisConn) AddToBalance(userID string, amount decimal.Decimal) error {
 	ctx := context.Background()
 	key := fmt.Sprintf("balance:%s", userID)
-	return r.client.IncrByFloat(ctx, key, amount).Err()
+	f, exact := amount.Float64()
+	if !exact {
+		// log warning if loss may occur
+		r.logger.Warn("Converting decimal to float64 may lose precision", zap.String("amount", amount.String()))
+	}
+	return r.client.IncrByFloat(ctx, key, f).Err()
 }
 
 func (r *RedisConn) Allow(ctx context.Context, key string, limit int, window time.Duration) (bool, int64, error) {
