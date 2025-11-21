@@ -134,6 +134,10 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 				handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
 			}
 			if err := handler.updateBalance(id, newBal); err != nil {
+				if err == ErrorRedisBalanceUpdate {
+					// Log and continue
+					handler.logger.Warn("Airtime balance update failed in Redis", zap.Error(err))
+				}
 				w.WriteHeader(http.StatusInternalServerError)
 				handler.logger.Error("Airtime balance update failed", zap.Error(err))
 				response := responseFormat.CustomResponse{
@@ -466,10 +470,14 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if err := handler.updateBalance(id, newBal); err != nil {
-				w.WriteHeader(http.StatusNotModified)
+				if err == ErrorRedisBalanceUpdate {
+					// Log and continue
+					handler.logger.Warn("Data balance update failed in Redis", zap.Error(err))
+				}
+				w.WriteHeader(http.StatusInternalServerError)
 				handler.logger.Error("Failed to update user balance", zap.Error(err))
 				response := responseFormat.CustomResponse{
-					Status:  http.StatusNotModified,
+					Status:  http.StatusInternalServerError,
 					Message: "error",
 					Data:    map[string]interface{}{"data": "Payment successful but server failed to modify balance"},
 				}
@@ -664,10 +672,14 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 		}
 
 		if err := handler.updateBalance(id, newBal); err != nil {
-			w.WriteHeader(http.StatusNotModified)
+			if err == ErrorRedisBalanceUpdate {
+				// Log and continue
+				handler.logger.Warn("Balance update failed in Redis", zap.Error(err))
+			}
+			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to update user balance", zap.Error(err))
 			response := responseFormat.CustomResponse{
-				Status:  http.StatusNotModified,
+				Status:  http.StatusInternalServerError,
 				Message: "error",
 				Data:    map[string]interface{}{"data": "Payment successful but server failed to modify balance"},
 			}

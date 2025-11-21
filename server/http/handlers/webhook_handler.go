@@ -183,18 +183,39 @@ func (handler *HttpHandler) processTransfer(p webhookPayload) error {
 		UserID string `json:"user_id"`
 		Amount int64  `json:"amount"`
 	}
-	found, err := handler.redisClient.GetMeta(txID, meta)
-	if !found || err != nil {
-		handler.logger.Warn("failed to read transfer meta from redis", zap.String("txID", txID))
-	} else {
-		// fallback to receipt values
+	found, err := handler.redisClient.GetMeta(txID, &meta) // pass pointer
+	if err != nil {
+		// Redis error: log and fall back to receipt values
+		handler.logger.Warn("failed to read transfer meta from redis, falling back to receipt", zap.String("txID", txID), zap.Error(err))
 		meta.UserID = rec.UserID
 		if rec.Amount != "" {
-			if amt, err := strconv.ParseInt(rec.Amount, 10, 64); err == nil {
+			if amt, perr := strconv.ParseInt(rec.Amount, 10, 64); perr == nil {
 				meta.Amount = amt
 			} else {
-				handler.logger.Warn("failed to parse receipt amount", zap.String("amount", rec.Amount), zap.Error(err))
+				handler.logger.Warn("failed to parse receipt amount, using 0", zap.String("amount", rec.Amount), zap.Error(perr))
 				meta.Amount = 0
+			}
+		}
+	} else if !found {
+		// Not found: fall back to receipt values
+		handler.logger.Warn("transfer meta not found in redis, falling back to receipt", zap.String("txID", txID))
+		meta.UserID = rec.UserID
+		if rec.Amount != "" {
+			if amt, perr := strconv.ParseInt(rec.Amount, 10, 64); perr == nil {
+				meta.Amount = amt
+			} else {
+				handler.logger.Warn("failed to parse receipt amount, using 0", zap.String("amount", rec.Amount), zap.Error(perr))
+				meta.Amount = 0
+			}
+		}
+	} else {
+		// meta loaded from redis successfully; keep it. If some fields missing, fall back to receipt minimally.
+		if meta.UserID == "" {
+			meta.UserID = rec.UserID
+		}
+		if meta.Amount == 0 && rec.Amount != "" {
+			if amt, perr := strconv.ParseInt(rec.Amount, 10, 64); perr == nil {
+				meta.Amount = amt
 			}
 		}
 	}
@@ -364,10 +385,10 @@ func (handler HttpHandler) processDeposit(p webhookPayload) error {
 		return err
 	}
 
-	createdAt, err := time.Parse("2006-01-02T15:04:05", created_At)
+	createdAt, err := time.Parse(time.RFC3339, created_At)
 	if err != nil {
-		handler.logger.Error("Deposit failed: unable to parse createdAt", zap.Error(err))
-		return err
+		handler.logger.Warn("Deposit: unable to parse createdAt, using current time", zap.String("createdAt", created_At), zap.Error(err))
+		createdAt = time.Now().UTC()
 	}
 
 	result := models.DepositResponse{

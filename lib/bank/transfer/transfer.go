@@ -12,6 +12,7 @@ import (
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
+	"github.com/aremxyplug-be/db/redis"
 	"github.com/aremxyplug-be/lib/balance"
 	"github.com/aremxyplug-be/lib/randomgen"
 	"github.com/shopspring/decimal"
@@ -33,12 +34,14 @@ var (
 type Config struct {
 	db     db.DataStore
 	logger *zap.Logger
+	redis  *redis.RedisConn
 }
 
-func NewConfig(store db.DataStore, logger *zap.Logger) *Config {
+func NewConfig(store db.DataStore, logger *zap.Logger, redis *redis.RedisConn) *Config {
 	return &Config{
 		db:     store,
 		logger: logger,
+		redis:  redis,
 	}
 }
 
@@ -120,28 +123,6 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 		return models.TransferResponse{}, err
 	}
 
-	// save the new deposit receipt for the reciever's account
-	dept := models.DepositResponse{
-		UserID:                 user.ID,
-		Amount:                 fmt.Sprintf("%v", data.Amount),
-		Bank_Name:              senderBank.Bank_Name,
-		Account_Name:           senderBank.Account_Name,
-		Account_No:             senderBank.Account_No,
-		TransactionProduct:     "Internal Deposit",
-		TransactionDescription: "NGN Wallet Top Up",
-		Message:                data.Reason,
-		Reference:              trfTransactionID,
-		Order_ID:               depOrderID,
-		Transaction_ID:         depTransactionID,
-		Status:                 "success",
-		CreatedAt:              time.Now().UTC(),
-	}
-
-	if err := c.db.SaveDeposit(dept); err != nil {
-		c.logger.Error(err.Error())
-		return models.TransferResponse{}, err
-	}
-
 	trf := models.TransferResponse{
 		Status:                 "success",
 		Amount:                 fmt.Sprintf("%v", data.Amount),
@@ -163,6 +144,48 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 	if err := c.saveTransaction(trf); err != nil {
 		c.logger.Error(err.Error())
 		return trf, DBConnectionError(err)
+	}
+
+	// save the new deposit receipt for the reciever's account
+	dept := models.DepositResponse{
+		UserID:                 user.ID,
+		Amount:                 fmt.Sprintf("%v", data.Amount),
+		Bank_Name:              senderBank.Bank_Name,
+		Account_Name:           senderBank.Account_Name,
+		Account_No:             senderBank.Account_No,
+		TransactionProduct:     "Internal Deposit",
+		TransactionDescription: "NGN Wallet Top Up",
+		Message:                data.Reason,
+		Reference:              trfTransactionID,
+		Order_ID:               depOrderID,
+		Transaction_ID:         depTransactionID,
+		Status:                 "success",
+		CreatedAt:              time.Now().UTC(),
+	}
+
+	// amount as decimal (lowest units handled by balance.NewBalanceDeposit earlier)
+	amountDec := decimal.NewFromFloatWithExponent(data.Amount, -2)
+
+	// need to use redis to update balance here as well
+	if err := c.db.SaveDeposit(dept); err != nil {
+		c.logger.Error(err.Error())
+		return models.TransferResponse{}, err
+	}
+
+	if c.redis != nil {
+		if err := c.redis.AddToBalance(user.ID, amountDec); err != nil {
+			c.logger.Warn("redis AddToBalance failed; attempting to seed and retry", zap.Error(err), zap.String("userID", user.ID))
+
+			// seed redis with the canonical DB balance (use newBalance produced earlier)
+			// newBalance is the decimal from db.UpdateBalance call above
+			if seedErr := c.redis.InitializeBalance(user.ID, newBalance); seedErr != nil {
+				c.logger.Warn("failed to seed redis with DB balance", zap.Error(seedErr), zap.String("userID", user.ID))
+			} else {
+				if retryErr := c.redis.AddToBalance(user.ID, amountDec); retryErr != nil {
+					c.logger.Warn("retry AddToBalance after seeding failed", zap.Error(retryErr), zap.String("userID", user.ID))
+				}
+			}
+		}
 	}
 
 	return trf, nil

@@ -112,6 +112,10 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 			}
 			// persist DB balance (idempotent) — this preserves your original behaviour
 			if err := handler.updateBalance(userDetails.ID, newBal); err != nil {
+				if err == ErrorRedisBalanceUpdate {
+					// Log and continue
+					handler.logger.Warn("Balance update failed in Redis", zap.Error(err))
+				}
 				handler.logger.Error("Failed to update user balance", zap.Error(err))
 				// keep behavior: return NotModified if persistence fails (as your original did)
 				w.WriteHeader(http.StatusInternalServerError)
@@ -344,6 +348,10 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 		}
 		// persist DB balance (idempotent) — this preserves your original behaviour
 		if err := handler.updateBalance(userDetails.ID, newBal); err != nil {
+			if err == ErrorRedisBalanceUpdate {
+				// Log and continue
+				handler.logger.Warn("Balance update failed in Redis", zap.Error(err))
+			}
 			handler.logger.Error("Failed to update user balance", zap.Error(err))
 			// keep behavior: return NotModified if persistence fails (as your original did)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -638,10 +646,16 @@ func (handler *HttpHandler) checkTransfer(bal decimal.Decimal, amount float64) (
 
 }
 
+var ErrorRedisBalanceUpdate = errors.New("could not update redis balance")
+
 func (handler *HttpHandler) updateBalance(userID string, newBalance float64) error {
 
 	if err := handler.bankTranc.UpdateBalance(userID, newBalance); err != nil {
 		return err
+	}
+
+	if err := handler.updateBalanceOnTransaction(userID, decimal.NewFromFloat(newBalance)); err != nil {
+		return ErrorRedisBalanceUpdate
 	}
 
 	return nil
@@ -684,7 +698,7 @@ func (handler *HttpHandler) getBalance(userID string) (balance decimal.Decimal, 
 		}
 		// Use decimal from Mongo value and attempt to seed Redis in background
 		redisBalDec := mongoBal.Round(2)
-		if setErr := handler.redisClient.SetInitialBalance(userID, mustFloat64(redisBalDec)); setErr != nil {
+		if setErr := handler.redisClient.InitializeBalance(userID, redisBalDec); setErr != nil {
 			handler.logger.Warn("failed to seed redis initial balance", zap.Error(setErr), zap.String("userID", userID))
 		}
 		// get held funds
@@ -697,7 +711,7 @@ func (handler *HttpHandler) getBalance(userID string) (balance decimal.Decimal, 
 	}
 
 	// Redis succeeded — treat the returned value as authoritative (even if zero)
-	redisBalDec := decimal.NewFromFloat(redisBalFloat).Round(2)
+	redisBalDec := redisBalFloat.Round(2)
 
 	heldFloat, heldErr := handler.redisClient.GetHeldFundsLua(userID)
 	if heldErr != nil {
@@ -707,12 +721,6 @@ func (handler *HttpHandler) getBalance(userID string) (balance decimal.Decimal, 
 
 	available := redisBalDec.Sub(decimal.NewFromFloat(heldFloat))
 	return available, nil
-}
-
-// helper: convert decimal.Decimal to float64 for SetInitialBalance calls (handles error ignored here)
-func mustFloat64(d decimal.Decimal) float64 {
-	f, _ := d.Float64()
-	return f
 }
 
 func (handler *HttpHandler) GetUserDetails(r *http.Request) (user *models.User, err error) {
@@ -738,26 +746,32 @@ func (handler *HttpHandler) GetUserDetails(r *http.Request) (user *models.User, 
 }
 
 // Call this after a successful deposit to update Redis balance
-func (handler *HttpHandler) updateBalanceOnDeposit(userID string, amount float64) error {
-	// Add to Redis balance
+// ...existing code...
+func (handler *HttpHandler) updateBalanceOnTransaction(userID string, amount decimal.Decimal) error {
+
+	// Ensure Redis has an initialized balance for this user; if not, seed from Mongo.
+	if _, err := handler.redisClient.GetBalance(userID); err != nil {
+		// Redis missing or returned an error — fallback to Mongo to seed Redis
+		mongoBal, dbErr := handler.store.GetBalance(userID)
+		if dbErr != nil {
+			handler.logger.Error("failed to read balance from mongo while seeding redis", zap.Error(dbErr), zap.String("userID", userID))
+			return dbErr
+		}
+
+		seed := mongoBal.Round(2)
+		if setErr := handler.redisClient.InitializeBalance(userID, seed); setErr != nil {
+			// non-fatal: log and continue — AddToBalance will still create/increment the key
+			handler.logger.Warn("failed to seed redis initial balance", zap.Error(setErr), zap.String("userID", userID))
+		}
+	}
+
+	// Add the transaction amount to the Redis balance (best-effort)
 	if err := handler.redisClient.AddToBalance(userID, amount); err != nil {
-		handler.logger.Error("Failed to update Redis balance on deposit", zap.Error(err), zap.String("userID", userID))
+		handler.logger.Error("Failed to update Redis balance on transaction", zap.Error(err), zap.String("userID", userID))
 		return err
 	}
+
 	return nil
 }
 
-// Call this after a successful point redeem to update Redis balance
-func (handler *HttpHandler) updateBalanceOnPointRedeem(userID string, amount float64) error {
-	// Add to Redis balance
-	if err := handler.redisClient.AddToBalance(userID, amount); err != nil {
-		handler.logger.Error("Failed to update Redis balance on point redeem", zap.Error(err), zap.String("userID", userID))
-		return err
-	}
-	return nil
-}
-
-// update the user balance using the UserID
-// get the user balance using the UserID
-
-// create a delete user operation, delete the user and all associated virtualNuban. Save the transaction details.
+// ...existing code...

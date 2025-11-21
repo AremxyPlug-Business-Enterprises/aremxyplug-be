@@ -54,6 +54,11 @@ func main() {
 		logger.Fatal("failed to open mongodb", zap.Error(err))
 	}
 
+	redisClient, err := redis.NewRedisConn(logger)
+	if err != nil {
+		logger.Fatal("failed to connect to redis", zap.Error(err))
+	}
+
 	sshFactory := func() (*ssh.Client, error) {
 		return createSSHClient()
 	}
@@ -74,12 +79,11 @@ func main() {
 	electSub := elect.NewElectricConn(store, logger)
 	virtualAcc := bankacc.NewBankConfig(store, logger)
 	bankTransc := transactions.NewTransaction(store)
-	bankTrf := transfer.NewConfig(store, logger)
+	bankTrf := transfer.NewConfig(store, logger, redisClient)
 	bankDep := deposit.NewDepositConfig(store, logger)
 	point := pointredeem.NewPointConfig(store)
 	pin := auth_pin.NewPinConfig(logger, store)
 	sms := termii.NewSMSConn(store, logger)
-	redisClient := redis.NewRedisConn(logger)
 	auth := auth.NewAuthConn(secrets, redisClient)
 	scheduler := scheduler.NewScheduler(redisClient, store, logger)
 
