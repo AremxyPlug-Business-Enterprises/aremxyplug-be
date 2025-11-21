@@ -1198,11 +1198,15 @@ func (handler *HttpHandler) RefreshToken(w http.ResponseWriter, r *http.Request)
 	}
 
 	refresh := cookie.Value
+	handler.logger.Debug("RefreshToken: cookie value", zap.String("refresh_cookie", refresh))
+
 	claims, err := handler.jwt.ValidateToken(refresh)
 	if err != nil {
+		handler.logger.Warn("RefreshToken: token validation failed", zap.Error(err))
 		http.Error(w, "invalid refresh token", http.StatusUnauthorized)
 		return
 	}
+	handler.logger.Debug("RefreshToken: token validated", zap.Any("claims", claims))
 
 	userID := claims.ID
 	sessionKey := fmt.Sprintf("session:%s", userID)
