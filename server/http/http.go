@@ -120,7 +120,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 		router.Post("/webhook", httpHandler.WebhookHandler)
 
 		// refresh token
-		router.Post("/refresh-token", httpHandler.RefreshToken)
+		router.Get("/refresh-token", httpHandler.RefreshToken)
 
 		// SignUp
 		router.Post("/signup", httpHandler.SignUp)
