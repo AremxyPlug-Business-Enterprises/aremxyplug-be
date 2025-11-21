@@ -54,7 +54,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		bal, err := handler.getBalance(id)
+		_, bal, _, err := handler.getBalance(userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError) // Assume DB error
 			handler.logger.Error("Failed to get balance", zap.Error(err))
@@ -299,7 +299,7 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		bal, err := handler.getBalance(id)
+		_, bal, _, err := handler.getBalance(userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError) // Assume DB error
 			handler.logger.Error("Failed to get balance", zap.Error(err))
@@ -532,7 +532,7 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 		}
 		data.FullName = userDetails.Username
 
-		bal, err := handler.getBalance(id)
+		_, bal, _, err := handler.getBalance(userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to get balance", zap.Error(err))

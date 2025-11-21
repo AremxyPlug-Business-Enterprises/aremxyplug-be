@@ -40,19 +40,19 @@ func NewDepositConfig(db db.DataStore, logger *zap.Logger) *Config {
 	}
 }
 
-func (c *Config) Deposit(virtualaccountid string, userID string) error {
+func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, err error) {
 	// using the list payment endpoint.
 	url := fmt.Sprintf("%s/%s?%s=%s", api, "payments", "virtualNubanId", virtualaccountid)
 
 	if virtualaccountid == "" {
 		c.logger.Error("Deposit failed: missing account number")
-		return ErrEmptyVirtualNuban
+		return false, ErrEmptyVirtualNuban
 	}
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		c.logger.Error("Deposit failed: unable to create new request", zap.Error(err))
-		return ErrNewRequestFailed
+		return false, ErrNewRequestFailed
 	}
 	req.Header.Add("accept", "application/json")
 	req.Header.Add("x-anchor-key", apikey)
@@ -61,7 +61,7 @@ func (c *Config) Deposit(virtualaccountid string, userID string) error {
 	resp, err := client.Do(req)
 	if err != nil {
 		c.logger.Error("Deposit failed: API connection error", zap.Error(err))
-		return ErrAPIConnectionFailed
+		return false, ErrAPIConnectionFailed
 	}
 	defer resp.Body.Close()
 
@@ -69,22 +69,24 @@ func (c *Config) Deposit(virtualaccountid string, userID string) error {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		c.logger.Error("Deposit failed: unable to read response body", zap.Error(err))
-		return JSONError(err)
+		return false, JSONError(err)
 	}
 	c.logger.Debug("API Response Body", zap.String("body", string(body)))
 
 	if err := json.Unmarshal(body, &apiResponse); err != nil {
 		c.logger.Error("Deposit failed: unable to unmarshal JSON response", zap.Error(err))
-		return JSONError(err)
+		return false, JSONError(err)
 	}
 	c.logger.Debug("Parsed API Response", zap.Any("response", apiResponse))
+
+	updatedAny := false
 
 	paymentData := apiResponse.Data
 	for _, data := range paymentData {
 		orderID, err := randomgen.GenerateOrderID()
 		if err != nil {
 			c.logger.Error("Deposit failed: unable to generate order ID", zap.Error(err))
-			return err
+			return updatedAny, err
 		}
 
 		transctionID := randomgen.GenerateTransactionID("dep")
@@ -101,13 +103,13 @@ func (c *Config) Deposit(virtualaccountid string, userID string) error {
 				continue
 			}
 			c.logger.Error("Deposit failed: unable to save deposit ID", zap.Error(err))
-			return DBConnectionError(err)
+			return updatedAny, DBConnectionError(err)
 		}
 
 		bal, err := c.db.GetBalance(userID)
 		if err != nil {
 			c.logger.Error("Deposit failed: unable to fetch balance", zap.Error(err))
-			return DBConnectionError(err)
+			return updatedAny, DBConnectionError(err)
 		}
 		c.logger.Debug("Fetched Balance", zap.Any("balance", bal))
 
@@ -124,13 +126,13 @@ func (c *Config) Deposit(virtualaccountid string, userID string) error {
 		}
 		if err := c.db.SaveBalance(userID, userBalance); err != nil {
 			c.logger.Error("Deposit failed: unable to save user balance", zap.Error(err))
-			return DBConnectionError(err)
+			return updatedAny, DBConnectionError(err)
 		}
 
 		createdAt, err := time.Parse("2006-01-02T15:04:05", data.Attributes.CreatedAt)
 		if err != nil {
 			c.logger.Error("Deposit failed: unable to parse createdAt", zap.Error(err))
-			return err
+			return updatedAny, err
 		}
 
 		result := models.DepositResponse{
@@ -152,12 +154,14 @@ func (c *Config) Deposit(virtualaccountid string, userID string) error {
 
 		if err := c.saveTransaction(result); err != nil {
 			c.logger.Error("Deposit failed: unable to save transaction", zap.Error(err))
-			return DBConnectionError(err)
+			return updatedAny, DBConnectionError(err)
 		}
 		c.logger.Info("Deposit transaction saved successfully", zap.Any("transaction", result))
+
+		updatedAny = true
 	}
 
-	return nil
+	return updatedAny, nil
 }
 
 // write to save transaction to the database
