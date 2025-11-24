@@ -243,7 +243,7 @@ func (r *RedisConn) HoldFunds(userID, txID string, currentBalance decimal.Decima
 		}
 	}
 
-	res, err := holdScript.Run(ctx, r.client, []string{balanceKey, holdKey}, amount, int(ttl.Seconds())).Result()
+	res, err := holdScript.Run(ctx, r.client, []string{balanceKey, holdKey}, amount.String(), int(ttl.Seconds())).Result()
 	if err != nil {
 		r.logger.Error("Failed to hold funds in Redis", zap.Error(err))
 		return decimal.Zero, err
@@ -431,4 +431,51 @@ func (r *RedisConn) Allow(ctx context.Context, key string, limit int, window tim
 
 	allowed := count <= int64(limit)
 	return allowed, count, nil
+}
+
+// PublishUserEvent publishes a JSON event to a user-specific Redis channel.
+func (r *RedisConn) PublishUserEvent(ctx context.Context, userID string, event interface{}) error {
+	b, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	channel := fmt.Sprintf("transfer:events:%s", userID)
+	// short timeout so publish doesn't block
+	ctxPub, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return r.client.Publish(ctxPub, channel, b).Err()
+}
+
+// SubscribeUserEvents subscribes to a user's event channel and returns a channel of JSON payloads.
+// Caller cancels ctx to stop the subscription; the returned channel will be closed.
+func (r *RedisConn) SubscribeUserEvents(ctx context.Context, userID string) (<-chan string, error) {
+	out := make(chan string)
+	channel := fmt.Sprintf("transfer:events:%s", userID)
+	pubsub := r.client.Subscribe(ctx, channel)
+
+	// ensure subscription established
+	if _, err := pubsub.Receive(ctx); err != nil {
+		_ = pubsub.Close()
+		return nil, err
+	}
+
+	ch := pubsub.Channel()
+
+	go func() {
+		defer close(out)
+		defer pubsub.Close()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case m, ok := <-ch:
+				if !ok {
+					return
+				}
+				out <- m.Payload
+			}
+		}
+	}()
+
+	return out, nil
 }
