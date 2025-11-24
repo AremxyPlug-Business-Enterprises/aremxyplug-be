@@ -144,16 +144,17 @@ var (
 	// ARGV[1] = amount (integer)
 	// ARGV[2] = holdTTLSeconds
 	holdScript = redis.NewScript(`
-local bal = tonumber(redis.call("GET", KEYS[1]) or "0")
-local amt = tonumber(ARGV[1])
-if bal < amt then
-    return -1
-end
--- Use INCRBYFLOAT with negative value to decrement
-redis.call("INCRBYFLOAT", KEYS[1], -amt)
-redis.call("SET", KEYS[2], ARGV[1], "EX", ARGV[2])
--- Get the updated balance to return
-return tonumber(redis.call("GET", KEYS[1]))
+	local bal = tonumber(redis.call("GET", KEYS[1]) or "0")
+	local amt = tonumber(ARGV[1])
+	if not amt then
+		return -2
+	end
+	if bal < amt then
+		return -1
+	end
+	redis.call("INCRBYFLOAT", KEYS[1], -amt)
+	redis.call("SET", KEYS[2], ARGV[1], "EX", ARGV[2])
+	return tonumber(redis.call("GET", KEYS[1]))
 `)
 
 	// release script:
@@ -235,7 +236,7 @@ func (r *RedisConn) HoldFunds(userID, txID string, currentBalance decimal.Decima
 		return decimal.Zero, err
 	}
 
-	// Initialize with 0 if balance doesn't exist
+	// Initialize with provided balance if the key doesn't exist
 	if exists == 0 {
 		r.logger.Warn("Balance key does not exist, initializing to balance", zap.String("userID", userID))
 		if err := r.InitializeBalance(userID, currentBalance); err != nil {
@@ -243,42 +244,64 @@ func (r *RedisConn) HoldFunds(userID, txID string, currentBalance decimal.Decima
 		}
 	}
 
-	res, err := holdScript.Run(ctx, r.client, []string{balanceKey, holdKey}, amount, int(ttl.Seconds())).Result()
+	// Run LUA script
+	res, err := holdScript.Run(
+		ctx,
+		r.client,
+		[]string{balanceKey, holdKey},
+		amount.String(),
+		int(ttl.Seconds()),
+	).Result()
+
 	if err != nil {
 		r.logger.Error("Failed to hold funds in Redis", zap.Error(err))
 		return decimal.Zero, err
 	}
 
 	switch v := res.(type) {
+
 	case float64:
-		if v < 0 {
-			if v == -1 {
+		iv := int64(v)
+		if iv < 0 {
+			switch iv {
+			case -1:
 				return decimal.Zero, errors.New("insufficient funds")
+			case -2:
+				return decimal.Zero, errors.New("invalid amount")
+			default:
+				return decimal.Zero, fmt.Errorf("script returned error code: %d", iv)
 			}
-			return decimal.Zero, fmt.Errorf("script returned error code: %f", v)
 		}
 		return decimal.NewFromFloat(v), nil
+
 	case int64:
 		if v < 0 {
-			if v == -1 {
+			switch v {
+			case -1:
 				return decimal.Zero, errors.New("insufficient funds")
+			case -2:
+				return decimal.Zero, errors.New("invalid amount")
+			default:
+				return decimal.Zero, fmt.Errorf("script returned error code: %d", v)
 			}
-			return decimal.Zero, fmt.Errorf("script returned error code: %d", v)
 		}
 		return decimal.NewFromInt(v), nil
+
 	case string:
-		// Try to parse as float
+		// Script might return a string if Redis coerces it
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			return decimal.NewFromFloat(f), nil
 		}
-		// If parsing fails, try to get balance directly
+		// If parsing fails, fallback to reading the balance directly
 		valStr, err := r.client.Get(ctx, balanceKey).Result()
 		if err != nil {
 			return decimal.Zero, err
 		}
 		return decimal.NewFromString(valStr)
+
 	case nil:
 		return decimal.Zero, errors.New("script returned nil")
+
 	default:
 		return decimal.Zero, fmt.Errorf("invalid return type from script: %T", v)
 	}
@@ -431,4 +454,51 @@ func (r *RedisConn) Allow(ctx context.Context, key string, limit int, window tim
 
 	allowed := count <= int64(limit)
 	return allowed, count, nil
+}
+
+// PublishUserEvent publishes a JSON event to a user-specific Redis channel.
+func (r *RedisConn) PublishUserEvent(ctx context.Context, userID string, event interface{}) error {
+	b, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	channel := fmt.Sprintf("transfer:events:%s", userID)
+	// short timeout so publish doesn't block
+	ctxPub, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return r.client.Publish(ctxPub, channel, b).Err()
+}
+
+// SubscribeUserEvents subscribes to a user's event channel and returns a channel of JSON payloads.
+// Caller cancels ctx to stop the subscription; the returned channel will be closed.
+func (r *RedisConn) SubscribeUserEvents(ctx context.Context, userID string) (<-chan string, error) {
+	out := make(chan string)
+	channel := fmt.Sprintf("transfer:events:%s", userID)
+	pubsub := r.client.Subscribe(ctx, channel)
+
+	// ensure subscription established
+	if _, err := pubsub.Receive(ctx); err != nil {
+		_ = pubsub.Close()
+		return nil, err
+	}
+
+	ch := pubsub.Channel()
+
+	go func() {
+		defer close(out)
+		defer pubsub.Close()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case m, ok := <-ch:
+				if !ok {
+					return
+				}
+				out <- m.Payload
+			}
+		}
+	}()
+
+	return out, nil
 }
