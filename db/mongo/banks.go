@@ -23,6 +23,7 @@ var (
 	virtualColl  = "virtualAccount"
 	counterColl  = "counterParty"
 	deptColl     = "deposit_IDs"
+	tasksColl    = "tasks"
 )
 
 var (
@@ -496,7 +497,7 @@ func (m *mongoStore) SavePin(data models.UserPin) error {
 		return err
 	}
 
-	filter := bson.M{"id": data.UserID, "has_Pin": false}
+	filter := bson.M{"user_id": data.UserID, "has_Pin": false}
 	update := bson.M{
 		"$set": bson.M{
 			"has_Pin": true,
@@ -518,7 +519,7 @@ func (m *mongoStore) SavePin(data models.UserPin) error {
 // code to get the pin from the database
 func (m *mongoStore) GetPin(userID string) (string, error) {
 	ctx := context.Background()
-	filter := bson.D{primitive.E{Key: "userid", Value: userID}}
+	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
 
 	result := m.col("pin").FindOne(ctx, filter)
 	var resp models.UserPin
@@ -539,9 +540,11 @@ func (m *mongoStore) UpdatePin(data models.UserPin) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.D{primitive.E{Key: "userid", Value: data.UserID}}
+	filter := bson.D{primitive.E{Key: "user_id", Value: data.UserID}}
 
-	updateFilter := bson.D{{Key: "$set", Value: bson.D{primitive.E{Key: "pin", Value: data.Pin}}}}
+	// need to update update the updated_at field as well
+
+	updateFilter := bson.D{{Key: "$set", Value: bson.D{primitive.E{Key: "pin", Value: data.Pin}, {Key: "updated_at", Value: time.Now().UTC()}}}}
 
 	_, err := m.col("pin").UpdateOne(ctx, filter, updateFilter)
 	if err != nil {

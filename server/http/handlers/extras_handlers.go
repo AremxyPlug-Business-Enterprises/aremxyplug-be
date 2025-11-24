@@ -183,8 +183,10 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 		}
 
 		pin := models.UserPin{
-			UserID: user.ID,
-			Pin:    newPin.Pin,
+			UserID:    user.ID,
+			Pin:       newPin.Pin,
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
 		}
 
 		if user.HasPin {

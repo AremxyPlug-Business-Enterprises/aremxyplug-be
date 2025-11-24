@@ -94,7 +94,7 @@ func (r *RedisConn) Get(key string) (interface{}, error) {
 	ctx := context.Background()
 	r.logger.Info("Getting key from Redis", zap.String("key", key))
 	val, err := r.client.Get(ctx, key).Result()
-	r.logger.Info("Key retrieved from Redis", zap.String("key", key), zap.String("value", val))
+	r.logger.Info("Key retrieved from Redis", zap.String("key", key))
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			r.logger.Info("Key does not exist in Redis", zap.String("key", key))
@@ -103,7 +103,7 @@ func (r *RedisConn) Get(key string) (interface{}, error) {
 		return nil, err
 	}
 	// Return the value (string) as interface{}
-	r.logger.Info("Returning value from Redis", zap.String("key", key), zap.String("value", val))
+	r.logger.Info("Returning value from Redis", zap.String("key", key))
 	return val, nil
 }
 
