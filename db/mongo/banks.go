@@ -541,7 +541,9 @@ func (m *mongoStore) UpdatePin(data models.UserPin) error {
 
 	filter := bson.D{primitive.E{Key: "userid", Value: data.UserID}}
 
-	updateFilter := bson.D{{Key: "$set", Value: bson.D{primitive.E{Key: "pin", Value: data.Pin}}}}
+	// need to update update the updated_at field as well
+
+	updateFilter := bson.D{{Key: "$set", Value: bson.D{primitive.E{Key: "pin", Value: data.Pin}, {Key: "updated_at", Value: time.Now().UTC()}}}}
 
 	_, err := m.col("pin").UpdateOne(ctx, filter, updateFilter)
 	if err != nil {
