@@ -14,6 +14,7 @@ import (
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/errorvalues"
+	"github.com/aremxyplug-be/lib/events"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/aremxyplug-be/lib/smsclient/termii"
 	"github.com/aremxyplug-be/types/dto"
@@ -852,6 +853,18 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "error", err)
 			return
+		}
+
+		ev := &events.Event{
+			Version:   "1",
+			UserID:    user.ID,
+			Type:      "signup.completed",
+			TS:        time.Now().UTC(),
+			Published: false,
+		}
+
+		if err := handler.processor.ProcessEvent(r.Context(), ev); err != nil {
+			handler.logger.Error("error processing signup completed event", zap.String("user_id", user.ID), zap.Error(err))
 		}
 
 		err = handler.sendOTP(user, "verify-email", welcomeMessage)

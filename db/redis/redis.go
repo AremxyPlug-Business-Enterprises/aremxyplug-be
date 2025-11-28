@@ -369,6 +369,34 @@ func (r *RedisConn) PublishUserEvent(ctx context.Context, userID string, event i
 	defer cancel()
 	return r.client.Publish(ctxPub, channel, b).Err()
 }
+func (r *RedisConn) SaveAndPublish(ctx context.Context, event interface{}) error {
+	b, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	// Save the event to a Redis list (durable store)
+	if err := r.client.LPush(ctx, "transfer:events", b).Err(); err != nil {
+		return err
+	}
+	// Publish the event to the global channel
+	if err := r.client.Publish(ctx, "transfer:events:all", b).Err(); err != nil {
+		return err
+	}
+
+	// Best-effort: also publish to per-user channel if event contains "user_id"
+	// Do not fail durable save if per-user publish fails.
+	var m map[string]interface{}
+	if err := json.Unmarshal(b, &m); err == nil {
+		if uid, ok := m["user_id"].(string); ok && uid != "" {
+			ch := fmt.Sprintf("transfer:events:%s", uid)
+			ctxPub, cancel := context.WithTimeout(ctx, 2*time.Second)
+			defer cancel()
+			_ = r.client.Publish(ctxPub, ch, b).Err() // ignore error
+		}
+	}
+
+	return nil
+}
 
 // SubscribeUserEvents subscribes to a user's event channel and returns a channel of JSON payloads.
 // Caller cancels ctx to stop the subscription; the returned channel will be closed.

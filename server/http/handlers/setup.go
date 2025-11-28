@@ -14,6 +14,7 @@ import (
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
+	"github.com/aremxyplug-be/lib/events"
 	"github.com/aremxyplug-be/lib/key_generator"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
@@ -78,6 +79,7 @@ type HttpHandler struct {
 	verifyClient         verification.VerificationClient
 	productClient        services.ProductService
 	redisClient          *redis.RedisConn
+	processor            *events.Processor
 }
 
 type HandlerOptions struct {
@@ -101,6 +103,7 @@ type HandlerOptions struct {
 	SMSClient    *termii.SMSConn
 	VerifyClient verification.VerificationClient
 	RedisClient  *redis.RedisConn
+	Processor    *events.Processor
 }
 
 func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
@@ -170,5 +173,6 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		verifyClient:         opt.VerifyClient,
 		productClient:        productService,
 		redisClient:          opt.RedisClient,
+		processor:            opt.Processor,
 	}
 }
