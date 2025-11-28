@@ -27,7 +27,7 @@ func (handler *HttpHandler) placeRedisHoldAndMeta(w http.ResponseWriter, userID 
 			response := responseFormat.CustomResponse{
 				Status:  http.StatusBadRequest,
 				Message: "error",
-				Data:    map[string]interface{}{"data": "invalid amount format"},
+				Data:    map[string]interface{}{"dsata": "invalid amount format"},
 			}
 			json.NewEncoder(w).Encode(response)
 			return "", err
@@ -53,7 +53,7 @@ func (handler *HttpHandler) placeRedisHoldAndMeta(w http.ResponseWriter, userID 
 	}
 	holdTTL := 48 * time.Hour
 	amountDec := decimal.NewFromFloat(amount)
-	if _, err := handler.redisClient.HoldFunds(userID, txnID, bal, amountDec, holdTTL); err != nil {
+	if err := handler.redisClient.HoldFunds(userID, txnID, amountDec, holdTTL); err != nil {
 		handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userID))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{

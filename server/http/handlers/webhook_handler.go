@@ -261,13 +261,13 @@ func (handler *HttpHandler) processTransfer(p webhookPayload) error {
 			handler.logger.Info("no hold present to confirm", zap.String("txID", txID))
 		}
 
-		// persist current Redis balance snapshot to DB
-		if currentBal, err := handler.redisClient.GetBalance(meta.UserID); err == nil {
-			if err := handler.store.UpdateUserBalanceFromRedis(meta.UserID, currentBal); err != nil {
-				handler.logger.Error("failed to persist user balance to DB", zap.Error(err), zap.String("userID", meta.UserID))
-			}
-		} else {
-			handler.logger.Warn("failed to read balance from redis for persist", zap.Error(err), zap.String("userID", meta.UserID))
+		currentBal, _, _, err := handler.getBalance(meta.UserID)
+		if err != nil {
+			handler.logger.Error("failed to get current balance for user", zap.Error(err), zap.String("userID", meta.UserID))
+		}
+
+		if err := handler.store.UpdateUserBalanceFromRedis(meta.UserID, currentBal); err != nil {
+			handler.logger.Error("failed to persist user balance to DB", zap.Error(err), zap.String("userID", meta.UserID))
 		}
 	}
 

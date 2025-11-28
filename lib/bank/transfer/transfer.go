@@ -163,29 +163,10 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 		CreatedAt:              time.Now().UTC(),
 	}
 
-	// amount as decimal (lowest units handled by balance.NewBalanceDeposit earlier)
-	amountDec := decimal.NewFromFloatWithExponent(data.Amount, -2)
-
 	// need to use redis to update balance here as well
 	if err := c.db.SaveDeposit(dept); err != nil {
 		c.logger.Error(err.Error())
 		return models.TransferResponse{}, err
-	}
-
-	if c.redis != nil {
-		if err := c.redis.AddToBalance(user.ID, amountDec); err != nil {
-			c.logger.Warn("redis AddToBalance failed; attempting to seed and retry", zap.Error(err), zap.String("userID", user.ID))
-
-			// seed redis with the canonical DB balance (use newBalance produced earlier)
-			// newBalance is the decimal from db.UpdateBalance call above
-			if seedErr := c.redis.InitializeBalance(user.ID, newBalance); seedErr != nil {
-				c.logger.Warn("failed to seed redis with DB balance", zap.Error(seedErr), zap.String("userID", user.ID))
-			} else {
-				if retryErr := c.redis.AddToBalance(user.ID, amountDec); retryErr != nil {
-					c.logger.Warn("retry AddToBalance after seeding failed", zap.Error(retryErr), zap.String("userID", user.ID))
-				}
-			}
-		}
 	}
 
 	return trf, nil

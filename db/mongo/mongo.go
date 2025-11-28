@@ -135,6 +135,20 @@ func (m *mongoStore) InitIndexes() error {
 		return fmt.Errorf("failed to create telcom recipient index: %w", err)
 	}
 
+	tasksIndex := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "user_id", Value: 1}, {Key: "task_code", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		},
+		{
+			Keys: bson.D{{Key: "completed", Value: 1}, {Key: "updated_at", Value: -1}},
+		},
+	}
+
+	if _, err := db.Collection("tasks").Indexes().CreateMany(ctx, tasksIndex); err != nil {
+		return fmt.Errorf("failed to create tasks index: %w", err)
+	}
+
 	return nil
 }
 

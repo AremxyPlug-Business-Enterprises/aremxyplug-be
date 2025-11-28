@@ -16,6 +16,7 @@ type DataStore interface {
 	UtilitiesStore
 	TransactionStore
 	WebhookStore
+	TaskStore
 }
 
 type Extras interface {
@@ -136,4 +137,15 @@ type WebhookStore interface {
 	UpdateReceiptStatus(txID, status string) error
 	UpdateReceiptExternalRef(externalRef, status string) error
 	GetUserFromVirtualNuban(virtualNuban string) (string, error)
+}
+
+type TaskStore interface {
+	// GetProgress retrieves the current progress document for a user and task.
+	GetProgress(userID string, task models.TaskType) (*models.ProgressDoc, error)
+	// IncrementCumulative atomically increments a cumulative task and returns the updated doc.
+	IncrementCumulative(userID string, def models.TaskDef, delta int64, txID string) (*models.ProgressDoc, error)
+	// SetProgressForOneTime sets the progress for a one-time task and returns the updated doc.
+	SetProgressForOneTime(userID string, def models.TaskDef, value int64, txID string) (*models.ProgressDoc, error)
+	// TryMarkCompleted attempts to mark a task as completed for a user.
+	TryMarkCompleted(userID string, task models.TaskType) (bool, error)
 }
