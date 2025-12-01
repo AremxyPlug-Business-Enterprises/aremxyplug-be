@@ -127,13 +127,14 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 		ev := events.Event{
 			Version:   "1",
 			UserID:    user.ID,
-			Type:      "point_redeem.completed",
+			Type:      "points.redeemed",
 			Amount:    receipt.Amount_Redeemed,
 			TxID:      receipt.TransactionID,
 			TS:        time.Now().UTC(),
 			Published: false,
 		}
 
+		handler.logger.Info("Processing point redeemed event", zap.String("user_id", user.ID), zap.Int("points_redeemed", pointsToRedeem.Point))
 		if err := handler.processor.ProcessEvent(r.Context(), &ev); err != nil {
 			handler.logger.Error("error processing point redeemed event", zap.String("user_id", user.ID), zap.Error(err))
 		}
