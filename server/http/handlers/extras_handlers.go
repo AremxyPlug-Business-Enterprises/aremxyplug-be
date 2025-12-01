@@ -108,7 +108,11 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 		}{}
 
 		if err := json.NewDecoder(r.Body).Decode(&pointsToRedeem); err != nil {
-
+			handler.logger.Error("Failed to decode request body", zap.Error(err))
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
 		}
 
 		receipt, err := handler.point.RedeemPoints(user.ID, pointsToRedeem.Point)

@@ -15,6 +15,7 @@ import (
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
+	"github.com/aremxyplug-be/lib/events"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
 	"github.com/aremxyplug-be/lib/smsclient/termii"
@@ -55,6 +56,7 @@ type ServerConfig struct {
 	SmsClient    *termii.SMSConn
 	VerifyClient verification.VerificationClient
 	RedisClient  *redis.RedisConn
+	Processor    *events.Processor
 }
 
 func MountServer(config ServerConfig) *chi.Mux {
@@ -98,6 +100,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 		SMSClient:    config.SmsClient,
 		VerifyClient: config.VerifyClient,
 		RedisClient:  config.RedisClient,
+		Processor:    config.Processor,
 	})
 
 	RateLimitMiddleware(RateLimitConfig{
