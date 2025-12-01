@@ -44,20 +44,26 @@ func NewProcessor(redis *redis.RedisConn, taskSvc *tasks.Service, logger *zap.Lo
 	}
 }
 
-// ----------------------------------------------------------------------
-// MAIN PROCESSOR ENTRY
-// ----------------------------------------------------------------------
-
 func (p *Processor) ProcessEvent(ctx context.Context, ev *Event) error {
 	if ev == nil {
+		p.Logger.Error("nil event passed to ProcessEvent")
 		return fmt.Errorf("nil event")
 	}
+
+	p.Logger.Debug("processing incoming event",
+		zap.String("id", ev.ID),
+		zap.String("type", ev.Type),
+		zap.String("user", ev.UserID),
+		zap.Time("ts", ev.TS),
+	)
 
 	// 1. Convert business event → TaskEvent
 	te := mapEventToTaskEvent(ev)
 	if te == nil {
+		p.Logger.Debug("event is not task-related; skipping", zap.String("type", ev.Type), zap.String("user", ev.UserID))
 		return nil // not a task-related event
 	}
+	p.Logger.Debug("mapped event to task event", zap.Any("task_event", te), zap.String("user", ev.UserID))
 
 	// 2. Apply task logic
 	completed, taskCode, progressDoc, err := p.TaskSvc.ApplyEvent(ev.UserID, *te)
@@ -66,9 +72,16 @@ func (p *Processor) ProcessEvent(ctx context.Context, ev *Event) error {
 			zap.Error(err),
 			zap.String("user", ev.UserID),
 			zap.String("task", string(taskCode)),
+			zap.Any("task_event", te),
 		)
 		return err
 	}
+	p.Logger.Info("task apply succeeded",
+		zap.String("user", ev.UserID),
+		zap.String("task", string(taskCode)),
+		zap.Bool("completed", completed),
+		zap.Any("progress_doc", progressDoc),
+	)
 
 	// 3. Publish real-time progress update
 	progressPayload := map[string]interface{}{
@@ -85,11 +98,14 @@ func (p *Processor) ProcessEvent(ctx context.Context, ev *Event) error {
 		progressPayload["completed"] = progressDoc.Completed
 	}
 
+	p.Logger.Debug("publishing user progress update", zap.String("user", ev.UserID), zap.Any("payload", progressPayload))
 	if err := p.redis.PublishUserEvent(ctx, ev.UserID, progressPayload); err != nil {
 		p.Logger.Warn("failed to publish user progress",
 			zap.Error(err),
 			zap.String("user", ev.UserID),
 		)
+	} else {
+		p.Logger.Debug("published user progress", zap.String("user", ev.UserID))
 	}
 
 	// 4. Emit task.completed event
@@ -103,6 +119,7 @@ func (p *Processor) ProcessEvent(ctx context.Context, ev *Event) error {
 			Published: false,
 		}
 
+		p.Logger.Debug("saving and publishing task.completed event", zap.String("user", ev.UserID), zap.String("task", string(taskCode)))
 		if err := p.redis.SaveAndPublish(ctx, completedEvent); err != nil {
 			p.Logger.Error("failed to publish task.completed",
 				zap.Error(err),
@@ -162,10 +179,6 @@ func mapEventToTaskEvent(ev *Event) *models.TaskEvent {
 		return nil
 	}
 }
-
-// ----------------------------------------------------------------------
-// JSON helper
-// ----------------------------------------------------------------------
 
 func MarshalEvent(ev *Event) ([]byte, error) {
 	return json.Marshal(ev)
