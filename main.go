@@ -20,11 +20,13 @@ import (
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient/postmark"
+	"github.com/aremxyplug-be/lib/events"
 	zapLogger "github.com/aremxyplug-be/lib/logger"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
 	"github.com/aremxyplug-be/lib/scheduler"
 	"github.com/aremxyplug-be/lib/smsclient/termii"
+	"github.com/aremxyplug-be/lib/tasks"
 	vtu "github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
@@ -86,6 +88,8 @@ func main() {
 	sms := termii.NewSMSConn(store, logger)
 	auth := auth.NewAuthConn(secrets, redisClient)
 	scheduler := scheduler.NewScheduler(redisClient, store, logger)
+	taskService := tasks.NewService(store)
+	processor := events.NewProcessor(redisClient, taskService, logger)
 
 	config := httpSrv.ServerConfig{
 		Store:        store,
@@ -109,6 +113,7 @@ func main() {
 		SmsClient:    sms,
 		VerifyClient: verifyClient,
 		RedisClient:  redisClient,
+		Processor:    processor,
 	}
 
 	// Initialize bank list if needed

@@ -10,10 +10,7 @@ import (
 
 var wsUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		if r.Header.Get("Origin") == "" {
-			return false
-		}
-		return true
+		return r.Header.Get("Origin") != ""
 	},
 }
 
