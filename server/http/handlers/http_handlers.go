@@ -280,7 +280,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Secure:   true,
 		Path:     "/",
 		SameSite: http.SameSiteNoneMode,
-		Domain:   "aremxyplug.onrender.com",
+		Domain:   "aremxyplug.com",
 	}
 
 	refreshCookie := &http.Cookie{
@@ -291,7 +291,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Secure:   true,
 		Path:     "/api/v1/refresh-token",
 		SameSite: http.SameSiteNoneMode,
-		Domain:   "aremxyplug.onrender.com",
+		Domain:   "aremxyplug.com",
 	}
 
 	http.SetCookie(w, accessCookie)
