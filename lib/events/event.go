@@ -98,7 +98,7 @@ func (p *Processor) ProcessEvent(ctx context.Context, ev *Event) error {
 		progressPayload["completed"] = progressDoc.Completed
 	}
 
-	p.Logger.Debug("publishing user progress update", zap.String("user", ev.UserID), zap.Any("payload", progressPayload))
+	p.Logger.Info("publishing user progress update", zap.String("user", ev.UserID), zap.Any("payload", progressPayload))
 	if err := p.redis.PublishUserEvent(ctx, ev.UserID, progressPayload); err != nil {
 		p.Logger.Warn("failed to publish user progress",
 			zap.Error(err),

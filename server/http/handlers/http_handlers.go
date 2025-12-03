@@ -273,27 +273,25 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	handler.redisClient.SetWithTTL(sessionKey, refreshToken, handler.refreshTokenDuration)
 
 	accessCookie := &http.Cookie{
-		Name:        "access_token",
-		Value:       jwtToken,
-		MaxAge:      500,
-		HttpOnly:    true,
-		Secure:      true,
-		Path:        "/",
-		SameSite:    http.SameSiteNoneMode,
-		Domain:      "aremxyplug.onrender.com",
-		Partitioned: true,
+		Name:     "access_token",
+		Value:    jwtToken,
+		MaxAge:   500,
+		HttpOnly: true,
+		Secure:   true,
+		Path:     "/",
+		SameSite: http.SameSiteNoneMode,
+		Domain:   "aremxyplug.onrender.com",
 	}
 
 	refreshCookie := &http.Cookie{
-		Name:        "refresh_token",
-		Value:       refreshToken,
-		MaxAge:      1800,
-		HttpOnly:    true,
-		Secure:      true,
-		Path:        "/api/v1/refresh-token",
-		SameSite:    http.SameSiteNoneMode,
-		Domain:      "aremxyplug.onrender.com",
-		Partitioned: true,
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		MaxAge:   1800,
+		HttpOnly: true,
+		Secure:   true,
+		Path:     "/api/v1/refresh-token",
+		SameSite: http.SameSiteNoneMode,
+		Domain:   "aremxyplug.onrender.com",
 	}
 
 	http.SetCookie(w, accessCookie)

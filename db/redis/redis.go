@@ -357,18 +357,26 @@ func (r *RedisConn) Allow(ctx context.Context, key string, limit int, window tim
 	return allowed, count, nil
 }
 
-// PublishUserEvent publishes a JSON event to a user-specific Redis channel.
 func (r *RedisConn) PublishUserEvent(ctx context.Context, userID string, event interface{}) error {
 	b, err := json.Marshal(event)
 	if err != nil {
+		r.logger.Error("failed to marshal user event", zap.String("user_id", userID), zap.Error(err))
 		return err
 	}
 	channel := fmt.Sprintf("transfer:events:%s", userID)
 	// short timeout so publish doesn't block
 	ctxPub, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	return r.client.Publish(ctxPub, channel, b).Err()
+
+	if err := r.client.Publish(ctxPub, channel, b).Err(); err != nil {
+		r.logger.Error("failed to publish user event", zap.String("user_id", userID), zap.String("channel", channel), zap.Error(err))
+		return err
+	}
+
+	r.logger.Info("published user event", zap.String("user_id", userID), zap.String("channel", channel))
+	return nil
 }
+
 func (r *RedisConn) SaveAndPublish(ctx context.Context, event interface{}) error {
 	b, err := json.Marshal(event)
 	if err != nil {
