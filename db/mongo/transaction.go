@@ -33,25 +33,26 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		matchConditions = append(matchConditions, bson.E{Key: "user_id", Value: userID})
 	}
 
-	// Handle date range
 	if start, ok := filter["start_date"].(time.Time); ok {
 		start = start.UTC()
-		end, hasEnd := filter["end_date"].(time.Time)
-
-		if !hasEnd {
-			// Default to end of start day
-			end = time.Date(start.Year(), start.Month(), start.Day(), 23, 59, 59, 999000000, time.UTC)
+		var endPtr *time.Time
+		if end, hasEnd := filter["end_date"].(time.Time); hasEnd {
+			endUTC := end.UTC()
+			endPtr = &endUTC
 		}
-
+		s, e := normalizeDayRange(start, endPtr)
+		// use half-open interval [s, e) to include full end day safely
 		matchConditions = append(matchConditions, bson.E{
 			Key:   "created_at",
-			Value: bson.M{"$gte": start, "$lte": end},
+			Value: bson.M{"$gte": s, "$lt": e},
 		})
 	} else if end, ok := filter["end_date"].(time.Time); ok {
-		// Handle case where only end_date is provided (no start_date)
+		// only end_date provided -> include that full day
+		endUTC := end.UTC()
+		_, e := normalizeDayRange(endUTC, &endUTC)
 		matchConditions = append(matchConditions, bson.E{
 			Key:   "created_at",
-			Value: bson.M{"$lte": end.UTC()},
+			Value: bson.M{"$lt": e},
 		})
 	} else {
 		// No date filters → return all time (no restriction)
@@ -427,27 +428,28 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 	// Determine start and end times
 	if start, ok := filter["start_date"].(time.Time); ok {
 		start = start.UTC()
-		end, hasEnd := filter["end_date"].(time.Time)
-
-		if !hasEnd {
-			// Default end to end of the same start day (23:59:59)
-			end = time.Date(start.Year(), start.Month(), start.Day(), 23, 59, 59, 999000000, time.UTC)
+		var endPtr *time.Time
+		if end, hasEnd := filter["end_date"].(time.Time); hasEnd {
+			endUTC := end.UTC()
+			endPtr = &endUTC
 		}
-
+		s, e := normalizeDayRange(start, endPtr)
+		// use half-open interval [s, e) to include full end day safely
 		matchConditions = append(matchConditions, bson.E{
 			Key:   "created_at",
-			Value: bson.M{"$gte": start, "$lte": end},
+			Value: bson.M{"$gte": s, "$lt": e},
+		})
+	} else if end, ok := filter["end_date"].(time.Time); ok {
+		// only end_date provided -> include that full day
+		endUTC := end.UTC()
+		_, e := normalizeDayRange(endUTC, &endUTC)
+		matchConditions = append(matchConditions, bson.E{
+			Key:   "created_at",
+			Value: bson.M{"$lt": e},
 		})
 	} else {
-		// Default to today’s start
-		now := time.Now().UTC()
-		dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-		dayEnd := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999000000, time.UTC)
-
-		matchConditions = append(matchConditions, bson.E{
-			Key:   "created_at",
-			Value: bson.M{"$gte": dayStart, "$lte": dayEnd},
-		})
+		// No date filters → return all time (no restriction)
+		// ❌ Don't append anything for created_at here
 	}
 
 	// Define collections based on category
@@ -736,27 +738,28 @@ func (m *mongoStore) GetSalesOverview(filter map[string]interface{}) (models.Sal
 	// Determine start and end times
 	if start, ok := filter["start_date"].(time.Time); ok {
 		start = start.UTC()
-		end, hasEnd := filter["end_date"].(time.Time)
-
-		if !hasEnd {
-			// Default end to end of the same start day (23:59:59)
-			end = time.Date(start.Year(), start.Month(), start.Day(), 23, 59, 59, 999000000, time.UTC)
+		var endPtr *time.Time
+		if end, hasEnd := filter["end_date"].(time.Time); hasEnd {
+			endUTC := end.UTC()
+			endPtr = &endUTC
 		}
-
+		s, e := normalizeDayRange(start, endPtr)
+		// use half-open interval [s, e) to include full end day safely
 		matchConditions = append(matchConditions, bson.E{
 			Key:   "created_at",
-			Value: bson.M{"$gte": start, "$lte": end},
+			Value: bson.M{"$gte": s, "$lt": e},
+		})
+	} else if end, ok := filter["end_date"].(time.Time); ok {
+		// only end_date provided -> include that full day
+		endUTC := end.UTC()
+		_, e := normalizeDayRange(endUTC, &endUTC)
+		matchConditions = append(matchConditions, bson.E{
+			Key:   "created_at",
+			Value: bson.M{"$lt": e},
 		})
 	} else {
-		// Default to today’s start
-		now := time.Now().UTC()
-		dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-		dayEnd := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999000000, time.UTC)
-
-		matchConditions = append(matchConditions, bson.E{
-			Key:   "created_at",
-			Value: bson.M{"$gte": dayStart, "$lte": dayEnd},
-		})
+		// No date filters → return all time (no restriction)
+		// ❌ Don't append anything for created_at here
 	}
 
 	// helper: amount conversion stage (cond type-check then convert)
@@ -1035,22 +1038,24 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 	// Handle date range
 	if start, ok := filter["start_date"].(time.Time); ok {
 		start = start.UTC()
-		end, hasEnd := filter["end_date"].(time.Time)
-
-		if !hasEnd {
-			// Default to end of start day
-			end = time.Date(start.Year(), start.Month(), start.Day(), 23, 59, 59, 999000000, time.UTC)
+		var endPtr *time.Time
+		if end, hasEnd := filter["end_date"].(time.Time); hasEnd {
+			endUTC := end.UTC()
+			endPtr = &endUTC
 		}
-
+		s, e := normalizeDayRange(start, endPtr)
+		// use half-open interval [s, e) to include full end day safely
 		matchConditions = append(matchConditions, bson.E{
 			Key:   "created_at",
-			Value: bson.M{"$gte": start, "$lte": end},
+			Value: bson.M{"$gte": s, "$lt": e},
 		})
 	} else if end, ok := filter["end_date"].(time.Time); ok {
-		// Handle case where only end_date is provided (no start_date)
+		// only end_date provided -> include that full day
+		endUTC := end.UTC()
+		_, e := normalizeDayRange(endUTC, &endUTC)
 		matchConditions = append(matchConditions, bson.E{
 			Key:   "created_at",
-			Value: bson.M{"$lte": end.UTC()},
+			Value: bson.M{"$lt": e},
 		})
 	} else {
 		// No date filters → return all time (no restriction)
@@ -1257,4 +1262,13 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 	)
 
 	return res, nil
+}
+
+func normalizeDayRange(start time.Time, end *time.Time) (time.Time, time.Time) {
+	s := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
+	if end == nil {
+		return s, s.Add(24 * time.Hour)
+	}
+	e := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, time.UTC).Add(24 * time.Hour)
+	return s, e
 }
