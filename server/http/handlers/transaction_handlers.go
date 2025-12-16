@@ -3,10 +3,12 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aremxyplug-be/lib/responseFormat"
@@ -478,4 +480,59 @@ func (handler *HttpHandler) fetchTransactionByProduct(orderID, product string) (
 	default:
 		return nil, fmt.Errorf("invalid product type")
 	}
+}
+
+func (handler *HttpHandler) Chart(w http.ResponseWriter, r *http.Request) {
+
+	userDetails, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	query := r.URL.Query()
+
+	rangeType := strings.ToUpper(strings.TrimSpace(query.Get("range")))
+	filter := make(map[string]interface{})
+
+	datefilter, err := addDateFilters(query)
+	if err != nil {
+		handler.logger.Error("Invalid date format", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusBadRequest,
+			Message: "error",
+			Data:    map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	maps.Copy(filter, datefilter)
+
+	filter["user_id"] = userDetails.ID
+
+	if rangeType == "" && len(datefilter) == 0 {
+		rangeType = "DAILY"
+	}
+
+	chartData, err := handler.store.GetChart(filter, rangeType)
+	if err != nil {
+		handler.logger.Error("Failed to get chart data", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": chartData},
+	}
+	handler.logger.Info("Chart data retrieved successfully", zap.String("user_id", userDetails.ID), zap.String("range_type", rangeType))
+
+	json.NewEncoder(w).Encode(response)
 }

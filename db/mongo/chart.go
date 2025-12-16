@@ -14,29 +14,107 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func (m *mongoStore) GetChart(userID string, rangeType string, fromTime time.Time, toTime time.Time) (models.StatsResponse, error) {
+// dayStart normalizes a time to the start of its day in UTC (00:00:00.0).
+func dayStart(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// dateStringGroupID returns a BSON grouping expression for $dateToString with the given format.
+func dateStringGroupID(format string) bson.D {
+	return bson.D{
+		{Key: "$dateToString", Value: bson.D{
+			{Key: "format", Value: format},
+			{Key: "date", Value: "$created_at"},
+		}},
+	}
+}
+
+func (m *mongoStore) GetChart(filter map[string]interface{}, rangeType string) (models.StatsResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	baseFilter := bson.D{
-		{Key: "created_at", Value: bson.D{
-			{Key: "$gte", Value: fromTime},
-			{Key: "$lt", Value: toTime},
-		}},
-		// {Key: "status", Value: "success"},
+	// Build baseFilter (Mongo query) and determine grouping strategy
+	var baseFilter bson.D
+	var groupID interface{}
+
+	start, hasStart := filter["start_date"].(time.Time)
+	end, hasEnd := filter["end_date"].(time.Time)
+	useExplicitDates := hasStart || hasEnd
+
+	if useExplicitDates {
+		// Explicit dates provided: normalize to day boundaries and derive grouping from span
+		var s, e time.Time
+		if hasStart {
+			s = dayStart(start)
+		} else {
+			// only end given: use that day as both start and end
+			s = dayStart(end)
+		}
+		if hasEnd {
+			e = dayStart(end).Add(24 * time.Hour)
+		} else {
+			e = s.Add(24 * time.Hour)
+		}
+
+		baseFilter = append(baseFilter, bson.E{Key: "created_at", Value: bson.M{"$gte": s, "$lt": e}})
+
+		// Derive grouping from the span
+		span := e.Sub(s)
+		switch {
+		case span <= 24*time.Hour:
+			groupID = bson.D{{Key: "$hour", Value: "$created_at"}} // hourly
+		case span <= 31*24*time.Hour:
+			groupID = dateStringGroupID("%Y-%m-%d") // daily
+		case span <= 120*24*time.Hour:
+			groupID = dateStringGroupID("%Y-%U") // weekly
+		default:
+			groupID = dateStringGroupID("%Y-%m") // monthly
+		}
+	} else {
+		// No explicit dates: use predefined rangeType to set window + grouping
+		now := time.Now().UTC()
+		var s, e time.Time
+
+		switch rangeType {
+		case "TODAY":
+			s = dayStart(now)
+			e = s.Add(24 * time.Hour)
+			groupID = bson.D{{Key: "$hour", Value: "$created_at"}}
+		case "WEEKLY":
+			s = now.AddDate(0, 0, -7)
+			e = now
+			groupID = dateStringGroupID("%Y-%U")
+		case "MONTHLY":
+			s = now.AddDate(0, -1, 0)
+			e = now
+			groupID = dateStringGroupID("%Y-%m")
+		case "ALL_TIME":
+			// No date restriction; group by month
+			groupID = dateStringGroupID("%Y-%m")
+		default: // DAILY or fallback
+			s = now.AddDate(0, 0, -1)
+			e = now
+			groupID = dateStringGroupID("%Y-%m-%d")
+		}
+
+		// Add created_at filter if range is not ALL_TIME
+		if rangeType != "ALL_TIME" && !s.IsZero() && !e.IsZero() {
+			baseFilter = append(baseFilter, bson.E{Key: "created_at", Value: bson.M{"$gte": s, "$lt": e}})
+		}
 	}
 
-	if userID != "" {
+	// Optional user filter
+	if userID, ok := filter["user_id"].(string); ok && userID != "" {
 		baseFilter = append(baseFilter, bson.E{Key: "user_id", Value: userID})
 	}
 
 	// Process inflow (deposits)
-	inflowResult, err := m.processCollection(ctx, depositColl, rangeType, baseFilter, true)
+	inflowResult, err := m.processCollection(ctx, depositColl, groupID, baseFilter)
 	if err != nil {
 		return models.StatsResponse{}, fmt.Errorf("inflow processing failed: %w", err)
 	}
 
-	// Process outflow collections in parallel with context cancellation
+	// Process outflow in parallel with cancellation
 	outflowCtx, outflowCancel := context.WithCancel(ctx)
 	defer outflowCancel()
 
@@ -44,26 +122,23 @@ func (m *mongoStore) GetChart(userID string, rangeType string, fromTime time.Tim
 	results := make(chan models.CollectionResult, len(collections))
 	errChan := make(chan error, len(collections))
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 5) // Limit to 5 concurrent DB queries
+	sem := make(chan struct{}, 5) // Limit concurrency
 
 	for _, collName := range collections {
 		wg.Add(1)
 		go func(name string) {
 			defer wg.Done()
-
-			// Acquire semaphore
 			select {
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
 			case <-outflowCtx.Done():
 				return
 			}
-
-			res, err := m.processCollection(outflowCtx, name, rangeType, baseFilter, false)
+			res, err := m.processCollection(outflowCtx, name, groupID, baseFilter)
 			if err != nil {
 				select {
 				case errChan <- fmt.Errorf("%s processing failed: %w", name, err):
-					outflowCancel() // Cancel other operations on error
+					outflowCancel()
 				case <-outflowCtx.Done():
 				}
 				return
@@ -81,38 +156,29 @@ func (m *mongoStore) GetChart(userID string, rangeType string, fromTime time.Tim
 		close(errChan)
 	}()
 
-	// Process outflow results
-	outflowResult := models.CollectionResult{
-		TimeMap: make(map[string]models.TimeStat),
-	}
+	outflowResult := models.CollectionResult{TimeMap: make(map[string]models.TimeStat)}
 	var merr *multierror.Error
-
-	// Collect errors first
 	for err := range errChan {
 		merr = multierror.Append(merr, err)
 	}
-
 	if merr != nil {
 		return models.StatsResponse{}, merr.ErrorOrNil()
 	}
 
-	// Process results
 	for res := range results {
 		outflowResult.TotalAmount += res.TotalAmount
 		outflowResult.TotalCount += res.TotalCount
 
-		// Merge time stats with proper label initialization
 		for timeKey, stat := range res.TimeMap {
-			existing, exists := outflowResult.TimeMap[timeKey]
-			if !exists {
-				existing = models.TimeStat{Label: timeKey}
+			existing := outflowResult.TimeMap[timeKey]
+			if existing.Label == "" {
+				existing.Label = timeKey
 			}
 			existing.Amount += stat.Amount
 			existing.Count += stat.Count
 			outflowResult.TimeMap[timeKey] = existing
 		}
 
-		// Limit total transactions to 1000
 		if len(outflowResult.Transactions) < 1000 {
 			remaining := 1000 - len(outflowResult.Transactions)
 			if len(res.Transactions) > remaining {
@@ -123,7 +189,6 @@ func (m *mongoStore) GetChart(userID string, rangeType string, fromTime time.Tim
 		}
 	}
 
-	// Convert hourly maps to sorted slices
 	inflow := convertTimeMapToSlice(inflowResult.TimeMap)
 	outflow := convertTimeMapToSlice(outflowResult.TimeMap)
 
@@ -139,32 +204,10 @@ func (m *mongoStore) GetChart(userID string, rangeType string, fromTime time.Tim
 	}, nil
 }
 
-func (m *mongoStore) processCollection(ctx context.Context, collName, rangeType string, filter bson.D, isInflow bool) (models.CollectionResult, error) {
+func (m *mongoStore) processCollection(ctx context.Context, collName string, groupID interface{}, filter bson.D) (models.CollectionResult, error) {
 	coll := m.col(collName)
 	result := models.CollectionResult{
 		TimeMap: make(map[string]models.TimeStat),
-	}
-
-	// Determine grouping key based on rangeType
-	var groupID interface{}
-	switch rangeType {
-	case "TODAY":
-		groupID = bson.D{{Key: "$hour", Value: "$created_at"}}
-	case "WEEKLY":
-		groupID = bson.D{{Key: "$dateToString", Value: bson.D{
-			{Key: "format", Value: "%Y-%U"},
-			{Key: "date", Value: "$created_at"},
-		}}}
-	case "MONTHLY", "ALL_TIME":
-		groupID = bson.D{{Key: "$dateToString", Value: bson.D{
-			{Key: "format", Value: "%Y-%m"},
-			{Key: "date", Value: "$created_at"},
-		}}}
-	default: // DAILY
-		groupID = bson.D{{Key: "$dateToString", Value: bson.D{
-			{Key: "format", Value: "%Y-%m-%d"},
-			{Key: "date", Value: "$created_at"},
-		}}}
 	}
 
 	pipeline := mongo.Pipeline{
@@ -259,7 +302,6 @@ func (m *mongoStore) processCollection(ctx context.Context, collName, rangeType 
 
 // Helper to format label based on range type
 func formatLabel(id interface{}) string {
-
 	switch v := id.(type) {
 	case string:
 		return v

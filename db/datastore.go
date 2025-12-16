@@ -1,8 +1,6 @@
 package db
 
 import (
-	"time"
-
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/shopspring/decimal"
@@ -33,7 +31,6 @@ type Extras interface {
 	CreatePointDoc(userID string) error
 	RedeemPoints(userID string, pointsToRedeem int, redeemRate int) (amountRedeemed int, e error)
 	GetPoint(userID string) (models.PointSummary, error)
-	GetChart(userID string, rangeType string, fromTime time.Time, toTime time.Time) (models.StatsResponse, error)
 	UpdatePointAndTransactionTime(userID string, pointsEarned int) error
 	CreatePointRedeemDoc(redeem models.PointRedeem) error
 	LogPointTransaction(transaction models.PointTransaction) error
@@ -126,6 +123,7 @@ type TransactionStore interface {
 	GetSalesSummary(category string, filter map[string]interface{}, page int) (models.SalesSummary, error)
 	GetWalletSummary(filter map[string]interface{}, page int) (models.TransactionResponse, error)
 	GetSalesOverview(filter map[string]interface{}) (models.SalesSummary, error)
+	GetChart(filter map[string]interface{}, rangeType string) (models.StatsResponse, error)
 }
 
 type WebhookStore interface {
