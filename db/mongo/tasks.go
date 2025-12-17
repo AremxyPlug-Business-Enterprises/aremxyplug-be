@@ -122,3 +122,19 @@ func (m *mongoStore) TryMarkCompleted(userID string, task models.TaskType) (bool
 	}
 	return false, nil
 }
+
+// ListUserProgress retrieves all task progress documents for a user.
+func (m *mongoStore) ListUserProgress(userID string) ([]models.ProgressDoc, error) {
+	ctx := context.Background()
+	cursor, err := m.col(tasksColl).Find(ctx, bson.M{"user_id": userID})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var docs []models.ProgressDoc
+	if err := cursor.All(ctx, &docs); err != nil {
+		return nil, err
+	}
+	return docs, nil
+}

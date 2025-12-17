@@ -652,3 +652,72 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 	}
 
 }
+
+// GetTaskProgress returns all task progress for the authenticated user
+func (handler *HttpHandler) GetTaskProgress(w http.ResponseWriter, r *http.Request) {
+	user, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusUnauthorized)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusUnauthorized,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "unauthorized"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Fetch existing progress from Mongo
+	docs, err := handler.store.ListUserProgress(user.ID)
+	if err != nil {
+		handler.logger.Error("Failed to list user progress", zap.String("user_id", user.ID), zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": err.Error()},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Build a map of existing progress by task code
+	progressMap := make(map[models.TaskType]*models.ProgressDoc)
+	for i := range docs {
+		progressMap[docs[i].TaskCode] = &docs[i]
+	}
+
+	// Ensure all registered tasks have an entry (fill missing with defaults)
+	result := []map[string]interface{}{}
+	for taskCode, taskDef := range models.TaskRegistry {
+		doc, exists := progressMap[taskCode]
+		if !exists {
+			// No progress yet - return defaults
+			result = append(result, map[string]interface{}{
+				"task_code":  taskCode,
+				"progress":   0,
+				"target":     taskDef.Target,
+				"completed":  false,
+				"updated_at": nil,
+			})
+		} else {
+			result = append(result, map[string]interface{}{
+				"task_code":    doc.TaskCode,
+				"progress":     doc.Progress,
+				"target":       doc.Target,
+				"completed":    doc.Completed,
+				"completed_at": doc.CompletedAt,
+				"updated_at":   doc.UpdatedAt,
+			})
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"tasks": result},
+	}
+	json.NewEncoder(w).Encode(response)
+}
