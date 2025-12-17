@@ -189,6 +189,9 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		authRouter.Get("/chart", httpHandler.Chart)
 
+		authRouter.Get("/ws/events", httpHandler.UserEventsWS)
+
+		authRouter.Get("/tasks/progress", httpHandler.GetTaskProgress)
 	})
 
 	return router

@@ -146,4 +146,6 @@ type TaskStore interface {
 	SetProgressForOneTime(userID string, def models.TaskDef, value int64, txID string) (*models.ProgressDoc, error)
 	// TryMarkCompleted attempts to mark a task as completed for a user.
 	TryMarkCompleted(userID string, task models.TaskType) (bool, error)
+	// ListUserProgress retrieves all task progress documents for a user.
+	ListUserProgress(userID string) ([]models.ProgressDoc, error)
 }
