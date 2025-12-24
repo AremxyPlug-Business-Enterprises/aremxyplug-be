@@ -88,7 +88,7 @@ func (m *mongoStore) GetChart(filter map[string]interface{}, rangeType string) (
 			s = now.AddDate(0, -1, 0)
 			e = now
 			groupID = dateStringGroupID("%Y-%m")
-		case "ALL_TIME":
+		case "ALL-TIME":
 			// No date restriction; group by month
 			groupID = dateStringGroupID("%Y-%m")
 		default: // DAILY or fallback
@@ -108,10 +108,17 @@ func (m *mongoStore) GetChart(filter map[string]interface{}, rangeType string) (
 		baseFilter = append(baseFilter, bson.E{Key: "user_id", Value: userID})
 	}
 
-	// Process inflow (deposits)
-	inflowResult, err := m.processCollection(ctx, depositColl, groupID, baseFilter)
-	if err != nil {
-		return models.StatsResponse{}, fmt.Errorf("inflow processing failed: %w", err)
+	// for the inflow collection, point-redeem is a part
+
+	// Process inflow (deposit + point-redeem)
+	inflowCollections := []string{depositColl, pointRedeemColl}
+	inflowResult := models.CollectionResult{TimeMap: make(map[string]models.TimeStat)}
+	for _, collName := range inflowCollections {
+		res, err := m.processCollection(ctx, collName, groupID, baseFilter)
+		if err != nil {
+			return models.StatsResponse{}, fmt.Errorf("%s inflow processing failed: %w", collName, err)
+		}
+		mergeCollectionResult(&inflowResult, res)
 	}
 
 	// Process outflow in parallel with cancellation
@@ -166,27 +173,7 @@ func (m *mongoStore) GetChart(filter map[string]interface{}, rangeType string) (
 	}
 
 	for res := range results {
-		outflowResult.TotalAmount += res.TotalAmount
-		outflowResult.TotalCount += res.TotalCount
-
-		for timeKey, stat := range res.TimeMap {
-			existing := outflowResult.TimeMap[timeKey]
-			if existing.Label == "" {
-				existing.Label = timeKey
-			}
-			existing.Amount += stat.Amount
-			existing.Count += stat.Count
-			outflowResult.TimeMap[timeKey] = existing
-		}
-
-		if len(outflowResult.Transactions) < 1000 {
-			remaining := 1000 - len(outflowResult.Transactions)
-			if len(res.Transactions) > remaining {
-				outflowResult.Transactions = append(outflowResult.Transactions, res.Transactions[:remaining]...)
-			} else {
-				outflowResult.Transactions = append(outflowResult.Transactions, res.Transactions...)
-			}
-		}
+		mergeCollectionResult(&outflowResult, res)
 	}
 
 	inflow := convertTimeMapToSlice(inflowResult.TimeMap)
@@ -210,12 +197,17 @@ func (m *mongoStore) processCollection(ctx context.Context, collName string, gro
 		TimeMap: make(map[string]models.TimeStat),
 	}
 
+	amountField := "$amount"
+	if collName == pointRedeemColl {
+		amountField = "$amount_redeemed"
+	}
+
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: filter}},
 		{{Key: "$addFields", Value: bson.D{
 			{Key: "convertedAmount", Value: bson.D{
 				{Key: "$convert", Value: bson.D{
-					{Key: "input", Value: "$amount"},
+					{Key: "input", Value: amountField},
 					{Key: "to", Value: "double"},
 					{Key: "onError", Value: 0.0},
 					{Key: "onNull", Value: 0.0},
@@ -322,4 +314,28 @@ func convertTimeMapToSlice(timeMap map[string]models.TimeStat) []models.TimeStat
 		return slice[i].Label < slice[j].Label
 	})
 	return slice
+}
+
+func mergeCollectionResult(target *models.CollectionResult, res models.CollectionResult) {
+	target.TotalAmount += res.TotalAmount
+	target.TotalCount += res.TotalCount
+
+	for timeKey, stat := range res.TimeMap {
+		existing := target.TimeMap[timeKey]
+		if existing.Label == "" {
+			existing.Label = timeKey
+		}
+		existing.Amount += stat.Amount
+		existing.Count += stat.Count
+		target.TimeMap[timeKey] = existing
+	}
+
+	if len(target.Transactions) < 1000 {
+		remaining := 1000 - len(target.Transactions)
+		if len(res.Transactions) > remaining {
+			target.Transactions = append(target.Transactions, res.Transactions[:remaining]...)
+		} else {
+			target.Transactions = append(target.Transactions, res.Transactions...)
+		}
+	}
 }

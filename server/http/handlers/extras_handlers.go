@@ -231,6 +231,18 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
+		ev := events.Event{
+			Version:   "1",
+			UserID:    user.ID,
+			Type:      "signup.completed",
+			TS:        time.Now().UTC(),
+			Published: false,
+		}
+
+		if err := handler.processor.ProcessEvent(r.Context(), &ev); err != nil {
+			handler.logger.Error("error processing point redeemed event", zap.String("user_id", user.ID), zap.Error(err))
+		}
+
 		w.WriteHeader(http.StatusCreated)
 		handler.logger.Info("User pin created successfully", zap.String("user_id", user.ID))
 		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "success", Data: map[string]interface{}{

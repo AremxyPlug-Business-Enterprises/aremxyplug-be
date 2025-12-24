@@ -7,6 +7,7 @@ import (
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/encryption"
+	"github.com/aremxyplug-be/lib/events"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"go.uber.org/zap"
 )
@@ -46,6 +47,18 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"error": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
+		}
+
+		ev := events.Event{
+			Version:   "1",
+			UserID:    user.ID,
+			Type:      "kyc.completed",
+			TS:        time.Now().UTC(),
+			Published: false,
+		}
+
+		if err := handler.processor.ProcessEvent(r.Context(), &ev); err != nil {
+			handler.logger.Error("error processing point redeemed event", zap.String("user_id", user.ID), zap.Error(err))
 		}
 
 		response := responseFormat.CustomResponse{
