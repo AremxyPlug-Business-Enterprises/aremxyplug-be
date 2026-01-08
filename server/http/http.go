@@ -126,7 +126,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 		router.Get("/refresh-token", httpHandler.RefreshToken)
 
 		// SignUp
-		router.Post("/signup", httpHandler.SignUp)
+		//router.Post("/signup", httpHandler.SignUp)
 		// Login
 		router.Post("/login", httpHandler.Login)
 		// forgot password

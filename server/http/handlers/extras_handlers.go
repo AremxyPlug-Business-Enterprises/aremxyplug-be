@@ -240,7 +240,7 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := handler.processor.ProcessEvent(r.Context(), &ev); err != nil {
-			handler.logger.Error("error processing point redeemed event", zap.String("user_id", user.ID), zap.Error(err))
+			handler.logger.Error("error processing signup completed event", zap.String("user_id", user.ID), zap.Error(err))
 		}
 
 		w.WriteHeader(http.StatusCreated)
