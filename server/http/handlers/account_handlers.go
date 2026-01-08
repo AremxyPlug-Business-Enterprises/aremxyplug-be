@@ -58,7 +58,7 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 		}
 
 		if err := handler.processor.ProcessEvent(r.Context(), &ev); err != nil {
-			handler.logger.Error("error processing point redeemed event", zap.String("user_id", user.ID), zap.Error(err))
+			handler.logger.Error("error processing virtual account creation event", zap.String("user_id", user.ID), zap.Error(err))
 		}
 
 		response := responseFormat.CustomResponse{
