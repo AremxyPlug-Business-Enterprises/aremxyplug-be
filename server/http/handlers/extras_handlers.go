@@ -309,10 +309,10 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 
 	pin := userPin{}
 
-	if err := json.NewDecoder(r.Body).Decode(&pin); err != nil {
-		handler.logger.Error("Failed to decode request body", zap.Error(err))
+	if jsonerr := json.NewDecoder(r.Body).Decode(&pin); jsonerr != nil {
+		handler.logger.Error("Failed to decode request body", zap.Error(jsonerr))
 		w.WriteHeader(http.StatusBadRequest)
-		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": jsonerr.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -732,4 +732,24 @@ func (handler *HttpHandler) GetTaskProgress(w http.ResponseWriter, r *http.Reque
 		Data:    map[string]interface{}{"tasks": result},
 	}
 	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) addevent(r *http.Request, usedID string, amt string, txnID string, taskType models.TaskType) {
+	if handler.processor != nil {
+		go func(uID string, amt string, txID string) {
+			ctx := r.Context()
+			ev := &events.Event{
+				Version:   "1",
+				Type:      string(taskType),
+				UserID:    uID,
+				Amount:    amt,
+				TxID:      txID,
+				TS:        time.Now().UTC(),
+				Published: false,
+			}
+			if err := handler.processor.ProcessEvent(ctx, ev); err != nil {
+				handler.logger.Error("failed to process airtime.purchase event", zap.Error(err), zap.String("user_id", uID))
+			}
+		}(usedID, amt, txnID)
+	}
 }
