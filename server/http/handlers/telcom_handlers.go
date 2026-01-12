@@ -152,6 +152,12 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 			}
+
+			// Emit utility.payment event
+			if handler.processor != nil {
+				handler.addevent(r, id, data.Amount, res.TransactionID, "airtime.purchase")
+			}
+
 			w.WriteHeader(http.StatusOK)
 			handler.logger.Info("Airtime processed successfully", zap.Any("response", res))
 			response := responseFormat.CustomResponse{
@@ -489,6 +495,11 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 
 			if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
+			}
+
+			// Emit utility.payment event
+			if handler.processor != nil {
+				handler.addevent(r, id, data.Amount, res.TransactionID, "data.purchase")
 			}
 
 			w.WriteHeader(http.StatusOK)

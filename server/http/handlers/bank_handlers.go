@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"github.com/aremxyplug-be/db/mongo"
 	"github.com/aremxyplug-be/lib/balance"
 	"github.com/aremxyplug-be/lib/bank/transfer"
+	"github.com/aremxyplug-be/lib/events"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
@@ -126,6 +128,27 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 
 			// return success (same response structure you had)
 			w.WriteHeader(http.StatusOK)
+
+			// Emit utility.payment event for bank transfer
+			if handler.processor != nil {
+				go func(uID string, amt string, txID string) {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					defer cancel()
+					ev := &events.Event{
+						Version:   "1",
+						Type:      "utility.payment",
+						UserID:    uID,
+						Amount:    amt,
+						TxID:      txID,
+						TS:        time.Now().UTC(),
+						Published: false,
+					}
+					if err := handler.processor.ProcessEvent(ctx, ev); err != nil {
+						handler.logger.Error("failed to process utility.payment event for transfer", zap.Error(err), zap.String("user_id", uID))
+					}
+				}(userDetails.ID, fmt.Sprintf("%.2f", amount), txID)
+			}
+
 			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
 			json.NewEncoder(w).Encode(response)
 			return
@@ -380,6 +403,27 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 
 		handler.logger.Info("Transfer to AremxyPlug account successful", zap.String("userID", userDetails.ID), zap.String("response", resp.Status))
 		w.WriteHeader(http.StatusOK)
+
+		// Emit utility.payment event for aremxyplug transfer
+		if handler.processor != nil {
+			go func(uID string, amt string, txID string) {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				ev := &events.Event{
+					Version:   "1",
+					Type:      "utility.payment",
+					UserID:    uID,
+					Amount:    amt,
+					TxID:      txID,
+					TS:        time.Now().UTC(),
+					Published: false,
+				}
+				if err := handler.processor.ProcessEvent(ctx, ev); err != nil {
+					handler.logger.Error("failed to process utility.payment event for aremxyplug transfer", zap.Error(err), zap.String("user_id", uID))
+				}
+			}(userDetails.ID, fmt.Sprintf("%.2f", info.Amount), txnID)
+		}
+
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
 		json.NewEncoder(w).Encode(response)
 		return

@@ -1,6 +1,7 @@
 package deposit
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/mongo"
 	"github.com/aremxyplug-be/lib/balance"
+	"github.com/aremxyplug-be/lib/events"
 	"github.com/aremxyplug-be/lib/randomgen"
 	"github.com/shopspring/decimal"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -24,8 +26,9 @@ var (
 )
 
 type Config struct {
-	db     db.DataStore
-	logger *zap.Logger
+	db        db.DataStore
+	logger    *zap.Logger
+	processor *events.Processor
 }
 
 type depositID struct {
@@ -33,10 +36,11 @@ type depositID struct {
 	ID           string `json:"id" bson:"ID"`
 }
 
-func NewDepositConfig(db db.DataStore, logger *zap.Logger) *Config {
+func NewDepositConfig(db db.DataStore, logger *zap.Logger, processor *events.Processor) *Config {
 	return &Config{
-		db:     db,
-		logger: logger,
+		db:        db,
+		logger:    logger,
+		processor: processor,
 	}
 }
 
@@ -159,6 +163,26 @@ func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, 
 		c.logger.Info("Deposit transaction saved successfully", zap.Any("transaction", result))
 
 		updatedAny = true
+
+		// Emit wallet.funded event
+		if c.processor != nil {
+			go func(uID string, amt string, txID string) {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				ev := &events.Event{
+					Version:   "1",
+					Type:      "wallet.funded",
+					UserID:    uID,
+					Amount:    amt,
+					TxID:      txID,
+					TS:        time.Now().UTC(),
+					Published: false,
+				}
+				if err := c.processor.ProcessEvent(ctx, ev); err != nil {
+					c.logger.Error("failed to process wallet.funded event", zap.Error(err), zap.String("user_id", uID))
+				}
+			}(userID, fmt.Sprintf("%v", depositAmount), transctionID)
+		}
 	}
 
 	return updatedAny, nil

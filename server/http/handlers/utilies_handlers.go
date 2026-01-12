@@ -145,6 +145,11 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 			}
 
+			// Emit utility.payment event
+			if handler.processor != nil {
+				handler.addevent(r, id, data.Amount, res.TransactionID, "purchase.completed")
+			}
+
 			w.WriteHeader(http.StatusOK)
 			response := responseFormat.CustomResponse{
 				Status:  http.StatusOK,
@@ -394,6 +399,11 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 			}
 
+			// Emit utility.payment event
+			if handler.processor != nil {
+				handler.addevent(r, id, strconv.Itoa(data.Amount), res.TransactionID, "purchase.completed")
+			}
+
 			w.WriteHeader(http.StatusOK)
 			handler.logger.Info("TV subscription processed successfully", zap.Any("response", res))
 			response := responseFormat.CustomResponse{
@@ -618,6 +628,10 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 
 			if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
+			}
+
+			if handler.processor != nil {
+				handler.addevent(r, id, strconv.Itoa(data.Amount), res.TransactionID, "purchase.completed")
 			}
 
 			w.WriteHeader(http.StatusOK)
