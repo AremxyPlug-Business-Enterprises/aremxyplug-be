@@ -71,7 +71,6 @@ func (s *Service) ApplyEvent(userID string, te models.TaskEvent) (bool, models.T
 }
 
 // Helper: AmountFromString converts a simple numeric string to int64 (best-effort).
-// For production prefer precise decimal handling per currency.
 func AmountFromString(s string) int64 {
 	if s == "" {
 		return 0
