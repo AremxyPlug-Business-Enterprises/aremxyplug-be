@@ -50,7 +50,6 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 		}
 
 		ev := events.Event{
-			Version:   "1",
 			UserID:    user.ID,
 			Type:      "kyc.completed",
 			TS:        time.Now().UTC(),
