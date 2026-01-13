@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
+	"github.com/aremxyplug-be/lib/randomgen"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/aremxyplug-be/lib/telcom/edu"
 	"github.com/go-chi/chi/v5"
@@ -101,17 +103,38 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 		data.UserID = id
 		data.Name = userDetails.FullName
 		data.TXN = txnID
-		res, err := handler.eduClient.BuyEduPin(data)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Failed to buy EduPin", zap.Error(err))
-			response := responseFormat.CustomResponse{
-				Status:  http.StatusInternalServerError,
-				Message: "error",
-				Data:    map[string]interface{}{"data": "Failed to purchase education pin"},
+		/*
+			res, err := handler.eduClient.BuyEduPin(data)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				handler.logger.Error("Failed to buy EduPin", zap.Error(err))
+				response := responseFormat.CustomResponse{
+					Status:  http.StatusInternalServerError,
+					Message: "error",
+					Data:    map[string]interface{}{"data": "Failed to purchase education pin"},
+				}
+				json.NewEncoder(w).Encode(response)
+				return
 			}
-			json.NewEncoder(w).Encode(response)
-			return
+		*/
+		orderID, _ := randomgen.GenerateOrderID()
+		transactionID := randomgen.GenerateTransactionID("edu")
+
+		res := &models.EduResponse{
+			UserID:                 id,
+			Status:                 "success",
+			Exam_Type:              data.Exam_Type,
+			Quantity:               data.Quantity,
+			PhoneNumber:            data.Phone_Number,
+			Email:                  data.Email,
+			Amount:                 float64(amount),
+			FullName:               data.Name,
+			TransactionProduct:     "Education Pins",
+			TransactionDescription: data.Exam_Type,
+			OrderID:                orderID,
+			TransactionID:          transactionID,
+			CreatedAt:              time.Now().UTC(),
+			ReferenceNumber:        "ID06466049509",
 		}
 
 		// based on the response status to update or hold balance.

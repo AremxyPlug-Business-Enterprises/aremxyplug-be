@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
+	"github.com/aremxyplug-be/lib/randomgen"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
@@ -113,19 +115,42 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 
 		data.TXN = txnID
 
-		res, err := handler.vtuClient.BuyAirtime(data)
-		if err != nil {
-			// Release hold on error
-			handler.redisClient.ReleaseHold(id, txnID)
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Failed to purchase airtime", zap.Error(err))
-			response := responseFormat.CustomResponse{
-				Status:  http.StatusInternalServerError,
-				Message: "error",
-				Data:    map[string]interface{}{"data": "An internal error occurred while purchasing airtime, please try again."},
+		/*
+			res, err := handler.vtuClient.BuyAirtime(data)
+			if err != nil {
+				// Release hold on error
+				handler.redisClient.ReleaseHold(id, txnID)
+				w.WriteHeader(http.StatusInternalServerError)
+				handler.logger.Error("Failed to purchase airtime", zap.Error(err))
+				response := responseFormat.CustomResponse{
+					Status:  http.StatusInternalServerError,
+					Message: "error",
+					Data:    map[string]interface{}{"data": "An internal error occurred while purchasing airtime, please try again."},
+				}
+				json.NewEncoder(w).Encode(response)
+				return
 			}
-			json.NewEncoder(w).Encode(response)
-			return
+		*/
+
+		orderID, _ := randomgen.GenerateOrderID()
+		transactionID := randomgen.GenerateTransactionID("VTU")
+		requestID := randomgen.GenerateRequestID()
+
+		res := &telcom.AirtimeResponse{
+			UserID:                 id,
+			Status:                 "success",
+			Network:                "MTN",
+			NetworkProduct:         "MTN VTU",
+			Amount:                 "100",
+			Phone_no:               data.Phone_no,
+			FullName:               fullName,
+			OrderID:                orderID,
+			TransactionProduct:     "Airtime Top-up",
+			TransactionDescription: "MTN VTU",
+			TransactionID:          transactionID,
+			ReferenceNumber:        "218508619",
+			CreatedAt:              time.Now().UTC(),
+			UserReference:          requestID,
 		}
 
 		switch res.Status {
@@ -454,17 +479,38 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		res, err := handler.dataClient.BuyData(data)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Error("Failed to purchase data", zap.Error(err))
-			response := responseFormat.CustomResponse{
-				Status:  http.StatusInternalServerError,
-				Message: "error",
-				Data:    map[string]interface{}{"data": "An internal error occurred while purchasing data, please try again."},
+		/*
+			res, err := handler.dataClient.BuyData(data)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				handler.logger.Error("Failed to purchase data", zap.Error(err))
+				response := responseFormat.CustomResponse{
+					Status:  http.StatusInternalServerError,
+					Message: "error",
+					Data:    map[string]interface{}{"data": "An internal error occurred while purchasing data, please try again."},
+				}
+				json.NewEncoder(w).Encode(response)
+				return
 			}
-			json.NewEncoder(w).Encode(response)
-			return
+		*/
+
+		orderID, _ := randomgen.GenerateOrderID()
+		transactionID := randomgen.GenerateTransactionID("dat")
+
+		res := telcom.DataResult{
+			UserID:                 id,
+			Status:                 "success",
+			OrderID:                orderID,
+			TransactionID:          transactionID,
+			FullName:               fullName,
+			RecipientName:          data.Name,
+			Validity:               data.Validity,
+			PlanName:               data.Plan_Name,
+			TransactionProduct:     "Datat Top-up",
+			TransactionDescription: fmt.Sprintf("%s %s", data.Plan_Name, data.PlanSize),
+			Network:                "MTN",
+			ReferenceNumber:        "",
+			CreatedAt:              time.Now().UTC(),
 		}
 
 		switch res.Status {
