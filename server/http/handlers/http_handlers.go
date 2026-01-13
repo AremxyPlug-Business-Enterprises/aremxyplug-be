@@ -854,7 +854,6 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		ev := &events.Event{
-			Version:   "1",
 			UserID:    user.ID,
 			Type:      "signup.completed",
 			TS:        time.Now().UTC(),

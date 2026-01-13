@@ -17,16 +17,14 @@ import (
 // ----------------------------------------------------------------------
 
 type Event struct {
-	ID            string                 `json:"id" bson:"_id,omitempty"`
-	Version       string                 `json:"version"`
-	Type          string                 `json:"type"`
-	UserID        string                 `json:"user_id"`
-	Amount        string                 `json:"amount,omitempty"`
-	TxID          string                 `json:"tx_id,omitempty"`
-	PointsAwarded int64                  `json:"points_awarded,omitempty"`
-	Meta          map[string]interface{} `json:"meta,omitempty"`
-	TS            time.Time              `json:"ts"`
-	Published     bool                   `json:"published"`
+	ID        string                 `json:"id" bson:"_id,omitempty"`
+	Type      string                 `json:"type"`
+	UserID    string                 `json:"user_id"`
+	Amount    string                 `json:"amount,omitempty"`
+	TxID      string                 `json:"tx_id,omitempty"`
+	TS        time.Time              `json:"ts"`
+	Meta      map[string]interface{} `json:"meta,omitempty"`
+	Published bool                   `json:"published"`
 }
 
 type Processor struct {
@@ -113,7 +111,6 @@ func (p *Processor) ProcessEvent(ctx context.Context, ev *Event) error {
 		// 4. Emit task.completed event
 		if completed {
 			completedEvent := &Event{
-				Version:   "1",
 				Type:      "task.completed",
 				UserID:    ev.UserID,
 				Meta:      map[string]interface{}{"task_code": string(taskCode)},

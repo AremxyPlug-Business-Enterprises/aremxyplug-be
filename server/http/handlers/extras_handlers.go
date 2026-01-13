@@ -125,7 +125,6 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 		}
 
 		ev := events.Event{
-			Version:   "1",
 			UserID:    user.ID,
 			Type:      "points.redeemed",
 			Amount:    receipt.Amount_Redeemed,
@@ -232,7 +231,6 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 		}
 
 		ev := events.Event{
-			Version:   "1",
 			UserID:    user.ID,
 			Type:      "signup.completed",
 			TS:        time.Now().UTC(),
@@ -739,7 +737,6 @@ func (handler *HttpHandler) addevent(r *http.Request, usedID string, amt string,
 		go func(uID string, amt string, txID string) {
 			ctx := r.Context()
 			ev := &events.Event{
-				Version:   "1",
 				Type:      string(taskType),
 				UserID:    uID,
 				Amount:    amt,
