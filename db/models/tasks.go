@@ -58,14 +58,15 @@ var TaskRegistry = map[TaskType]TaskDef{
 
 // ProgressDoc is the persisted task progress document.
 type ProgressDoc struct {
-	ID          string     `bson:"_id,omitempty" json:"id"`
-	UserID      string     `bson:"user_id" json:"user_id"`
-	TaskCode    TaskType   `bson:"task_code" json:"task_code"`
-	Type        string     `bson:"type" json:"type"` // "one_time" | "cumulative"
-	Progress    int64      `bson:"progress" json:"progress"`
-	Target      int64      `bson:"target" json:"target"`
-	Completed   bool       `bson:"completed" json:"completed"`
-	CompletedAt *time.Time `bson:"completed_at,omitempty" json:"completed_at,omitempty"`
-	UpdatedAt   time.Time  `bson:"updated_at" json:"updated_at"`
-	CreatedAt   time.Time  `bson:"created_at" json:"created_at"`
+	ID             string     `bson:"_id,omitempty" json:"id"`
+	UserID         string     `bson:"user_id" json:"user_id"`
+	TaskCode       TaskType   `bson:"task_code" json:"task_code"`
+	Type           string     `bson:"type" json:"type"` // "one_time" | "cumulative"
+	Progress       int64      `bson:"progress" json:"progress"`
+	Target         int64      `bson:"target" json:"target"`
+	Completed      bool       `bson:"completed" json:"completed"`
+	CompletedAt    *time.Time `bson:"completed_at,omitempty" json:"completed_at,omitempty"`
+	UpdatedAt      time.Time  `bson:"updated_at" json:"updated_at"`
+	CreatedAt      time.Time  `bson:"created_at" json:"created_at"`
+	ProcessedTxIDs []string   `bson:"processed_tx_ids,omitempty" json:"processed_tx_ids,omitempty"`
 }

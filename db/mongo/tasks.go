@@ -32,7 +32,13 @@ func (m *mongoStore) IncrementCumulative(userID string, def models.TaskDef, delt
 	ctx := context.Background()
 
 	now := time.Now().UTC()
+
+	// Filter includes check that we haven't processed this txID yet
 	filter := bson.M{"user_id": userID, "task_code": def.Code}
+	if txID != "" {
+		filter["processed_tx_ids"] = bson.M{"$ne": txID}
+	}
+
 	update := bson.M{
 		"$inc": bson.M{"progress": delta},
 		"$set": bson.M{
@@ -41,15 +47,25 @@ func (m *mongoStore) IncrementCumulative(userID string, def models.TaskDef, delt
 			"updated_at": now,
 		},
 		"$setOnInsert": bson.M{
-			"created_at": now,
-			"completed":  false,
-			"progress":   0, // $inc will add delta
+			"created_at":       now,
+			"completed":        false,
+			"progress":         0, // $inc will add delta
+			"processed_tx_ids": []string{},
 		},
+	}
+
+	if txID != "" {
+		update["$addToSet"] = bson.M{"processed_tx_ids": txID}
 	}
 
 	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
 	var doc models.ProgressDoc
 	if err := m.col(tasksColl).FindOneAndUpdate(ctx, filter, update, opts).Decode(&doc); err != nil {
+		// If we get a duplicate key error, it means the document exists but our filter (txID check) failed.
+		// This implies the transaction was already processed. Return the existing document.
+		if mongo.IsDuplicateKeyError(err) {
+			return m.GetProgress(userID, def.Code)
+		}
 		return nil, err
 	}
 	return &doc, nil
