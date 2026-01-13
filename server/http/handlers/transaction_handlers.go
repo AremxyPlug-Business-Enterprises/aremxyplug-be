@@ -249,6 +249,10 @@ func (handler *HttpHandler) GetWalletSummary(w http.ResponseWriter, r *http.Requ
 		filter["status"] = status
 	}
 
+	if category := query.Get("category"); category != "" {
+		filter["category"] = category
+	}
+
 	filter["user_id"] = id
 
 	summary, err := handler.store.GetWalletSummary(filter, page)

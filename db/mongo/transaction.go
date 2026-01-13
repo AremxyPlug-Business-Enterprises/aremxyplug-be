@@ -1142,43 +1142,71 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 		record = r
 	}
 
+	category := ""
+	if c, ok := filter["category"].(string); ok && c != "" {
+		category = c
+	}
+
 	// build dataPipeline and pick which collection to run Aggregate on (base)
 	dataBaseColl := depositColl
 	var dataPipeline mongo.Pipeline
 
-	switch record {
-	case "deposit":
-		// only deposit + pointRedeem (both inflow)
-		dataPipeline = append(basePipeline,
-			bson.D{{Key: "$unionWith", Value: bson.M{"coll": pointRedeemColl, "pipeline": pointRedeemUnionPipeline}}},
-			bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
-			bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
-			bson.D{{Key: "$limit", Value: int64(pageSize)}},
-		)
-		dataBaseColl = depositColl
-
-	case "transfer":
-		// only transfer collection (outflow)
-		dataPipeline = mongo.Pipeline{
-			bson.D{{Key: "$match", Value: matchConditions}},
-			amountConversionStage,
-			bson.D{{Key: "$addFields", Value: bson.M{"flowType": "outflow"}}},
-			projectStage,
-			bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
-			bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
-			bson.D{{Key: "$limit", Value: int64(pageSize)}},
-		}
-		dataBaseColl = transferColl
-
-	default:
-		// both inflow and outflow (original behaviour)
-		dataPipeline = append(basePipeline,
+	if category != "" {
+		// If category is set, we ignore 'record' filter logic and just combine everything + filter by category
+		p := append(basePipeline,
 			bson.D{{Key: "$unionWith", Value: bson.M{"coll": pointRedeemColl, "pipeline": pointRedeemUnionPipeline}}},
 			bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
+		)
+
+		switch category {
+		case "virtual":
+			p = append(p, bson.D{{Key: "$match", Value: bson.M{"product": bson.M{"$in": []string{"internal transfer", "internal deposit", "virtual account"}}}}})
+		case "point":
+			p = append(p, bson.D{{Key: "$match", Value: bson.M{"product": "point redeem"}}})
+		}
+
+		p = append(p,
 			bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
 			bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
 			bson.D{{Key: "$limit", Value: int64(pageSize)}},
 		)
+		dataPipeline = p
+	} else {
+		// Standard 'record' based filtering (existing logic)
+		switch record {
+		case "deposit":
+			// only deposit + pointRedeem (both inflow)
+			dataPipeline = append(basePipeline,
+				bson.D{{Key: "$unionWith", Value: bson.M{"coll": pointRedeemColl, "pipeline": pointRedeemUnionPipeline}}},
+				bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
+				bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
+				bson.D{{Key: "$limit", Value: int64(pageSize)}},
+			)
+			dataBaseColl = depositColl
+
+		case "transfer":
+			// only transfer collection (outflow)
+			dataPipeline = mongo.Pipeline{
+				bson.D{{Key: "$match", Value: matchConditions}},
+				amountConversionStage,
+				bson.D{{Key: "$addFields", Value: bson.M{"flowType": "outflow"}}},
+				projectStage,
+				bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
+				bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
+				bson.D{{Key: "$limit", Value: int64(pageSize)}},
+			}
+			dataBaseColl = transferColl
+
+		default:
+			// both inflow and outflow (original behaviour)
+			dataPipeline = append(basePipeline,
+				bson.D{{Key: "$unionWith", Value: bson.M{"coll": pointRedeemColl, "pipeline": pointRedeemUnionPipeline}}},
+				bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
+				bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
+				bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
+				bson.D{{Key: "$limit", Value: int64(pageSize)}},
+			)
+		}
 	}
 
 	cursor, err := m.col(dataBaseColl).Aggregate(ctx, dataPipeline)
