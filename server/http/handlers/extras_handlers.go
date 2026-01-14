@@ -124,7 +124,7 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 		}
 
 		handler.logger.Info("Processing point redeemed event", zap.String("user_id", user.ID), zap.Int("points_redeemed", pointsToRedeem.Point))
-		handler.addevent(r, user.ID, receipt.Amount_Redeemed, receipt.TransactionID, "points.redeemed")
+		handler.addevent(user.ID, receipt.Amount_Redeemed, receipt.TransactionID, "points.redeemed")
 
 		handler.logger.Info("Points redeemed successfully", zap.Any("receipt", receipt))
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": receipt}}
@@ -218,7 +218,9 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
-		handler.addevent(r, user.ID, "", "", "signup.completed")
+		if handler.processor != nil {
+			handler.addevent(user.ID, "", "", "signup.completed")
+		}
 
 		w.WriteHeader(http.StatusCreated)
 		handler.logger.Info("User pin created successfully", zap.String("user_id", user.ID))

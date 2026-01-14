@@ -180,7 +180,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 
 			// Emit utility.payment event
 			if handler.processor != nil {
-				handler.addevent(r, id, data.Amount, res.TransactionID, "airtime.purchase")
+				handler.addevent(id, data.Amount, res.TransactionID, "airtime.purchase")
 			}
 
 			w.WriteHeader(http.StatusOK)
@@ -545,7 +545,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 
 			// Emit utility.payment event
 			if handler.processor != nil {
-				handler.addevent(r, id, data.Amount, res.TransactionID, "data.purchase")
+				handler.addevent(id, data.Amount, res.TransactionID, "data.purchase")
 			}
 
 			w.WriteHeader(http.StatusOK)
