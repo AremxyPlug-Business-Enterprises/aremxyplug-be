@@ -47,9 +47,8 @@ func (m *mongoStore) IncrementCumulative(userID string, def models.TaskDef, delt
 			"updated_at": now,
 		},
 		"$setOnInsert": bson.M{
-			"created_at":       now,
-			"completed":        false,
-			"processed_tx_ids": []string{},
+			"created_at": now,
+			"completed":  false,
 		},
 	}
 

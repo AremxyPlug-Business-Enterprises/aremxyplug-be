@@ -1152,25 +1152,39 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 	var dataPipeline mongo.Pipeline
 
 	if category != "" {
-		// If category is set, we ignore 'record' filter logic and just combine everything + filter by category
-		p := append(basePipeline,
-			bson.D{{Key: "$unionWith", Value: bson.M{"coll": pointRedeemColl, "pipeline": pointRedeemUnionPipeline}}},
-			bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
-		)
-
 		switch category {
 		case "virtual":
-			p = append(p, bson.D{{Key: "$match", Value: bson.M{"product": bson.M{"$in": []string{"internal transfer", "internal deposit", "virtual account"}}}}})
-		case "point":
-			p = append(p, bson.D{{Key: "$match", Value: bson.M{"product": "point redeem"}}})
-		}
+			// Only deposit (inflow) + transfer (outflow), no product-specific filter
+			dataPipeline = append(basePipeline,
+				bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
+				bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
+				bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
+				bson.D{{Key: "$limit", Value: int64(pageSize)}},
+			)
+			dataBaseColl = depositColl
 
-		p = append(p,
-			bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
-			bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
-			bson.D{{Key: "$limit", Value: int64(pageSize)}},
-		)
-		dataPipeline = p
+		case "point":
+			// Only point redeem collection (inflow)
+			dataPipeline = mongo.Pipeline{
+				bson.D{{Key: "$match", Value: matchConditions}},
+			}
+			dataPipeline = append(dataPipeline,
+				bson.D{{Key: "$unionWith", Value: bson.M{"coll": pointRedeemColl, "pipeline": pointRedeemUnionPipeline}}},
+				bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
+				bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
+				bson.D{{Key: "$limit", Value: int64(pageSize)}},
+			)
+			dataBaseColl = depositColl
+		default:
+			// Fallback: all collections, no category-specific filter
+			dataPipeline = append(basePipeline,
+				bson.D{{Key: "$unionWith", Value: bson.M{"coll": pointRedeemColl, "pipeline": pointRedeemUnionPipeline}}},
+				bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
+				bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
+				bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
+				bson.D{{Key: "$limit", Value: int64(pageSize)}},
+			)
+		}
 	} else {
 		// Standard 'record' based filtering (existing logic)
 		switch record {
