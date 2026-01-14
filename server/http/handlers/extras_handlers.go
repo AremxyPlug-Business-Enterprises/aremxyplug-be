@@ -9,7 +9,6 @@ import (
 	"github.com/aremxyplug-be/db/models"
 	auth_pin "github.com/aremxyplug-be/lib/auth/pin"
 	"github.com/aremxyplug-be/lib/encryption"
-	"github.com/aremxyplug-be/lib/events"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"go.uber.org/zap"
 	"golang.org/x/text/cases"
@@ -124,19 +123,8 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		ev := events.Event{
-			UserID:    user.ID,
-			Type:      "points.redeemed",
-			Amount:    receipt.Amount_Redeemed,
-			TxID:      receipt.TransactionID,
-			TS:        time.Now().UTC(),
-			Published: false,
-		}
-
 		handler.logger.Info("Processing point redeemed event", zap.String("user_id", user.ID), zap.Int("points_redeemed", pointsToRedeem.Point))
-		if err := handler.processor.ProcessEvent(r.Context(), &ev); err != nil {
-			handler.logger.Error("error processing point redeemed event", zap.String("user_id", user.ID), zap.Error(err))
-		}
+		handler.addevent(r, user.ID, receipt.Amount_Redeemed, receipt.TransactionID, "points.redeemed")
 
 		handler.logger.Info("Points redeemed successfully", zap.Any("receipt", receipt))
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": receipt}}
@@ -230,16 +218,7 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
-		ev := events.Event{
-			UserID:    user.ID,
-			Type:      "signup.completed",
-			TS:        time.Now().UTC(),
-			Published: false,
-		}
-
-		if err := handler.processor.ProcessEvent(r.Context(), &ev); err != nil {
-			handler.logger.Error("error processing signup completed event", zap.String("user_id", user.ID), zap.Error(err))
-		}
+		handler.addevent(r, user.ID, "", "", "signup.completed")
 
 		w.WriteHeader(http.StatusCreated)
 		handler.logger.Info("User pin created successfully", zap.String("user_id", user.ID))
@@ -730,23 +709,4 @@ func (handler *HttpHandler) GetTaskProgress(w http.ResponseWriter, r *http.Reque
 		Data:    map[string]interface{}{"tasks": result},
 	}
 	json.NewEncoder(w).Encode(response)
-}
-
-func (handler *HttpHandler) addevent(r *http.Request, usedID string, amt string, txnID string, taskType models.TaskType) {
-	if handler.processor != nil {
-		go func(uID string, amt string, txID string) {
-			ctx := r.Context()
-			ev := &events.Event{
-				Type:      string(taskType),
-				UserID:    uID,
-				Amount:    amt,
-				TxID:      txID,
-				TS:        time.Now().UTC(),
-				Published: false,
-			}
-			if err := handler.processor.ProcessEvent(ctx, ev); err != nil {
-				handler.logger.Error("failed to process airtime.purchase event", zap.Error(err), zap.String("user_id", uID))
-			}
-		}(usedID, amt, txnID)
-	}
 }
