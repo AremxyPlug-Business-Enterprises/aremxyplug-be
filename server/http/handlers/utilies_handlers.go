@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/aremxyplug-be/lib/events"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/bills/electricity"
@@ -809,6 +812,26 @@ func (handler *HttpHandler) TvSubHandler(w http.ResponseWriter, r *http.Request)
 			Data:    map[string]interface{}{"data": "Method not allowed"},
 		}
 		json.NewEncoder(w).Encode(response)
+	}
+}
+
+func (handler *HttpHandler) addevent(r *http.Request, usedID string, amt string, txnID string, eventType string) {
+	if handler.processor != nil {
+		go func(uID string, amt string, txID string, eType string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			ev := &events.Event{
+				Type:      eType,
+				UserID:    uID,
+				Amount:    amt,
+				TxID:      txID,
+				TS:        time.Now().UTC(),
+				Published: false,
+			}
+			if err := handler.processor.ProcessEvent(ctx, ev); err != nil {
+				handler.logger.Error("failed to process event", zap.Error(err), zap.String("user_id", uID), zap.String("type", eType))
+			}
+		}(usedID, amt, txnID, eventType)
 	}
 }
 
