@@ -49,7 +49,6 @@ func (m *mongoStore) IncrementCumulative(userID string, def models.TaskDef, delt
 		"$setOnInsert": bson.M{
 			"created_at":       now,
 			"completed":        false,
-			"progress":         0, // $inc will add delta
 			"processed_tx_ids": []string{},
 		},
 	}
@@ -61,8 +60,6 @@ func (m *mongoStore) IncrementCumulative(userID string, def models.TaskDef, delt
 	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
 	var doc models.ProgressDoc
 	if err := m.col(tasksColl).FindOneAndUpdate(ctx, filter, update, opts).Decode(&doc); err != nil {
-		// If we get a duplicate key error, it means the document exists but our filter (txID check) failed.
-		// This implies the transaction was already processed. Return the existing document.
 		if mongo.IsDuplicateKeyError(err) {
 			return m.GetProgress(userID, def.Code)
 		}
