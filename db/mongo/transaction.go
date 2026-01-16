@@ -448,8 +448,13 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 			Value: bson.M{"$lt": e},
 		})
 	} else {
-		// No date filters → return all time (no restriction)
-		// ❌ Don't append anything for created_at here
+		// No date filters → use current day (UTC)
+		currentDay := time.Now().UTC()
+		s, e := normalizeDayRange(currentDay, &currentDay)
+		matchConditions = append(matchConditions, bson.E{
+			Key:   "created_at",
+			Value: bson.M{"$gte": s, "$lt": e},
+		})
 	}
 
 	// Define collections based on category
@@ -758,8 +763,12 @@ func (m *mongoStore) GetSalesOverview(filter map[string]interface{}) (models.Sal
 			Value: bson.M{"$lt": e},
 		})
 	} else {
-		// No date filters → return all time (no restriction)
-		// ❌ Don't append anything for created_at here
+		currentDay := time.Now().UTC()
+		s, e := normalizeDayRange(currentDay, &currentDay)
+		matchConditions = append(matchConditions, bson.E{
+			Key:   "created_at",
+			Value: bson.M{"$gte": s, "$lt": e},
+		})
 	}
 
 	// helper: amount conversion stage (cond type-check then convert)
@@ -1154,13 +1163,27 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 	if category != "" {
 		switch category {
 		case "virtual":
-			// Only deposit (inflow) + transfer (outflow), no product-specific filter
+			// Only Virtual Account product from deposit collection (inflow)
 			dataPipeline = append(basePipeline,
-				bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
+				bson.D{{Key: "$match", Value: bson.M{"transaction_product": "Virtual Account"}}},
 				bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
 				bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
 				bson.D{{Key: "$limit", Value: int64(pageSize)}},
 			)
+			dataBaseColl = depositColl
+
+		case "wallet":
+			// Internal wallet movements across deposit and transfer
+			p := append(basePipeline,
+				bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
+			)
+			p = append(p,
+				bson.D{{Key: "$match", Value: bson.M{"transaction_product": bson.M{"$in": []string{"Internal Deposit", "Internal Transfer"}}}}},
+				bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
+				bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
+				bson.D{{Key: "$limit", Value: int64(pageSize)}},
+			)
+			dataPipeline = p
 			dataBaseColl = depositColl
 
 		case "point":

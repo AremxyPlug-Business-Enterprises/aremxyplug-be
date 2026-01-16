@@ -54,6 +54,7 @@ func (handler *HttpHandler) UserEventsWS(w http.ResponseWriter, r *http.Request)
 			if r := recover(); r != nil {
 				handler.logger.Error("panic in websocket reader", zap.String("user_id", userID), zap.Any("panic", r))
 			}
+			cancel() // Ensure context is cancelled on exit
 		}()
 
 		conn.SetReadLimit(512)
@@ -63,29 +64,17 @@ func (handler *HttpHandler) UserEventsWS(w http.ResponseWriter, r *http.Request)
 			return nil
 		})
 
-		// Send periodic pings
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-
 		for {
-			select {
-			case <-ticker.C:
-				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
-					handler.logger.Debug("ping failed", zap.String("user_id", userID), zap.Error(err))
-					cancel()
-					return
-				}
-			case <-ctx.Done():
+			if _, _, err := conn.ReadMessage(); err != nil {
+				handler.logger.Debug("websocket client disconnected", zap.String("user_id", userID), zap.Error(err))
 				return
-			default:
-				if _, _, err := conn.ReadMessage(); err != nil {
-					handler.logger.Debug("websocket client disconnected", zap.String("user_id", userID), zap.Error(err))
-					cancel()
-					return
-				}
 			}
 		}
 	}()
+
+	// Send periodic pings
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 
 	// writer loop: forward redis messages to websocket
 	for {
@@ -93,6 +82,11 @@ func (handler *HttpHandler) UserEventsWS(w http.ResponseWriter, r *http.Request)
 		case <-ctx.Done():
 			handler.logger.Info("websocket context done", zap.String("user_id", userID))
 			return
+		case <-ticker.C:
+			if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
+				handler.logger.Debug("ping failed", zap.String("user_id", userID), zap.Error(err))
+				return
+			}
 		case m, ok := <-msgCh:
 			if !ok {
 				handler.logger.Debug("websocket message channel closed", zap.String("user_id", userID))
