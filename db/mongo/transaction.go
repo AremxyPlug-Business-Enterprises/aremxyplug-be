@@ -114,7 +114,12 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		case "points", "point", "redeem":
 			collectionsToQuery = []string{pointRedeemColl}
 			appliedSubcategory = true
-		case "internal deposit", "virtual accounts", "deposit":
+		case "virtual accounts":
+			// Virtual accounts is a specific filter on deposit collection
+			collectionsToQuery = []string{depositColl}
+			appliedSubcategory = true
+			matchConditions = append(matchConditions, bson.E{Key: "transaction_product", Value: "Virtual Account"})
+		case "internal deposit", "deposit":
 			collectionsToQuery = []string{depositColl}
 			appliedSubcategory = true
 		}
