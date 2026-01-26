@@ -1170,7 +1170,7 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 		case "virtual":
 			// Only Virtual Account product from deposit collection (inflow)
 			dataPipeline = append(basePipeline,
-				bson.D{{Key: "$match", Value: bson.M{"transaction_product": "Virtual Account"}}},
+				bson.D{{Key: "$match", Value: bson.M{"product": "Virtual Account"}}},
 				bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
 				bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
 				bson.D{{Key: "$limit", Value: int64(pageSize)}},
@@ -1183,7 +1183,7 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 				bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
 			)
 			p = append(p,
-				bson.D{{Key: "$match", Value: bson.M{"transaction_product": bson.M{"$in": []string{"Internal Deposit", "Internal Transfer"}}}}},
+				bson.D{{Key: "$match", Value: bson.M{"product": bson.M{"$in": []string{"Internal Deposit", "Internal Transfer"}}}}},
 				bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
 				bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
 				bson.D{{Key: "$limit", Value: int64(pageSize)}},
