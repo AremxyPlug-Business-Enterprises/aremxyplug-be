@@ -13,7 +13,6 @@ import (
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/redis"
-	"github.com/aremxyplug-be/lib/balance"
 	"github.com/aremxyplug-be/lib/randomgen"
 	"github.com/shopspring/decimal"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -116,7 +115,9 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 		return models.TransferResponse{}, err
 	}
 
-	newBalance, _ := balance.NewBalanceDeposit(bal, decimal.NewFromFloatWithExponent(data.Amount, -2))
+	// newBalance, _ := balance.NewBalanceDeposit(bal, decimal.NewFromFloatWithExponent(data.Amount, -2))
+
+	newBalance := bal.Add(decimal.NewFromFloatWithExponent(data.Amount, -2))
 
 	if err := c.db.UpdateBalance(user.ID, newBalance); err != nil {
 		c.logger.Error(err.Error())
