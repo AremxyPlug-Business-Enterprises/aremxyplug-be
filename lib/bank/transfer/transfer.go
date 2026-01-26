@@ -2,6 +2,7 @@ package transfer
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/redis"
+	"github.com/aremxyplug-be/lib/events"
 	"github.com/aremxyplug-be/lib/randomgen"
 	"github.com/shopspring/decimal"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -31,16 +33,18 @@ var (
 )
 
 type Config struct {
-	db     db.DataStore
-	logger *zap.Logger
-	redis  *redis.RedisConn
+	db        db.DataStore
+	logger    *zap.Logger
+	redis     *redis.RedisConn
+	processor *events.Processor
 }
 
-func NewConfig(store db.DataStore, logger *zap.Logger, redis *redis.RedisConn) *Config {
+func NewConfig(store db.DataStore, logger *zap.Logger, redis *redis.RedisConn, processor *events.Processor) *Config {
 	return &Config{
-		db:     store,
-		logger: logger,
-		redis:  redis,
+		db:        store,
+		logger:    logger,
+		redis:     redis,
+		processor: processor,
 	}
 }
 
@@ -168,6 +172,42 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 	if err := c.db.SaveDeposit(dept); err != nil {
 		c.logger.Error(err.Error())
 		return models.TransferResponse{}, err
+	}
+
+	if c.processor != nil {
+		// Process deposit event for receiver
+		go func(uID string, amt string, txID string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			ev := &events.Event{
+				Type:      "transaction.completed",
+				UserID:    user.ID, // receiver user ID
+				Amount:    fmt.Sprintf("%v", data.Amount),
+				TxID:      depTransactionID,
+				TS:        time.Now().UTC(),
+				Published: false,
+			}
+			if err := c.processor.ProcessEvent(ctx, ev); err != nil {
+				c.logger.Error("failed to process transaction.completed event", zap.Error(err), zap.String("user_id", uID))
+			}
+		}(user.ID, fmt.Sprintf("%v", data.Amount), depTransactionID)
+
+		// Process transfer event for sender
+		go func(uID string, amt string, txID string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			ev := &events.Event{
+				Type:      "transaction.completed",
+				UserID:    data.UserID, // sender user ID
+				Amount:    fmt.Sprintf("%v", data.Amount),
+				TxID:      trfTransactionID,
+				TS:        time.Now().UTC(),
+				Published: false,
+			}
+			if err := c.processor.ProcessEvent(ctx, ev); err != nil {
+				c.logger.Error("failed to process transaction.completed event", zap.Error(err), zap.String("user_id", uID))
+			}
+		}(data.UserID, fmt.Sprintf("%v", data.Amount), trfTransactionID)
 	}
 
 	return trf, nil
