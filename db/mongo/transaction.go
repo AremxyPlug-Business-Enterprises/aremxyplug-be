@@ -108,14 +108,16 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		case "elect", "electric", "electricity":
 			collectionsToQuery = []string{electricColl}
 			appliedSubcategory = true
-		case "internal transfer", "money transfer", "transfer":
-			collectionsToQuery = []string{transferColl}
-			appliedSubcategory = true
 		case "points", "point", "redeem":
 			collectionsToQuery = []string{pointRedeemColl}
 			appliedSubcategory = true
-		case "internal deposit", "virtual accounts", "deposit":
+		case "virtual accounts":
+			// Virtual accounts is a specific filter on deposit collection
 			collectionsToQuery = []string{depositColl}
+			appliedSubcategory = true
+			matchConditions = append(matchConditions, bson.E{Key: "transaction_product", Value: "Virtual Account"})
+		case "internal deposit", "deposit", "internal transfer", "transfer":
+			collectionsToQuery = []string{depositColl, transferColl}
 			appliedSubcategory = true
 		}
 	}
@@ -1165,7 +1167,7 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 		case "virtual":
 			// Only Virtual Account product from deposit collection (inflow)
 			dataPipeline = append(basePipeline,
-				bson.D{{Key: "$match", Value: bson.M{"transaction_product": "Virtual Account"}}},
+				bson.D{{Key: "$match", Value: bson.M{"product": "Virtual Account"}}},
 				bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
 				bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
 				bson.D{{Key: "$limit", Value: int64(pageSize)}},
@@ -1178,7 +1180,7 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 				bson.D{{Key: "$unionWith", Value: bson.M{"coll": transferColl, "pipeline": transferUnionPipeline}}},
 			)
 			p = append(p,
-				bson.D{{Key: "$match", Value: bson.M{"transaction_product": bson.M{"$in": []string{"Internal Deposit", "Internal Transfer"}}}}},
+				bson.D{{Key: "$match", Value: bson.M{"product": bson.M{"$in": []string{"Internal Deposit", "Internal Transfer"}}}}},
 				bson.D{{Key: "$sort", Value: bson.M{"created_at": -1}}},
 				bson.D{{Key: "$skip", Value: int64((page - 1) * pageSize)}},
 				bson.D{{Key: "$limit", Value: int64(pageSize)}},
