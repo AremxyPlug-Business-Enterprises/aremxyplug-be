@@ -273,6 +273,44 @@ func (m *mongoStore) GetPointRedeemDetails(orderID string) (models.PointRedeem, 
 	return redeem, nil
 }
 
+func (m *mongoStore) GetTotalPointsRedeemed(userID string) (int, error) {
+	ctx := context.Background()
+
+	// Aggregate sum of all points redeemed for this user
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.D{primitive.E{Key: "user_id", Value: userID}}}},
+		bson.D{{Key: "$group", Value: bson.D{
+			primitive.E{Key: "_id", Value: nil},
+			primitive.E{Key: "total_redeemed", Value: bson.D{
+				primitive.E{Key: "$sum", Value: bson.D{
+					primitive.E{Key: "$toInt", Value: "$points_redeemed"},
+				}},
+			}},
+		}}},
+	}
+
+	cursor, err := m.col(pointRedeemColl).Aggregate(ctx, pipeline)
+	if err != nil {
+		m.logger.Error("failed to aggregate total points redeemed", zap.Error(err), zap.String("user_id", userID))
+		return 0, fmt.Errorf("failed to aggregate total points redeemed: %v", err)
+	}
+	defer cursor.Close(ctx)
+
+	var result []bson.M
+	if err := cursor.All(ctx, &result); err != nil {
+		m.logger.Error("failed to decode aggregation result", zap.Error(err), zap.String("user_id", userID))
+		return 0, fmt.Errorf("failed to decode aggregation result: %v", err)
+	}
+
+	// If no documents found, return 0
+	if len(result) == 0 {
+		return 0, nil
+	}
+
+	totalRedeemed := int(result[0]["total_redeemed"].(int32))
+	return totalRedeemed, nil
+}
+
 func (m *mongoStore) RedeemPoints(userID string, pointsToRedeem int, redeemRate int) (amountRedeemed int, e error) {
 	ctx := context.Background()
 
