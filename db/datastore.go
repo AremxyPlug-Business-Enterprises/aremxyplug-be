@@ -37,6 +37,7 @@ type Extras interface {
 	GetPointTransactions(userID string, page int) ([]models.PointTransaction, error)
 	UpdatePointAfterVerify(userID string) error
 	GetPointRedeemDetails(orderID string) (models.PointRedeem, error)
+	GetTotalPointsRedeemed(userID string) (int, error)
 }
 
 type BankStore interface {

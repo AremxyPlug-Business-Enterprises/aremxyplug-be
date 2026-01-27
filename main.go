@@ -81,7 +81,6 @@ func main() {
 	electSub := elect.NewElectricConn(store, logger)
 	virtualAcc := bankacc.NewBankConfig(store, logger)
 	bankTransc := transactions.NewTransaction(store)
-	bankTrf := transfer.NewConfig(store, logger, redisClient)
 	point := pointredeem.NewPointConfig(store)
 	pin := auth_pin.NewPinConfig(logger, store)
 	sms := termii.NewSMSConn(store, logger)
@@ -90,6 +89,7 @@ func main() {
 	taskService := tasks.NewService(store)
 	processor := events.NewProcessor(redisClient, taskService, logger)
 	bankDep := deposit.NewDepositConfig(store, logger, processor)
+	bankTrf := transfer.NewConfig(store, logger, redisClient, processor)
 
 	config := httpSrv.ServerConfig{
 		Store:        store,

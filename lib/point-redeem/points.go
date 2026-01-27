@@ -22,9 +22,29 @@ func NewPointConfig(store db.Extras) *PointConfig {
 
 func (p *PointConfig) RedeemPoints(userID string, points int) (models.PointRedeem, error) {
 
-	redeemRate := 1
+	const (
+		MaxRedeemCap = 100
+		MinRedeem    = 10
+	)
 
-	// write the as a complete string
+	// Validate minimum points to redeem
+	if points < MinRedeem {
+		return models.PointRedeem{}, fmt.Errorf("minimum redeem is %d points, you requested %d", MinRedeem, points)
+	}
+
+	// Get total points already redeemed by this user
+	totalRedeemed, err := p.db.GetTotalPointsRedeemed(userID)
+	if err != nil {
+		return models.PointRedeem{}, err
+	}
+
+	// Check if redemption would exceed the cap
+	if totalRedeemed+points > MaxRedeemCap {
+		remainingCap := MaxRedeemCap - totalRedeemed
+		return models.PointRedeem{}, fmt.Errorf("redemption cap exceeded: you have already redeemed %d points, can only redeem up to %d more", totalRedeemed, remainingCap)
+	}
+
+	redeemRate := 1
 	redeemRateStr := fmt.Sprintf("%d", redeemRate)
 
 	transactionID := randomgen.GenerateTransactionID("pnt")
@@ -32,7 +52,6 @@ func (p *PointConfig) RedeemPoints(userID string, points int) (models.PointRedee
 
 	redeemedAmount, err := p.db.RedeemPoints(userID, points, redeemRate)
 	if err != nil {
-		// depending on the error returned
 		return models.PointRedeem{}, err
 	}
 
