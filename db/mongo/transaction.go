@@ -145,17 +145,25 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		}
 	}
 
-	// Projection
-	projectStage := bson.D{
-		{Key: "$project", Value: bson.D{
-			{Key: "product", Value: "$transaction_product"},
-			{Key: "description", Value: "$transaction_description"},
-			{Key: "order_id", Value: "$order_id"},
-			{Key: "created_at", Value: "$created_at"},
-			{Key: "status", Value: "$status"},
-			{Key: "amount", Value: "$amount"}, // keep raw here
-		}},
+	projectStageForColl := func(coll string) bson.D {
+		amountField := "$amount"
+		if coll == airColl {
+			amountField = "$discounted_amount"
+		}
+		return bson.D{
+			{Key: "$project", Value: bson.D{
+				{Key: "product", Value: "$transaction_product"},
+				{Key: "description", Value: "$transaction_description"},
+				{Key: "order_id", Value: "$order_id"},
+				{Key: "created_at", Value: "$created_at"},
+				{Key: "status", Value: "$status"},
+				{Key: "amount", Value: amountField},
+			}},
+		}
 	}
+
+	// Projection
+	projectStage := projectStageForColl(baseCollection)
 
 	// Base flow type
 	baseFlowType := "outflow"
@@ -200,7 +208,7 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 			// Normal collections
 			unionStages = bson.A{
 				bson.D{{Key: "$match", Value: matchConditions}},
-				projectStage,
+				projectStageForColl(coll),
 				bson.D{{Key: "$addFields", Value: bson.M{"flowType": flowType}}},
 			}
 		}
@@ -340,7 +348,7 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		} else {
 			unionStages = mongo.Pipeline{
 				bson.D{{Key: "$match", Value: totalsMatch}},
-				projectStage,
+				projectStageForColl(coll),
 				bson.D{{Key: "$addFields", Value: bson.M{"flowType": flowType}}},
 			}
 		}
@@ -479,19 +487,25 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 	var wg sync.WaitGroup
 
 	// common addFields stage for amountDecimal + product field
-	commonAdd := bson.D{{Key: "$addFields", Value: bson.M{
-		"amountDecimal": bson.M{
-			"$cond": bson.A{
-				bson.M{"$eq": bson.A{bson.M{"$type": "$amount"}, "double"}},
-				"$amount",
-				bson.M{"$convert": bson.M{
-					"input": "$amount", "to": "double",
-					"onError": 0, "onNull": 0,
-				}},
+	commonAddForColl := func(collection string) bson.D {
+		amountField := "$amount"
+		if collection == airColl {
+			amountField = "$discounted_amount"
+		}
+		return bson.D{{Key: "$addFields", Value: bson.M{
+			"amountDecimal": bson.M{
+				"$cond": bson.A{
+					bson.M{"$eq": bson.A{bson.M{"$type": amountField}, "double"}},
+					amountField,
+					bson.M{"$convert": bson.M{
+						"input": amountField, "to": "double",
+						"onError": 0, "onNull": 0,
+					}},
+				},
 			},
-		},
-		"product": "$transaction_description",
-	}}}
+			"product": "$transaction_description",
+		}}}
+	}
 
 	// per-collection worker
 	for _, coll := range collections {
@@ -504,7 +518,7 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 				pipeline = append(pipeline, bson.D{{Key: "$match", Value: matchConditions}})
 			}
 			// add common fields
-			pipeline = append(pipeline, commonAdd)
+			pipeline = append(pipeline, commonAddForColl(collection))
 
 			// category-specific handling
 			if category == "data" {
@@ -798,10 +812,15 @@ func (m *mongoStore) GetSalesOverview(filter map[string]interface{}) (models.Sal
 		per := mongo.Pipeline{}
 		per = append(per, bson.D{{Key: "$match", Value: matchConditions}})
 
+		amountField := "$amount"
+		if coll == airColl {
+			amountField = "$discounted_amount"
+		}
+
 		per = append(per, bson.D{{Key: "$addFields", Value: bson.M{
 			"product":                "$transaction_description",
 			"transaction_created_at": "$created_at",
-			"amount":                 "$amount",
+			"amount":                 amountField,
 		}}})
 
 		switch cat {
@@ -879,7 +898,7 @@ func (m *mongoStore) GetSalesOverview(filter map[string]interface{}) (models.Sal
 					},
 				},
 				"product":    "$productType",
-				"amount":     "$amount",
+				"amount":     amountField,
 				"created_at": "$transaction_created_at",
 			}}})
 

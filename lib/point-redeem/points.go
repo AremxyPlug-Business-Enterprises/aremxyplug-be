@@ -45,7 +45,7 @@ func (p *PointConfig) RedeemPoints(userID string, points int) (models.PointRedee
 	}
 
 	redeemRate := 1
-	redeemRateStr := fmt.Sprintf("%d", redeemRate)
+	redeemRateStr := fmt.Sprintf("%d point(s) ~ ₦1", redeemRate)
 
 	transactionID := randomgen.GenerateTransactionID("pnt")
 	orderID, _ := randomgen.GenerateOrderID()

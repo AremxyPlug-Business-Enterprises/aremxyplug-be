@@ -14,6 +14,7 @@ import (
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/aremxyplug-be/lib/randomgen"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
@@ -64,6 +65,16 @@ func (a *AirtimeConn) BuyAirtime(airtime AirtimeInfo) (*telcom.AirtimeResponse, 
 	product := network + " " + "VTU"
 	description := product
 	transactionProduct := "Airtime Top-up"
+	discount_percentage := "3%"
+	amt, err := strconv.ParseFloat(airtime.Amount, 64)
+	if err != nil {
+		a.logger.Error("Error converting amount to int", zap.Error(err))
+		return nil, err
+	}
+	amt_decimal := decimal.NewFromFloatWithExponent(amt, -2)
+
+	discount_deciamal := amt_decimal.Mul(decimal.NewFromFloat(0.03))
+	discounted_amount := discount_deciamal.String()
 
 	result := &telcom.AirtimeResponse{
 		UserID:                 airtime.UserID,
@@ -79,6 +90,8 @@ func (a *AirtimeConn) BuyAirtime(airtime AirtimeInfo) (*telcom.AirtimeResponse, 
 		TransactionID:          transactionID,
 		CreatedAt:              time.Now().UTC(),
 		UserReference:          airtime.Reference,
+		Discount_perecent:      discount_percentage,
+		Discount_amount:        discounted_amount,
 	}
 
 	resp, err := a.buy(airtime)
