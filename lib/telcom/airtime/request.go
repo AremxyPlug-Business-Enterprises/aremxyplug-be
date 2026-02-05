@@ -31,14 +31,16 @@ type vendData struct {
 }
 
 type AirtimeInfo struct {
-	UserID    string
-	Network   string `json:"network"`
-	Amount    string `json:"amount"`
-	Phone_no  string `json:"mobileno"`
-	Recipient string `json:"recipient,omitempty"`
-	FullName  string
-	Reference string
-	TXN       string
+	UserID           string
+	Network          string `json:"network"`
+	Amount           string `json:"amount"`
+	Phone_no         string `json:"mobileno"`
+	Recipient        string `json:"recipient,omitempty"`
+	Discount_percent string
+	Discount_amount  string
+	FullName         string
+	Reference        string
+	TXN              string
 }
 
 type AirtimeApiResponse struct {

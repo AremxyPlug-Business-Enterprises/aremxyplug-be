@@ -59,7 +59,8 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		amount, err := strconv.Atoi(data.Amount)
+		discount_percentage := "3%"
+		amt, err := strconv.ParseFloat(data.Amount, 64)
 		if err != nil {
 			handler.logger.Error("Failed to convert amount to integer", zap.Error(err))
 			w.WriteHeader(http.StatusBadRequest)
@@ -71,7 +72,13 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(response)
 			return
 		}
-		amtDecimal := decimal.NewFromFloatWithExponent(float64(amount), -2)
+		amt_decimal := decimal.NewFromFloatWithExponent(amt, -2)
+
+		discount_decimal := amt_decimal.Mul(decimal.NewFromFloat(0.03))
+		discounted_amount := discount_decimal.String()
+
+		data.Discount_percent = discount_percentage
+		data.Discount_amount = discounted_amount
 
 		_, balance, _, err := handler.getBalance(id)
 		handler.logger.Info("fallback to DB for user balance", zap.String("userID", id), zap.Error(err))
@@ -90,7 +97,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		handler.logger.Info("User balance", zap.String("userID", id), zap.String("balance", balance.String()))
 
 		// Check payment validity
-		newBal, valid, err := handler.checkPayment(balance, amtDecimal)
+		newBal, valid, err := handler.checkPayment(balance, amt_decimal)
 		if !valid || err != nil {
 			handler.logger.Error("Payment validation failed", zap.Error(err))
 			w.WriteHeader(http.StatusBadRequest)
@@ -106,7 +113,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		data.FullName = fullName
 		data.UserID = id
 
-		txnID, err := handler.placeRedisHoldAndMeta(w, id, amount, balance)
+		txnID, err := handler.placeRedisHoldAndMeta(w, id, amt_decimal, balance)
 		if err != nil {
 			return
 		}
