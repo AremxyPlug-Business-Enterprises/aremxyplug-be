@@ -148,7 +148,7 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 	projectStageForColl := func(coll string) bson.D {
 		amountField := "$amount"
 		if coll == airColl {
-			amountField = "$discounted_amount"
+			amountField = "$discount_amount"
 		}
 		return bson.D{
 			{Key: "$project", Value: bson.D{
@@ -490,7 +490,7 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 	commonAddForColl := func(collection string) bson.D {
 		amountField := "$amount"
 		if collection == airColl {
-			amountField = "$discounted_amount"
+			amountField = "$discount_amount"
 		}
 		return bson.D{{Key: "$addFields", Value: bson.M{
 			"amountDecimal": bson.M{
@@ -814,7 +814,7 @@ func (m *mongoStore) GetSalesOverview(filter map[string]interface{}) (models.Sal
 
 		amountField := "$amount"
 		if coll == airColl {
-			amountField = "$discounted_amount"
+			amountField = "$discount_amount"
 		}
 
 		per = append(per, bson.D{{Key: "$addFields", Value: bson.M{
