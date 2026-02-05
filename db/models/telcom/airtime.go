@@ -19,5 +19,5 @@ type AirtimeResponse struct {
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
 	UserReference          string    `json:"user_reference" bson:"user_reference"`
 	Discount_perecent      string    `json:"discount_percentage" bson:"discount_percentage"`
-	Discount_amount        string    `json:"discounted_amount" bson:"discounted_amount"`
+	Discount_amount        string    `json:"discount_amount" bson:"discount_amount"`
 }
