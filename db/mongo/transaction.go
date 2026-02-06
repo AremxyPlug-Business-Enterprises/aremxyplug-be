@@ -16,6 +16,12 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	ErrInvalidCategory = errors.New("invalid category filter")
+	ErrInvalidFlow     = errors.New("invalid flow filter")
+	ErrInvalidSubcat   = errors.New("invalid subcategory filter")
+)
+
 func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSize int) (models.TransactionResponse, error) {
 	// Validate pagination
 	if page < 1 {
@@ -87,7 +93,7 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		case "outflow":
 			collectionsToQuery = outflowCollections
 		default:
-			return models.TransactionResponse{}, errors.New("invalid flow filter")
+			return models.TransactionResponse{}, ErrInvalidFlow
 		}
 	}
 
@@ -125,7 +131,7 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 
 		default:
 			// If subcategory provided but doesn't match known values, return error
-			return models.TransactionResponse{}, errors.New("invalid subcategory filter")
+			return models.TransactionResponse{}, ErrInvalidSubcat
 		}
 	}
 
@@ -139,7 +145,7 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 			collectionsToQuery = []string{depositColl, transferColl, pointRedeemColl}
 		default:
 			// If category provided but doesn't match known values, return error
-			return models.TransactionResponse{}, errors.New("invalid category filter")
+			return models.TransactionResponse{}, ErrInvalidCategory
 		}
 	}
 

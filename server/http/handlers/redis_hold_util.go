@@ -27,7 +27,7 @@ func (handler *HttpHandler) placeRedisHoldAndMeta(w http.ResponseWriter, userID 
 			response := responseFormat.CustomResponse{
 				Status:  http.StatusBadRequest,
 				Message: "error",
-				Data:    map[string]interface{}{"dsata": "invalid amount format"},
+				Data:    map[string]interface{}{"data": "invalid amount format"},
 			}
 			json.NewEncoder(w).Encode(response)
 			return "", err
@@ -40,6 +40,8 @@ func (handler *HttpHandler) placeRedisHoldAndMeta(w http.ResponseWriter, userID 
 		amount = float64(v)
 	case float32:
 		amount = float64(v)
+	case decimal.Decimal:
+		amount, _ = v.Float64()
 	default:
 		handler.logger.Error("Unsupported amount type for redis hold", zap.Any("type", v))
 		w.WriteHeader(http.StatusBadRequest)
