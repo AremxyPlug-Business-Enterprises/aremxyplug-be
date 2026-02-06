@@ -59,7 +59,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		discount_percentage := "3%"
+		discount_percentage := "2%"
 		amt, err := strconv.ParseFloat(data.Amount, 64)
 		if err != nil {
 			handler.logger.Error("Failed to convert amount to integer", zap.Error(err))
@@ -74,7 +74,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		}
 		amt_decimal := decimal.NewFromFloatWithExponent(amt, -2)
 
-		discount_decimal := amt_decimal.Mul(decimal.NewFromFloat(0.03))
+		discount_decimal := amt_decimal.Mul(decimal.NewFromFloat(0.02))
 		discounted_amount := discount_decimal.String()
 
 		data.Discount_percent = discount_percentage
