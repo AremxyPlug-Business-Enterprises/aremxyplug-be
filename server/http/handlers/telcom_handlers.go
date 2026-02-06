@@ -75,10 +75,10 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		amt_decimal := decimal.NewFromFloatWithExponent(amt, -2)
 
 		discount_decimal := amt_decimal.Mul(decimal.NewFromFloat(0.02))
-		discounted_amount := amt_decimal.Sub(discount_decimal).StringFixed(2)
+		discounted_amount := amt_decimal.Sub(discount_decimal)
 
 		data.Discount_percent = discount_percentage
-		data.Discount_amount = discounted_amount
+		data.Discount_amount = discounted_amount.StringFixed(2)
 
 		_, balance, _, err := handler.getBalance(id)
 		handler.logger.Info("fallback to DB for user balance", zap.String("userID", id), zap.Error(err))
@@ -97,7 +97,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		handler.logger.Info("User balance", zap.String("userID", id), zap.String("balance", balance.String()))
 
 		// Check payment validity
-		newBal, valid, err := handler.checkPayment(balance, amt_decimal)
+		newBal, valid, err := handler.checkPayment(balance, discounted_amount)
 		if !valid || err != nil {
 			handler.logger.Error("Payment validation failed", zap.Error(err))
 			w.WriteHeader(http.StatusBadRequest)
@@ -113,7 +113,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		data.FullName = fullName
 		data.UserID = id
 
-		txnID, err := handler.placeRedisHoldAndMeta(w, id, amt_decimal, balance)
+		txnID, err := handler.placeRedisHoldAndMeta(w, id, discounted_amount, balance)
 		if err != nil {
 			return
 		}
