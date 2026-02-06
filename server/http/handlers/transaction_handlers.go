@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aremxyplug-be/db/mongo"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -107,6 +108,17 @@ func (handler *HttpHandler) GetTransactions(w http.ResponseWriter, r *http.Reque
 		// --- Query Transactions ---
 		transactions, err := handler.store.GetTransactions(filter, page, pageSize)
 		if err != nil {
+			if err == mongo.ErrInvalidCategory || err == mongo.ErrInvalidFlow || err == mongo.ErrInvalidSubcat {
+				handler.logger.Warn("Invalid filter parameter", zap.Error(err))
+				w.WriteHeader(http.StatusBadRequest)
+				response := responseFormat.CustomResponse{
+					Status:  http.StatusBadRequest,
+					Message: "error",
+					Data:    map[string]interface{}{"data": err.Error()},
+				}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
 			handler.logger.Error("Error fetching transactions", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{
