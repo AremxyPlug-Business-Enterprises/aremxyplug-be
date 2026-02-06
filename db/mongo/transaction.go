@@ -86,6 +86,8 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 			collectionsToQuery = inflowCollections
 		case "outflow":
 			collectionsToQuery = outflowCollections
+		default:
+			return models.TransactionResponse{}, errors.New("invalid flow filter")
 		}
 	}
 
@@ -120,6 +122,10 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 			collectionsToQuery = []string{depositColl, transferColl}
 			matchConditions = append(matchConditions, bson.E{Key: "transaction_product", Value: "Internal Deposit"}, bson.E{Key: "transaction_product", Value: "Internal Transfer"})
 			appliedSubcategory = true
+
+		default:
+			// If subcategory provided but doesn't match known values, return error
+			return models.TransactionResponse{}, errors.New("invalid subcategory filter")
 		}
 	}
 
@@ -131,6 +137,9 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 			collectionsToQuery = []string{airColl, dataColl, eduColl, tvColl, electricColl}
 		case "payments":
 			collectionsToQuery = []string{depositColl, transferColl, pointRedeemColl}
+		default:
+			// If category provided but doesn't match known values, return error
+			return models.TransactionResponse{}, errors.New("invalid category filter")
 		}
 	}
 
@@ -149,6 +158,9 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		amountField := "$amount"
 		if coll == airColl {
 			amountField = "$discount_amount"
+		}
+		if coll == pointRedeemColl {
+			amountField = "$amount_redeemed"
 		}
 		return bson.D{
 			{Key: "$project", Value: bson.D{
