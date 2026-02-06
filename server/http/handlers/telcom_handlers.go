@@ -75,7 +75,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		amt_decimal := decimal.NewFromFloatWithExponent(amt, -2)
 
 		discount_decimal := amt_decimal.Mul(decimal.NewFromFloat(0.02))
-		discounted_amount := discount_decimal.String()
+		discounted_amount := amt_decimal.Sub(discount_decimal).StringFixed(2)
 
 		data.Discount_percent = discount_percentage
 		data.Discount_amount = discounted_amount
