@@ -275,7 +275,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	accessCookie := &http.Cookie{
 		Name:     "access_token",
 		Value:    jwtToken,
-		MaxAge:   500,
+		MaxAge:   900,
 		HttpOnly: true,
 		Secure:   true,
 		Path:     "/",
@@ -1254,7 +1254,7 @@ func (handler *HttpHandler) RefreshToken(w http.ResponseWriter, r *http.Request)
 	accessCookie := &http.Cookie{
 		Name:     "access_token",
 		Value:    newAccess,
-		MaxAge:   500,
+		MaxAge:   900,
 		HttpOnly: true,
 		Secure:   true,
 		Path:     "/",
