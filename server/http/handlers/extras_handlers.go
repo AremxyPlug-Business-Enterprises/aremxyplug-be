@@ -708,7 +708,10 @@ func (handler *HttpHandler) GetTaskProgress(w http.ResponseWriter, r *http.Reque
 	response := responseFormat.CustomResponse{
 		Status:  http.StatusOK,
 		Message: "success",
-		Data:    map[string]interface{}{"tasks": result},
+		Data: map[string]interface{}{
+			"tasks": result,
+			"beta":  user.Beta,
+		},
 	}
 	json.NewEncoder(w).Encode(response)
 }

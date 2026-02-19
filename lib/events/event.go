@@ -7,6 +7,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/redis"
 	"github.com/aremxyplug-be/lib/tasks"
@@ -30,13 +31,15 @@ type Event struct {
 type Processor struct {
 	redis   *redis.RedisConn
 	TaskSvc *tasks.Service
+	store   db.DataStore
 	Logger  *zap.Logger
 }
 
-func NewProcessor(redis *redis.RedisConn, taskSvc *tasks.Service, logger *zap.Logger) *Processor {
+func NewProcessor(redis *redis.RedisConn, taskSvc *tasks.Service, store db.DataStore, logger *zap.Logger) *Processor {
 	return &Processor{
 		redis:   redis,
 		TaskSvc: taskSvc,
+		store:   store,
 		Logger:  logger,
 	}
 }
@@ -61,6 +64,17 @@ func (p *Processor) ProcessEvent(ctx context.Context, ev *Event) error {
 		return nil // not a task-related event
 	}
 	p.Logger.Debug("mapped event to task events", zap.Any("task_events", tes), zap.String("user", ev.UserID))
+
+	// Prevent duplicate processing for the same user/type/txID (or event ID fallback)
+	if dedupKey := p.eventDedupKey(ev); dedupKey != "" {
+		set, err := p.redis.SetNXWithTTL(dedupKey, "1", 30*24*time.Hour)
+		if err != nil {
+			p.Logger.Warn("failed to set event dedup key", zap.String("user", ev.UserID), zap.String("key", dedupKey), zap.Error(err))
+		} else if !set {
+			p.Logger.Debug("duplicate event skipped", zap.String("user", ev.UserID), zap.String("key", dedupKey))
+			return nil
+		}
+	}
 
 	// Iterate over each task event derived from the business event
 	for _, te := range tes {
@@ -134,7 +148,55 @@ func (p *Processor) ProcessEvent(ctx context.Context, ev *Event) error {
 		}
 	}
 
+	p.maybeSetUserBeta(ctx, ev.UserID)
+
 	return nil
+}
+
+func (p *Processor) maybeSetUserBeta(ctx context.Context, userID string) {
+	allCompleted, err := p.TaskSvc.AllTasksCompleted(userID)
+	if err != nil {
+		p.Logger.Warn("failed to check task completion", zap.String("user", userID), zap.Error(err))
+		return
+	}
+	if !allCompleted {
+		return
+	}
+
+	user, err := p.store.GetUserByID(userID)
+	if err != nil {
+		p.Logger.Warn("failed to load user for beta update", zap.String("user", userID), zap.Error(err))
+		return
+	}
+	if user.Beta {
+		return
+	}
+
+	if err := p.store.UpdateUserBeta(userID, true); err != nil {
+		p.Logger.Error("failed to update user beta flag", zap.String("user", userID), zap.Error(err))
+		return
+	}
+
+	payload := map[string]interface{}{
+		"type": "user.beta.updated",
+		"beta": true,
+	}
+	if err := p.redis.PublishUserEvent(ctx, userID, payload); err != nil {
+		p.Logger.Warn("failed to publish beta update", zap.String("user", userID), zap.Error(err))
+	}
+}
+
+func (p *Processor) eventDedupKey(ev *Event) string {
+	if ev == nil {
+		return ""
+	}
+	if ev.UserID != "" && ev.Type != "" && ev.TxID != "" {
+		return fmt.Sprintf("event:dedup:%s:%s:%s", ev.UserID, ev.Type, ev.TxID)
+	}
+	if ev.ID != "" {
+		return fmt.Sprintf("event:dedup:id:%s", ev.ID)
+	}
+	return ""
 }
 
 func mapEventToTaskEvent(ev *Event) []models.TaskEvent {

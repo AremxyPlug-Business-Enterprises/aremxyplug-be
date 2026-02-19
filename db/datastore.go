@@ -88,6 +88,7 @@ type UserStore interface {
 	UpdateEmail(id, email string) error
 	GetUserByUsernameOrEmailOrPhone(username, email, phone string) (*models.User, error)
 	UpdateUserAddress(userID string, gender string, dob string, address string, postalCode string) error
+	UpdateUserBeta(id string, beta bool) error
 }
 
 type TelcomStore interface {

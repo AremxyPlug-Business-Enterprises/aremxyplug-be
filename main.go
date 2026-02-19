@@ -87,7 +87,7 @@ func main() {
 	auth := auth.NewAuthConn(secrets, redisClient)
 	scheduler := scheduler.NewScheduler(redisClient, store, logger)
 	taskService := tasks.NewService(store)
-	processor := events.NewProcessor(redisClient, taskService, logger)
+	processor := events.NewProcessor(redisClient, taskService, store, logger)
 	bankDep := deposit.NewDepositConfig(store, logger, processor)
 	bankTrf := transfer.NewConfig(store, logger, redisClient, processor)
 

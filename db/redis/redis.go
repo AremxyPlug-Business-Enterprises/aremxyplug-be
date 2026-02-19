@@ -89,6 +89,23 @@ func (r *RedisConn) SetWithTTL(key string, value interface{}, ttl time.Duration)
 	return r.client.Set(ctx, key, v, ttl).Err()
 }
 
+// SetNXWithTTL sets a key if it does not exist, with a TTL.
+// Returns true if the key was set, false if it already existed.
+func (r *RedisConn) SetNXWithTTL(key string, value interface{}, ttl time.Duration) (bool, error) {
+	ctx := context.Background()
+	var v interface{} = value
+	switch value.(type) {
+	case string, []byte:
+	default:
+		b, err := json.Marshal(value)
+		if err == nil {
+			v = b
+		}
+	}
+
+	return r.client.SetNX(ctx, key, v, ttl).Result()
+}
+
 // Get key - returns (nil, nil) when key missing (preserves original behaviour)
 func (r *RedisConn) Get(key string) (interface{}, error) {
 	ctx := context.Background()

@@ -70,6 +70,28 @@ func (s *Service) ApplyEvent(userID string, te models.TaskEvent) (bool, models.T
 	return false, def.Code, nil, fmt.Errorf("unhandled task type")
 }
 
+// AllTasksCompleted returns true if every task in the registry is completed for the user.
+func (s *Service) AllTasksCompleted(userID string) (bool, error) {
+	docs, err := s.store.ListUserProgress(userID)
+	if err != nil {
+		return false, err
+	}
+
+	progressMap := make(map[models.TaskType]models.ProgressDoc)
+	for i := range docs {
+		progressMap[docs[i].TaskCode] = docs[i]
+	}
+
+	for taskCode := range models.TaskRegistry {
+		doc, exists := progressMap[taskCode]
+		if !exists || !doc.Completed {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
 // Helper: AmountFromString converts a simple numeric string to int64 (best-effort).
 func AmountFromString(s string) int64 {
 	if s == "" {

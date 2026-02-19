@@ -194,9 +194,9 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 
 	// Base pipeline
 	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: matchConditions}},
+		bson.D{{Key: "$match", Value: matchConditions}},
 		projectStage,
-		{{Key: "$addFields", Value: bson.M{"flowType": baseFlowType}}},
+		bson.D{{Key: "$addFields", Value: bson.M{"flowType": baseFlowType}}},
 	}
 
 	// Union with other collections
@@ -1309,9 +1309,9 @@ func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (
 
 	// Base pipeline for totals (deposit = inflow)
 	totalsBasePipeline := mongo.Pipeline{
-		{{Key: "$match", Value: totalsMatch}},
+		bson.D{{Key: "$match", Value: totalsMatch}},
 		amountConversionStage,
-		{{Key: "$addFields", Value: bson.M{"flowType": "inflow"}}},
+		bson.D{{Key: "$addFields", Value: bson.M{"flowType": "inflow"}}},
 		projectStage,
 	}
 
