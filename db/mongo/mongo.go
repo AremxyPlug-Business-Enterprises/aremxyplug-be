@@ -378,6 +378,18 @@ func (m *mongoStore) UpdatePhone(id, phone string) error {
 	return nil
 }
 
+func (m *mongoStore) UpdateUserBeta(id string, beta bool) error {
+	ctx := context.Background()
+	filter := bson.M{"id": id}
+	update := bson.M{"$set": bson.M{"beta": beta}}
+	_, err := m.col(userColl).UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m *mongoStore) VerifyUser(identifier string) (*models.User, error) {
 	userColl := m.col(userColl)
 	ctx := context.Background()

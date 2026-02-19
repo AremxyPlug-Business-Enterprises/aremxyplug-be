@@ -117,6 +117,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		ReferralCount:   0,
 		LastTransaction: timestamp,
 		HasPin:          false,
+		Beta:            false,
 	}
 
 	err = handler.store.SaveUser(newUser)

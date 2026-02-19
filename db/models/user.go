@@ -28,4 +28,5 @@ type User struct {
 	Address         string    `json:"address" bson:"address"`
 	PostalCode      string    `json:"postal_code" bson:"postal_code"`
 	Gender          string    `json:"gender" bson:"gender"`
+	Beta            bool      `json:"beta" bson:"beta"`
 }
