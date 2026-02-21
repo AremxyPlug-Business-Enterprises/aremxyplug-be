@@ -12,6 +12,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// when verifying should we be able to compare the user's date of birth with what is returned from the server? Or just store an object for the user's dob that was returned from the server.
+// on the account of a new user, first check the db, compare to in terms of names and dob for existing customers
+
 func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Request) {
 
 	userDetails, err := handler.GetUserDetails(r)

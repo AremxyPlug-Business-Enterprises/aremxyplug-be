@@ -126,6 +126,7 @@ func (d *DataConn) buyDontechData(data DataInfo) (*telcom.DataResult, error) {
 		TransactionDescription: transactionDesc,
 		TransactionID:          transactionID,
 		RecipientName:          data.Name,
+		Profit_Margin:          data.Profit_Margin,
 	}
 
 	log.Println(resp.StatusCode)

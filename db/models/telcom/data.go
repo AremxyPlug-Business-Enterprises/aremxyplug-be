@@ -20,4 +20,5 @@ type DataResult struct {
 	ReferenceNumber        string    `json:"reference_number" bson:"reference_number"`
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
 	ApiID                  int       `bson:"apiID"`
+	Profit_Margin          string    `json:"-" bson:"profit_margin"`
 }

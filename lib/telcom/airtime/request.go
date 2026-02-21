@@ -41,6 +41,7 @@ type AirtimeInfo struct {
 	FullName         string
 	Reference        string
 	TXN              string
+	Profit_Margin    string
 }
 
 type AirtimeApiResponse struct {

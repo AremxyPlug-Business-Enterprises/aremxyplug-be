@@ -214,7 +214,7 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 
 		pointsEarned := 100
 
-		if err := handler.addPoints(w, id, pointsEarned, "Sign-Up Points", "", "referrals"); err != nil {
+		if err := handler.addPoints(w, id, pointsEarned, "Sign-Up Points", "", "referral"); err != nil {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
