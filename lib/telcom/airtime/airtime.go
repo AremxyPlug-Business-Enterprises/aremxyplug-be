@@ -83,6 +83,7 @@ func (a *AirtimeConn) BuyAirtime(airtime AirtimeInfo) (*telcom.AirtimeResponse, 
 		UserReference:          airtime.Reference,
 		Discount_perecent:      discountPercentage,
 		Discount_amount:        discountAmount,
+		Profit_Margin:          airtime.Profit_Margin,
 	}
 
 	resp, err := a.buy(airtime)

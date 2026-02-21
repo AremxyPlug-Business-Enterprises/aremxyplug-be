@@ -1,19 +1,20 @@
 package data
 
 type DataInfo struct {
-	UserID     string
-	Network    int    `json:"network"`
-	Plan       int    `json:"plan"`
-	Mobile_Num string `json:"mobile_number"`
-	Name       string `json:"name"`
-	FullName   string
-	ProviderID int
-	PlanID     int
-	Amount     string
-	Plan_Name  string
-	PlanSize   string
-	Validity   string
-	TXN        string
+	UserID        string
+	Network       int    `json:"network"`
+	Plan          int    `json:"plan"`
+	Mobile_Num    string `json:"mobile_number"`
+	Name          string `json:"name"`
+	FullName      string
+	ProviderID    int
+	PlanID        int
+	Amount        string
+	Plan_Name     string
+	PlanSize      string
+	Validity      string
+	TXN           string
+	Profit_Margin string
 }
 
 type dontechAPIResponse struct {

@@ -13,6 +13,7 @@ type TelecomProducts interface {
 	DeletePlan(id int) error
 	GetPlans(id int) ([]models.Plan, error)
 	GetPlanByID(planID int) (*models.Plan, error)
+	GetAirtimeProduct(network string) (models.AirtimeProduct, error)
 }
 
 type TelecomServiceImpl struct {
@@ -91,4 +92,15 @@ func (s *TelecomServiceImpl) GetPlanByID(planID int) (*models.Plan, error) {
 	}
 	s.logger.Info("Fetched plan by ID successfully", zap.Int("id", planID))
 	return plan, nil
+}
+
+func (s *TelecomServiceImpl) GetAirtimeProduct(network string) (models.AirtimeProduct, error) {
+	s.logger.Info("Fetching airtime product", zap.String("network", network))
+	airtimeProduct, err := s.store.GetAirtimeProduct(network)
+	if err != nil {
+		s.logger.Error("Error fetching airtime product", zap.Error(err))
+		return models.AirtimeProduct{}, err
+	}
+	s.logger.Info("Fetched airtime product successfully", zap.String("network", network))
+	return airtimeProduct, nil
 }

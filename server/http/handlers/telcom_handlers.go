@@ -74,11 +74,42 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		}
 		amt_decimal := decimal.NewFromFloatWithExponent(amt, -2)
 
-		discount_decimal := amt_decimal.Mul(decimal.NewFromFloat(0.02))
+		network := ""
+
+		switch data.Network {
+		case "1":
+			network = "MTN"
+		case "2":
+			network = "AIRTEL"
+		case "3":
+			network = "GLO"
+		case "4":
+			network = "9MOBILE"
+		}
+		// call the sql db for getting the discount attached to the network and calculate the discount amount and the discounted amount
+		airtimeProduct, err := handler.productClient.GetAirtimeProduct(network)
+		if err != nil {
+			handler.logger.Error("Failed to get airtime product details", zap.String("network", network), zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Failed to retrieve airtime product details"},
+			}
+			json.NewEncoder(w).Encode(response)
+		}
+		discount := airtimeProduct.Customer_Discount
+		provider_discount := airtimeProduct.Provider_Discount
+
+		discount_decimal := amt_decimal.Mul(decimal.NewFromFloat(discount / 100.0))
 		discounted_amount := amt_decimal.Sub(discount_decimal)
 
 		data.Discount_percent = discount_percentage
 		data.Discount_amount = discounted_amount.StringFixed(2)
+
+		site_discount := provider_discount - discount
+
+		profit_margin := amt_decimal.Mul(decimal.NewFromFloat(site_discount / 100.0)).StringFixed(2)
 
 		_, balance, _, err := handler.getBalance(id)
 		handler.logger.Info("fallback to DB for user balance", zap.String("userID", id), zap.Error(err))
@@ -119,6 +150,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		}
 
 		data.TXN = txnID
+		data.Profit_Margin = profit_margin
 
 		res, err := handler.vtuClient.BuyAirtime(data)
 		if err != nil {
@@ -455,6 +487,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		data.Plan_Name = plan.PlanType
 		data.PlanSize = plan.Size
 		data.Validity = plan.Validity
+		data.Profit_Margin = fmt.Sprintf("%.2f", plan.ProfitMargin)
 
 		txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, data.Amount, userBalance)
 		if err != nil {
