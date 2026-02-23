@@ -1,14 +1,15 @@
 package edu
 
 type EduInfo struct {
-	UserID       string
-	Exam_Type    string `json:"exam_type"`
-	Phone_Number string `json:"phone_no"`
-	Amount       string `json:"amount"`
-	Email        string `json:"email"`
-	Quantity     int    `json:"quantity"`
-	Name         string
-	TXN          string
+	UserID        string
+	Exam_Type     string `json:"exam_type"`
+	Phone_Number  string `json:"phone_no"`
+	Amount        string `json:"amount"`
+	Email         string `json:"email"`
+	Quantity      int    `json:"quantity"`
+	Name          string
+	TXN           string
+	Profit_Margin string
 }
 
 type EduApiResponse struct {

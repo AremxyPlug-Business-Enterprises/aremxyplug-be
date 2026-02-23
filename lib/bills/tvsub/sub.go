@@ -119,6 +119,7 @@ func (t *TvConn) BuySub(data TvInfo) (*models.TV_Result, error) {
 		Amount:                 data.Amount,
 		CreatedAt:              time.Now().UTC(),
 		TXN:                    data.TXN,
+		Profit_Margin:          data.Profit_Margin,
 	}
 
 	if err := t.saveTransaction(result); err != nil {

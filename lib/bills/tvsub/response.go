@@ -41,6 +41,7 @@ type TvInfo struct {
 	RequestID        string `json:"request_id"`
 	Name             string
 	TXN              string
+	Profit_Margin    string
 }
 type tvAPI struct {
 	Code          string     `json:"code"`

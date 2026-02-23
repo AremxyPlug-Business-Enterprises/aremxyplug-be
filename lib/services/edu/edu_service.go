@@ -7,7 +7,7 @@ import (
 )
 
 type Edurecords interface {
-	GetRecord(id int) (models.EduRecord, error)
+	// GetRecord(id int) (models.EduRecord, error)
 	UpdateRecord(id int, edu models.EduRecord) error
 	DeleteRecord(id int) error
 }
@@ -22,17 +22,6 @@ func NewEduService(store *sqlstore.SqlStore, logger *zap.Logger) Edurecords {
 		logger: logger,
 		store:  store,
 	}
-}
-
-func (s *EduServiceImpl) GetRecord(id int) (models.EduRecord, error) {
-	s.logger.Info("Fetching records")
-	record, err := s.store.GetEduRecord(id)
-	if err != nil {
-		s.logger.Error("Error fetching records", zap.Error(err))
-		return models.EduRecord{}, err
-	}
-	s.logger.Info("Fetched records successfully", zap.Int("count", 1))
-	return record, nil
 }
 
 func (s *EduServiceImpl) UpdateRecord(id int, edu models.EduRecord) error {

@@ -22,4 +22,10 @@ type ElectricResult struct {
 	RequestID              string    `bson:"request_ID"`
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
 	TXN                    string    `bson:"txn"`
+	Profit_Margin          string    `json:"-" bson:"profit_margin"`
+}
+
+type ElectricDetails struct {
+	DiscoType     *string
+	Profit_Margin *float64
 }

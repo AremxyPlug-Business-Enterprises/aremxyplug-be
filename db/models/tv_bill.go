@@ -21,4 +21,5 @@ type TV_Result struct {
 	ReferenceNumber        string    `json:"reference_number" bson:"reference_number"`
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
 	TXN                    string    `bson:"txn"`
+	Profit_Margin          string    `json:"-" bson:"profit_margin"`
 }

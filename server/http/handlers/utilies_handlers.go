@@ -98,6 +98,39 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		productID := 0
+
+		switch data.Exam_Type {
+		case "waec":
+			productID = 1
+		case "neco":
+			productID = 2
+		case "nabteb":
+			productID = 3
+		case "nbais":
+			productID = 4
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// get the edu record from the db. associate the profit_margin to the profit_margin
+		// field in the EduInfo struct. this will be used to calculate the profit margin for the transaction and update the balance of the user accordingly
+		edu, err := handler.productClient.GetEduRecord(productID)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Failed to fetch EduProduct by ID", zap.Int("productID", productID), zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Failed to fetch education product by ID"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		data.Profit_Margin = decimal.NewFromFloat(*edu.Profit_Margin).StringFixed(2)
+
 		txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, amount, bal)
 		if err != nil {
 			return
@@ -356,6 +389,25 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
+		tvDetails, err := handler.productClient.GetTVSubByPackageName(data.DecoderType, data.Package)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Failed to fetch TV subscription details", zap.String("decoderType", data.DecoderType), zap.String("package", data.Package), zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Failed to fetch TV subscription details"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		amount := decimal.NewFromFloat(float64(data.Amount))
+		profit_margin := amount.Mul(decimal.NewFromFloat(*tvDetails.Profit_Margin / 100.0))
+		discounted_amount := amount.Sub(profit_margin)
+
+		data.Profit_Margin = amount.Sub(discounted_amount).StringFixed(2)
+
 		txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, data.Amount, bal)
 		if err != nil {
 			return
@@ -600,6 +652,25 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			json.NewEncoder(w).Encode(response)
 			return
 		}
+
+		electricDetails, err := handler.productClient.GetElectricDetails(data.DiscoType)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Failed to get electric details", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Failed to retrieve electric details"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		amount := decimal.NewFromFloat(float64(data.Amount))
+		profit_margin := amount.Mul(decimal.NewFromFloat(*electricDetails.Profit_Margin / 100.0))
+		discounted_amount := amount.Sub(profit_margin)
+
+		data.Profit_Margin = amount.Sub(discounted_amount).StringFixed(2)
 
 		txnID, err := handler.placeRedisHoldAndMeta(w, id, data.Amount, bal)
 		if err != nil {
@@ -1218,7 +1289,7 @@ func (handler *HttpHandler) EduProduct(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		res, err := handler.productClient.GetRecord(productID)
+		res, err := handler.productClient.GetEduRecord(productID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to fetch EduProduct by ID", zap.Int("productID", productID), zap.Error(err))

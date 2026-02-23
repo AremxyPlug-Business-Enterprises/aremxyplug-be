@@ -2,6 +2,7 @@ package sqlstore
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"regexp"
@@ -29,7 +30,7 @@ func (s *SqlStore) GetTVSubs(table string) ([]models.TVSub, error) {
 	}
 
 	query := fmt.Sprintf(
-		"SELECT plan_id, package, package_name, amount FROM %s",
+		"SELECT plan_id, package, package_name, amount, profit_margin FROM %s",
 		sanitizeTableName(table),
 	)
 
@@ -48,6 +49,7 @@ func (s *SqlStore) GetTVSubs(table string) ([]models.TVSub, error) {
 			&p.Package,
 			&p.PackageName,
 			&p.Amount,
+			&p.Profit_Margin,
 		); err != nil {
 			s.logger.Error("Error scanning plan row", zap.String("table", table), zap.Error(err))
 			return nil, fmt.Errorf("failed to scan %s plan: %w", table, err)
@@ -64,6 +66,38 @@ func (s *SqlStore) GetTVSubs(table string) ([]models.TVSub, error) {
 	return plans, nil
 }
 
+func (s *SqlStore) GetTVSubByPackageName(table string, packageName string) (*models.TVSub, error) {
+	ctx := context.Background()
+
+	if err := validateTableName(table); err != nil {
+		return nil, fmt.Errorf("invalid table name: %w", err)
+	}
+
+	query := fmt.Sprintf(
+		"SELECT plan_id, package, package_name, amount, profit_margin FROM %s WHERE package_name = ?",
+		sanitizeTableName(table),
+	)
+	row := s.db.QueryRowContext(ctx, query, packageName)
+
+	var p models.TVSub
+	if err := row.Scan(
+		&p.ID,
+		&p.Package,
+		&p.PackageName,
+		&p.Amount,
+		&p.Profit_Margin,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			s.logger.Warn("Plan not found", zap.String("table", table), zap.String("packageName", packageName))
+			return nil, nil
+		}
+		s.logger.Error("Error scanning plan row", zap.String("table", table), zap.String("packageName", packageName), zap.Error(err))
+		return nil, fmt.Errorf("failed to scan %s plan: %w", table, err)
+	}
+	s.logger.Info("Plan retrieved", zap.String("table", table), zap.String("packageName", packageName))
+	return &p, nil
+}
+
 // CreatePlan inserts a new plan into specified table
 func (s *SqlStore) CreateTvSub(table string, plan models.TVSub) (int, error) {
 	ctx := context.Background()
@@ -73,8 +107,8 @@ func (s *SqlStore) CreateTvSub(table string, plan models.TVSub) (int, error) {
 	}
 
 	query := fmt.Sprintf(
-		`INSERT INTO %s (package, package_name, amount)
-		VALUES (?, ?, ?)`,
+		`INSERT INTO %s (package, package_name, amount, profit_margin)
+		VALUES (?, ?, ?, ?)`,
 		sanitizeTableName(table),
 	)
 
@@ -82,6 +116,7 @@ func (s *SqlStore) CreateTvSub(table string, plan models.TVSub) (int, error) {
 		plan.Package,
 		plan.PackageName,
 		plan.Amount,
+		plan.Profit_Margin,
 	)
 	if err != nil {
 		s.logger.Error("Failed to insert plan", zap.String("table", table), zap.Error(err))
@@ -120,6 +155,10 @@ func (s *SqlStore) UpdateTvSub(table string, planID int, upd models.TVSubUpdate)
 	if upd.Amount != nil {
 		setClauses = append(setClauses, "amount = ?")
 		args = append(args, *upd.Amount)
+	}
+	if upd.Profit_Margin != nil {
+		setClauses = append(setClauses, "profit_margin = ?")
+		args = append(args, *upd.Profit_Margin)
 	}
 
 	if len(setClauses) == 0 {
