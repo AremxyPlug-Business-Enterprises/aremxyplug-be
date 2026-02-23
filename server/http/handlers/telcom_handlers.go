@@ -487,7 +487,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		data.Plan_Name = plan.PlanType
 		data.PlanSize = plan.Size
 		data.Validity = plan.Validity
-		data.Profit_Margin = fmt.Sprintf("%.2f", plan.ProfitMargin)
+		data.Profit_Margin = decimal.NewFromFloat(plan.ProfitMargin).StringFixed(2)
 
 		txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, data.Amount, userBalance)
 		if err != nil {

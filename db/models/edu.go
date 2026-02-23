@@ -19,10 +19,12 @@ type EduResponse struct {
 	ReferenceNumber        string    `json:"reference_no" bson:"reference_no"`
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
 	TXN                    string    `bson:"txn"`
+	Profit_Margin          string    `json:"-" bson:"profit_margin"`
 }
 
 type EduRecord struct {
-	ID     int
-	Amount string
-	Name   string
+	ID            int
+	Amount        string
+	Name          string
+	Profit_Margin *float64
 }

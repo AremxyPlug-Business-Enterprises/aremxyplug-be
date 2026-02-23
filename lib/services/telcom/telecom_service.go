@@ -14,6 +14,7 @@ type TelecomProducts interface {
 	GetPlans(id int) ([]models.Plan, error)
 	GetPlanByID(planID int) (*models.Plan, error)
 	GetAirtimeProduct(network string) (models.AirtimeProduct, error)
+	GetEduRecord(id int) (models.EduRecord, error)
 }
 
 type TelecomServiceImpl struct {
@@ -103,4 +104,15 @@ func (s *TelecomServiceImpl) GetAirtimeProduct(network string) (models.AirtimePr
 	}
 	s.logger.Info("Fetched airtime product successfully", zap.String("network", network))
 	return airtimeProduct, nil
+}
+
+func (s *TelecomServiceImpl) GetEduRecord(id int) (models.EduRecord, error) {
+	s.logger.Info("Fetching records")
+	record, err := s.store.GetEduRecord(id)
+	if err != nil {
+		s.logger.Error("Error fetching records", zap.Error(err))
+		return models.EduRecord{}, err
+	}
+	s.logger.Info("Fetched records successfully", zap.Int("count", 1))
+	return record, nil
 }

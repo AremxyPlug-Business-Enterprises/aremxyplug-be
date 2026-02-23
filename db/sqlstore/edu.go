@@ -10,11 +10,11 @@ import (
 
 // GET: Retrieve a record by ID
 func (s *SqlStore) GetEduRecord(id int) (models.EduRecord, error) {
-	query := "SELECT id, amount, name FROM edu_pins WHERE id = ?"
+	query := "SELECT id, amount, name, profit_margin FROM edu_pins WHERE id = ?"
 	row := s.db.QueryRow(query, id)
 
 	record := models.EduRecord{}
-	err := row.Scan(&record.ID, &record.Amount, &record.Name)
+	err := row.Scan(&record.ID, &record.Amount, &record.Name, &record.Profit_Margin)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			s.logger.Warn("No record found", zap.Int("ID", id))

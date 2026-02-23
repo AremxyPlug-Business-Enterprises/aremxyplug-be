@@ -11,6 +11,7 @@ type TVSubService interface {
 	CreateTVSub(tableName string, data models.TVSub) (int, error)
 	UpdateTVSub(tableName string, id int, data models.TVSubUpdate) error
 	DeleteTVSub(tableName string, id int) error
+	GetTVSubByPackageName(tableName string, packageName string) (*models.TVSub, error)
 }
 
 type TVSubServiceImpl struct {
@@ -35,6 +36,17 @@ func (s *TVSubServiceImpl) GetTVSubs(tableName string) ([]models.TVSub, error) {
 	s.logger.Info("Fetched TV subscriptions successfully", zap.Int("count", len(tvSubs)))
 	return tvSubs, nil
 
+}
+
+func (s *TVSubServiceImpl) GetTVSubByPackageName(tableName string, packageName string) (*models.TVSub, error) {
+	s.logger.Info("Fetching TV subscription by package name", zap.String("packageName", packageName))
+	tvSub, err := s.store.GetTVSubByPackageName(tableName, packageName)
+	if err != nil {
+		s.logger.Error("Error fetching TV subscription by package name", zap.String("packageName", packageName), zap.Error(err))
+		return nil, err
+	}
+	s.logger.Info("Fetched TV subscription by package name successfully", zap.String("packageName", packageName))
+	return tvSub, nil
 }
 
 func (s *TVSubServiceImpl) CreateTVSub(tableName string, data models.TVSub) (int, error) {

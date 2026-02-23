@@ -17,17 +17,18 @@ type verifyResponse struct {
 }
 
 type ElectricInfo struct {
-	DiscoType    string `json:"disco_type"` // Name of service to buy
-	Meter_No     string `json:"meter_no"`   // meter number
-	Meter_Type   string `json:"meter_type"` // meter type
-	Amount       int    `json:"amount"`
-	Phone        string `json:"phone"`
-	Email        string `json:"email"`
-	VerifiedName string `json:"verified_name"` // Name on the meter
-	RequestID    string `json:"request_id"`
-	FullName     string
-	UserID       string
-	TXN          string
+	DiscoType     string `json:"disco_type"` // Name of service to buy
+	Meter_No      string `json:"meter_no"`   // meter number
+	Meter_Type    string `json:"meter_type"` // meter type
+	Amount        int    `json:"amount"`
+	Phone         string `json:"phone"`
+	Email         string `json:"email"`
+	VerifiedName  string `json:"verified_name"` // Name on the meter
+	RequestID     string `json:"request_id"`
+	FullName      string
+	UserID        string
+	TXN           string
+	Profit_Margin string
 }
 
 type electricAPI struct {
