@@ -8,7 +8,7 @@ import (
 )
 
 func (s *SqlStore) GetElectricDetails(discoType string) (*models.ElectricDetails, error) {
-	query := "SELECT DiscoType, profit_margin FROM electricity_plans WHERE DiscoType = ?"
+	query := "SELECT disco_type, profit_margin FROM electric_providers WHERE disco_type = ?"
 	rows := s.db.QueryRow(query, discoType)
 
 	details := &models.ElectricDetails{}
