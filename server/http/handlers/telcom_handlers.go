@@ -114,8 +114,8 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 
 		// Calculate profit margin: difference between what provider gives us and what we give customer
 		// Example: Airtime 100, provider offers at 97 (3% discount), we offer customer 2%, profit = 1%
-		profit_margin_percent := provider_discount - customer_discount
-		profit_margin := amt_decimal.Mul(decimal.NewFromFloat(profit_margin_percent / 100.0)).StringFixed(2)
+		profit_margin := airtimeProduct.Profit_Margin
+		profit := amt_decimal.Mul(decimal.NewFromFloat(profit_margin / 100.0)).StringFixed(2)
 
 		_, balance, _, err := handler.getBalance(id)
 		handler.logger.Info("fallback to DB for user balance", zap.String("userID", id), zap.Error(err))
@@ -156,7 +156,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		}
 
 		data.TXN = txnID
-		data.Profit_Margin = profit_margin
+		data.Profit_Margin = profit
 
 		res, err := handler.vtuClient.BuyAirtime(data)
 		if err != nil {
