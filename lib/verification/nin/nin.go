@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/aremxyplug-be/db/models"
 	"go.uber.org/zap"
@@ -103,15 +104,21 @@ func (n *NINConfig) VerifyNIN(nin string, user models.User) (result *NINVerifica
 			Success:         true,
 			NameMatched:     false,
 			ResponseCode:    "400",
-			ResponseMessage: "Name does not match BVN name",
+			ResponseMessage: "Name does not match NIN name",
 		}, nil
 	}
 
 	n.logger.Info("User name matches NIN data", zap.String("apiFullName", apiFullName), zap.String("FullName", fullName))
+	formattedDob, err := formatDOB(apiResponse.NINData.Birthdate)
+	if err != nil {
+		n.logger.Error("Failed to format date of birth", zap.Error(err))
+		return &NINVerificationResult{}, err
+	}
 
 	return &NINVerificationResult{
 		Success:         true,
 		NameMatched:     true,
+		Birthdate:       formattedDob,
 		ResponseCode:    "200",
 		ResponseMessage: "NIN verification succesful",
 	}, nil
@@ -158,4 +165,12 @@ func isSubset(sliceA, sliceB []string) bool {
 		}
 	}
 	return true
+}
+
+func formatDOB(d string) (string, error) {
+	t, err := time.Parse("02-01-2006", d)
+	if err != nil {
+		return "", err
+	}
+	return t.Format("2006-01-02"), nil
 }

@@ -5,13 +5,10 @@ type bvnRequest struct {
 }
 
 type bvnResponse struct {
-	Status       bool        `json:"status"`
-	Detail       string      `json:"detail"`
-	ResponseCode string      `json:"response_code"`
-	Data         *userData   `json:"data"`
-	Source       string      `json:"source"`
-	UserInfo     interface{} `json:"user_info"` // Can be changed to a specific type if needed
-	RequestData  requestData `json:"request_data"`
+	Status       bool      `json:"status"`
+	Detail       string    `json:"detail"`
+	ResponseCode string    `json:"response_code"`
+	Data         *userData `json:"data"`
 }
 
 type userData struct {
@@ -22,13 +19,10 @@ type userData struct {
 	PhoneNumber string `json:"phoneNumber"`
 }
 
-type requestData struct {
-	Number string `json:"number"`
-}
-
 type BVNVerificationResult struct {
 	Success         bool   `json:"success"`          // Overall verification status
 	NameMatched     bool   `json:"name_matched"`     // Whether names match
+	DOB             string `json:"dob"`              // Date of birth (if available)
 	ResponseCode    string `json:"response_code"`    // API response code
 	ResponseMessage string `json:"response_message"` // API response message
 	Reason          string `json:"reason,omitempty"` // Reason for failure (if any)

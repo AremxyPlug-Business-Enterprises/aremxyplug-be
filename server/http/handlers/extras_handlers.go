@@ -553,13 +553,13 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			handler.logger.Warn("Failed to update points after BVN verification", zap.Error(err))
 		}
 
-		if err := handler.store.UpdateUserAddress(user.ID, req.Gender, req.Dob, req.Address, req.PostalCode); err != nil {
+		if err := handler.store.UpdateUserAddress(user.ID, req.Gender, result.DOB, req.Address, req.PostalCode); err != nil {
 			handler.logger.Warn("Failed to update user address", zap.Error(err))
 		}
 
 		data := map[string]interface{}{
 			"BVN":     req.BVN,
-			"Dob":     req.Dob,
+			"Dob":     result.DOB,
 			"Address": req.Address,
 			"Gender":  req.Gender,
 		}
@@ -622,13 +622,13 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			handler.logger.Warn("Failed to update points after NIN verification", zap.Error(err))
 		}
 
-		if err := handler.store.UpdateUserAddress(user.ID, req.Gender, req.Dob, req.Address, req.PostalCode); err != nil {
+		if err := handler.store.UpdateUserAddress(user.ID, req.Gender, result.Birthdate, req.Address, req.PostalCode); err != nil {
 			handler.logger.Warn("Failed to update user address", zap.Error(err))
 		}
 
 		data := map[string]interface{}{
 			"NIN":     req.NIN,
-			"Dob":     req.Dob,
+			"Dob":     result.Birthdate,
 			"Address": req.Address,
 			"Gender":  req.Gender,
 		}

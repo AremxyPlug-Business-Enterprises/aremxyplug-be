@@ -21,4 +21,5 @@ type AirtimeResponse struct {
 	Discount_perecent      string    `json:"discount_percentage" bson:"discount_percentage"`
 	Discount_amount        string    `json:"discount_amount" bson:"discount_amount"`
 	Profit_Margin          string    `json:"-" bson:"profit_margin"`
+	Provider_Discount      string    `json:"-" bson:"provider_discount"`
 }

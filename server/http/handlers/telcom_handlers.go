@@ -59,7 +59,6 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		discount_percentage := "2%"
 		amt, err := strconv.ParseFloat(data.Amount, 64)
 		if err != nil {
 			handler.logger.Error("Failed to convert amount to integer", zap.Error(err))
@@ -86,7 +85,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		case "4":
 			network = "9MOBILE"
 		}
-		// call the sql db for getting the discount attached to the network and calculate the discount amount and the discounted amount
+		// Get product details from database
 		airtimeProduct, err := handler.productClient.GetAirtimeProduct(network)
 		if err != nil {
 			handler.logger.Error("Failed to get airtime product details", zap.String("network", network), zap.Error(err))
@@ -98,18 +97,25 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			}
 			json.NewEncoder(w).Encode(response)
 		}
-		discount := airtimeProduct.Customer_Discount
+
+		// Get discount percentages from product
+		customer_discount := airtimeProduct.Customer_Discount
 		provider_discount := airtimeProduct.Provider_Discount
 
-		discount_decimal := amt_decimal.Mul(decimal.NewFromFloat(discount / 100.0))
-		discounted_amount := amt_decimal.Sub(discount_decimal)
+		// Calculate customer discount amount and final price customer pays
+		discount_amount := amt_decimal.Mul(decimal.NewFromFloat(customer_discount / 100.0))
+		discounted_amount := amt_decimal.Sub(discount_amount)
 
-		data.Discount_percent = discount_percentage
+		// Store discount info for transaction
+		data.Discount_percent = fmt.Sprintf("%.2f%%", customer_discount)
 		data.Discount_amount = discounted_amount.StringFixed(2)
 
-		site_discount := provider_discount - discount
+		data.Provider_Discount = fmt.Sprintf("%.2f%%", provider_discount)
 
-		profit_margin := amt_decimal.Mul(decimal.NewFromFloat(site_discount / 100.0)).StringFixed(2)
+		// Calculate profit margin: difference between what provider gives us and what we give customer
+		// Example: Airtime 100, provider offers at 97 (3% discount), we offer customer 2%, profit = 1%
+		profit_margin := airtimeProduct.Profit_Margin
+		profit := amt_decimal.Mul(decimal.NewFromFloat(profit_margin / 100.0)).StringFixed(2)
 
 		_, balance, _, err := handler.getBalance(id)
 		handler.logger.Info("fallback to DB for user balance", zap.String("userID", id), zap.Error(err))
@@ -150,7 +156,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		}
 
 		data.TXN = txnID
-		data.Profit_Margin = profit_margin
+		data.Profit_Margin = profit
 
 		res, err := handler.vtuClient.BuyAirtime(data)
 		if err != nil {
