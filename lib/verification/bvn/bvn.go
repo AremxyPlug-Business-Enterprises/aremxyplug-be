@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/aremxyplug-be/db/models"
 	"go.uber.org/zap"
@@ -105,9 +106,16 @@ func (b *BvnConfig) VerifyBVN(bvn string, user models.User) (result *BVNVerifica
 
 	b.logger.Info("User name matches BVN data", zap.String("apiFullName", apiFullName), zap.String("FullName", user.FullName))
 
+	dob := apiResponse.Data.DateOfBirth
+	formattedDOB, err := formatDOB(dob)
+	if err != nil {
+		b.logger.Error("Failed to format date of birth", zap.Error(err))
+		return &BVNVerificationResult{}, err
+	}
 	return &BVNVerificationResult{
 		Success:         true,
 		NameMatched:     true,
+		DOB:             formattedDOB,
 		ResponseCode:    "200",
 		ResponseMessage: "BVN verification succesful",
 	}, nil
@@ -139,4 +147,12 @@ func isSubset(sliceA, sliceB []string) bool {
 		}
 	}
 	return true
+}
+
+func formatDOB(d string) (string, error) {
+	t, err := time.Parse("02-Jan-2006", d)
+	if err != nil {
+		return "", err
+	}
+	return t.Format("2006-01-02"), nil
 }
