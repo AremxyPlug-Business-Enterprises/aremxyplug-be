@@ -10,7 +10,7 @@ import (
 
 // GET: Retrieve a record by ID
 func (s *SqlStore) GetEduRecord(id int) (models.EduRecord, error) {
-	query := "SELECT id, amount, name, profit_margin FROM edu_pins WHERE id = ?"
+	query := "SELECT id, amount, name, profit_margin FROM edu_pins WHERE id = $1"
 	row := s.db.QueryRow(query, id)
 
 	record := models.EduRecord{}
@@ -30,7 +30,7 @@ func (s *SqlStore) GetEduRecord(id int) (models.EduRecord, error) {
 
 // UPDATE: Update amount and name by ID
 func (s *SqlStore) UpdateEduRecord(id int, edu models.EduRecord) error {
-	query := "UPDATE edu_pins SET amount = ?, name = ? WHERE id = ?"
+	query := "UPDATE edu_pins SET amount = $1, name = $2 WHERE id = $3"
 	result, err := s.db.Exec(query, edu.Amount, edu.Name, id)
 	if err != nil {
 		s.logger.Error("Failed to update record", zap.Int("ID", id), zap.Error(err))
@@ -54,7 +54,7 @@ func (s *SqlStore) UpdateEduRecord(id int, edu models.EduRecord) error {
 
 // DELETE: Delete a record by ID
 func (s *SqlStore) DeleteEduRecord(id int) error {
-	query := "DELETE FROM edu_pins WHERE id = ?"
+	query := "DELETE FROM edu_pins WHERE id = $1"
 	result, err := s.db.Exec(query, id)
 	if err != nil {
 		s.logger.Error("Failed to delete record", zap.Int("ID", id), zap.Error(err))

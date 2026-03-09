@@ -1,38 +1,35 @@
 package sqlstore
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/ssh"
 )
 
 var (
 	dbUser     = os.Getenv("SQL_DB_USER")
 	dbPassword = os.Getenv("SQL_DB_PASSWORD")
 	dbHost     = os.Getenv("SQL_DB_HOST")
+	dbPort     = os.Getenv("SQL_DB_PORT")
 	dbName     = os.Getenv("SQL_DB_NAME")
+	dbSSLMode  = os.Getenv("SQL_DB_SSLMODE")
 )
 
 type SqlStore struct {
-	db         *sql.DB
-	logger     *zap.Logger
-	sshFactory func() (*ssh.Client, error)
-	mu         sync.Mutex
+	db     *sql.DB
+	logger *zap.Logger
+	mu     sync.Mutex
 }
 
-func NewSQLConn(sshFactory func() (*ssh.Client, error), logger *zap.Logger) (*SqlStore, error) {
+func NewSQLConn(logger *zap.Logger) (*SqlStore, error) {
 	store := &SqlStore{
-		logger:     logger,
-		sshFactory: sshFactory,
+		logger: logger,
 	}
 
 	if err := store.connect(); err != nil {
@@ -42,24 +39,28 @@ func NewSQLConn(sshFactory func() (*ssh.Client, error), logger *zap.Logger) (*Sq
 	// start one keepalive goroutine
 	go store.keepAlive()
 
-	log.Println("Connected to MySQL via SSH tunnel")
+	log.Println("Connected to PostgreSQL")
 	return store, nil
 }
 
 func (s *SqlStore) connect() error {
-	sshClient, err := s.sshFactory()
-	if err != nil {
-		return fmt.Errorf("failed to create SSH client: %w", err)
+	// Set default port if not provided
+	port := dbPort
+	if port == "" {
+		port = "5432"
 	}
 
-	mysql.RegisterDialContext("tcp+ssh", func(_ context.Context, addr string) (net.Conn, error) {
-		return sshClient.Dial("tcp", dbHost)
-	})
+	sslMode := dbSSLMode
+	if sslMode == "" {
+		sslMode = "disable"
+	}
 
-	dsn := fmt.Sprintf("%s:%s@tcp+ssh(%s)/%s?parseTime=true", dbUser, dbPassword, dbHost, dbName)
-	db, err := sql.Open("mysql", dsn)
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		dbUser, dbPassword, dbHost, port, dbName, sslMode)
+
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
-		return fmt.Errorf("mysql open: %w", err)
+		return fmt.Errorf("postgres open: %w", err)
 	}
 
 	db.SetConnMaxLifetime(2 * time.Minute)
@@ -67,10 +68,14 @@ func (s *SqlStore) connect() error {
 	db.SetMaxOpenConns(10)
 
 	if err := db.Ping(); err != nil {
-		return fmt.Errorf("mysql ping: %w", err)
+		_ = db.Close()
+		return fmt.Errorf("postgres ping: %w", err)
 	}
 
+	s.mu.Lock()
 	s.db = db
+	s.mu.Unlock()
+
 	return nil
 }
 
@@ -78,8 +83,16 @@ func (s *SqlStore) keepAlive() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
-		if err := s.db.Ping(); err != nil {
-			s.logger.Warn("MySQL keep-alive ping failed, reconnecting...", zap.Error(err))
+		s.mu.Lock()
+		db := s.db
+		s.mu.Unlock()
+
+		if db == nil {
+			continue
+		}
+
+		if err := db.Ping(); err != nil {
+			s.logger.Warn("PostgreSQL keep-alive ping failed, reconnecting...", zap.Error(err))
 			if err := s.reconnect(); err != nil {
 				s.logger.Error("Reconnection failed", zap.Error(err))
 			}
@@ -89,11 +102,11 @@ func (s *SqlStore) keepAlive() {
 
 func (s *SqlStore) reconnect() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.db != nil {
 		_ = s.db.Close()
+		s.db = nil
 	}
+	s.mu.Unlock()
 
 	return s.connect()
 }
