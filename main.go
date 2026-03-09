@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/aremxyplug-be/config"
@@ -35,13 +34,6 @@ import (
 	"github.com/aremxyplug-be/lib/verification/nin"
 	httpSrv "github.com/aremxyplug-be/server/http"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/ssh"
-)
-
-var (
-	sshUser     = os.Getenv("SSH_USER")
-	sshHost     = os.Getenv("SSH_HOST")
-	sshPassword = os.Getenv("SSH_PASSWORD")
 )
 
 func main() {
@@ -61,11 +53,7 @@ func main() {
 		logger.Fatal("failed to connect to redis", zap.Error(err))
 	}
 
-	sshFactory := func() (*ssh.Client, error) {
-		return createSSHClient()
-	}
-
-	sqlStore, err := sqlstore.NewSQLConn(sshFactory, logger)
+	sqlStore, err := sqlstore.NewSQLConn(logger)
 	if err != nil {
 		logger.Fatal("failed to create SQL connection", zap.Error(err))
 	}
@@ -137,33 +125,4 @@ func main() {
 	}
 }
 
-func createSSHClient() (*ssh.Client, error) {
-	config := &ssh.ClientConfig{
-		User: sshUser,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(sshPassword),
-		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         30 * time.Second,
-	}
 
-	sshClient, err := ssh.Dial("tcp", sshHost, config)
-	if err != nil {
-		return nil, fmt.Errorf("SSH connection failed: %w", err)
-	}
-
-	// Start SSH keep-alive goroutine
-	go func(client *ssh.Client) {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			_, _, err := client.SendRequest("keepalive@openssh.com", true, nil)
-			if err != nil {
-				fmt.Printf("SSH keepalive failed: %v\n", err)
-				return // tunnel is dead → SqlStore.reconnect() will build a new one
-			}
-		}
-	}(sshClient)
-
-	return sshClient, nil
-}

@@ -43,7 +43,7 @@ func (n *NINConfig) VerifyNIN(nin string, user models.User) (result *NINVerifica
 		return &NINVerificationResult{}, err
 	}
 
-	url := fmt.Sprintf("%s/%s", baseUrl, "vnin")
+	url := fmt.Sprintf("%s/%s", baseUrl, "vnin-basic")
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return &NINVerificationResult{}, err

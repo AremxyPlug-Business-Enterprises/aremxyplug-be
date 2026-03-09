@@ -11,7 +11,7 @@ import (
 
 func (s *SqlStore) GetProducts(id int) ([]models.Product, error) {
 	rows, err := s.db.Query(
-		"SELECT product_id, network_id, plan_type FROM products WHERE network_id = ? ORDER BY sort ASC",
+		"SELECT product_id, network_id, plan_type FROM products WHERE network_id = $1 ORDER BY sort ASC",
 		id)
 	if err != nil {
 		s.logger.Error("Error querying products", zap.Error(err))
@@ -63,7 +63,7 @@ func (s *SqlStore) CreatePlan(plan models.Plan) (int, error) {
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO plans 
         (plan_id, product_id, amount, validity, size)
-        VALUES (?, ?, ?, ?, ?)`,
+		VALUES ($1, $2, $3, $4, $5)`,
 		nextID,
 		plan.ProductID,
 		plan.Amount,
@@ -97,17 +97,22 @@ func (s *SqlStore) UpdatePlan(planID int, updatedPlan models.PlanUpdate) error {
 	setClauses := []string{}
 	args := []interface{}{}
 
+	argPos := 1
+
 	if updatedPlan.Amount != 0 {
-		setClauses = append(setClauses, "amount = ?")
+		setClauses = append(setClauses, fmt.Sprintf("amount = $%d", argPos))
 		args = append(args, updatedPlan.Amount)
+		argPos++
 	}
 	if updatedPlan.Validity != "" {
-		setClauses = append(setClauses, "validity = ?")
+		setClauses = append(setClauses, fmt.Sprintf("validity = $%d", argPos))
 		args = append(args, updatedPlan.Validity)
+		argPos++
 	}
 	if updatedPlan.Size != "" {
-		setClauses = append(setClauses, "size = ?")
+		setClauses = append(setClauses, fmt.Sprintf("size = $%d", argPos))
 		args = append(args, updatedPlan.Size)
+		argPos++
 	}
 
 	if len(setClauses) == 0 {
@@ -119,13 +124,14 @@ func (s *SqlStore) UpdatePlan(planID int, updatedPlan models.PlanUpdate) error {
 
 	// Build the final query
 	query := fmt.Sprintf(
-		"UPDATE plans SET %s WHERE plan_id = ?",
+		"UPDATE plans SET %s WHERE plan_id = $%d",
 		strings.Join(setClauses, ", "),
+		argPos,
 	)
 
 	var exists bool
 	err = tx.QueryRowContext(ctx,
-		"SELECT EXISTS(SELECT 1 FROM plans WHERE plan_id = ?)",
+		"SELECT EXISTS(SELECT 1 FROM plans WHERE plan_id = $1)",
 		planID).Scan(&exists)
 	if err != nil {
 		s.logger.Error("Failed to check plan existence", zap.Error(err))
@@ -162,7 +168,7 @@ func (s *SqlStore) DeletePlan(planID int) error {
 
 	var exists bool
 	err = tx.QueryRowContext(ctx,
-		"SELECT EXISTS(SELECT 1 FROM plans WHERE plan_id = ?)",
+		"SELECT EXISTS(SELECT 1 FROM plans WHERE plan_id = $1)",
 		planID).Scan(&exists)
 	if err != nil {
 		s.logger.Error("Failed to check plan existence", zap.Error(err))
@@ -174,7 +180,7 @@ func (s *SqlStore) DeletePlan(planID int) error {
 	}
 
 	_, err = tx.ExecContext(ctx,
-		"DELETE FROM plans WHERE plan_id = ?",
+		"DELETE FROM plans WHERE plan_id = $1",
 		planID)
 	if err != nil {
 		s.logger.Error("Failed to delete plan", zap.Error(err))
@@ -203,7 +209,7 @@ func (s *SqlStore) GetPlansByProductID(productID int) ([]models.Plan, error) {
 		INNER JOIN products pr ON p.product_id = pr.product_id
 		INNER JOIN api_providers ap ON p.provider_id = ap.id
 		WHERE 
-			p.product_id = ? AND 
+			p.product_id = $1 AND 
 			p.status = 'active' AND 
 			p.available = TRUE AND 
 			ap.status = 'active' AND 
@@ -276,7 +282,7 @@ func (s *SqlStore) GetPlanByID(planID int) (*models.Plan, error) {
 		pr.plan_type
 	FROM plans p
 	INNER JOIN products pr ON p.product_id = pr.product_id
-	WHERE p.id = ?`, planID)
+	WHERE p.id = $1`, planID)
 	if err != nil {
 		s.logger.Error("Failed to retrieve plan", zap.Int("planID", planID), zap.Error(err))
 		return nil, fmt.Errorf("failed to retrieve plan with ID %d: %v", planID, err)

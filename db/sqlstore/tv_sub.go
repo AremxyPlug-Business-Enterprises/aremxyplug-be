@@ -74,7 +74,7 @@ func (s *SqlStore) GetTVSubByPackageName(table string, packageName string) (*mod
 	}
 
 	query := fmt.Sprintf(
-		"SELECT plan_id, package, package_name, amount, profit_margin FROM %s WHERE package_name = ?",
+		"SELECT plan_id, package, package_name, amount, profit_margin FROM %s WHERE package_name = $1",
 		sanitizeTableName(table),
 	)
 	row := s.db.QueryRowContext(ctx, query, packageName)
@@ -108,29 +108,25 @@ func (s *SqlStore) CreateTvSub(table string, plan models.TVSub) (int, error) {
 
 	query := fmt.Sprintf(
 		`INSERT INTO %s (package, package_name, amount, profit_margin)
-		VALUES (?, ?, ?, ?)`,
+		VALUES ($1, $2, $3, $4)
+		RETURNING plan_id`,
 		sanitizeTableName(table),
 	)
 
-	result, err := s.db.ExecContext(ctx, query,
+	var id int
+	err := s.db.QueryRowContext(ctx, query,
 		plan.Package,
 		plan.PackageName,
 		plan.Amount,
 		plan.Profit_Margin,
-	)
+	).Scan(&id)
 	if err != nil {
 		s.logger.Error("Failed to insert plan", zap.String("table", table), zap.Error(err))
 		return 0, fmt.Errorf("insert into %s failed: %w", table, err)
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		s.logger.Error("Failed to get last insert ID", zap.String("table", table), zap.Error(err))
-		return 0, fmt.Errorf("failed to get insert ID from %s: %w", table, err)
-	}
-
-	s.logger.Info("Plan created", zap.String("table", table), zap.Int64("planID", id))
-	return int(id), nil
+	s.logger.Info("Plan created", zap.String("table", table), zap.Int("planID", id))
+	return id, nil
 }
 
 // UpdatePlan modifies fields of an existing plan in specified table
@@ -143,22 +139,27 @@ func (s *SqlStore) UpdateTvSub(table string, planID int, upd models.TVSubUpdate)
 
 	setClauses := []string{}
 	args := []interface{}{}
+	argPos := 1
 
 	if upd.Package != nil {
-		setClauses = append(setClauses, "package = ?")
+		setClauses = append(setClauses, fmt.Sprintf("package = $%d", argPos))
 		args = append(args, *upd.Package)
+		argPos++
 	}
 	if upd.PackageName != nil {
-		setClauses = append(setClauses, "package_name = ?")
+		setClauses = append(setClauses, fmt.Sprintf("package_name = $%d", argPos))
 		args = append(args, *upd.PackageName)
+		argPos++
 	}
 	if upd.Amount != nil {
-		setClauses = append(setClauses, "amount = ?")
+		setClauses = append(setClauses, fmt.Sprintf("amount = $%d", argPos))
 		args = append(args, *upd.Amount)
+		argPos++
 	}
 	if upd.Profit_Margin != nil {
-		setClauses = append(setClauses, "profit_margin = ?")
+		setClauses = append(setClauses, fmt.Sprintf("profit_margin = $%d", argPos))
 		args = append(args, *upd.Profit_Margin)
+		argPos++
 	}
 
 	if len(setClauses) == 0 {
@@ -167,9 +168,10 @@ func (s *SqlStore) UpdateTvSub(table string, planID int, upd models.TVSubUpdate)
 
 	args = append(args, planID)
 	query := fmt.Sprintf(
-		"UPDATE %s SET %s WHERE plan_id = ?",
+		"UPDATE %s SET %s WHERE plan_id = $%d",
 		sanitizeTableName(table),
 		strings.Join(setClauses, ", "),
+		argPos,
 	)
 
 	result, err := s.db.ExecContext(ctx, query, args...)
@@ -202,7 +204,7 @@ func (s *SqlStore) DeleteTvSub(table string, planID int) error {
 	}
 
 	query := fmt.Sprintf(
-		"DELETE FROM %s WHERE plan_id = ?",
+		"DELETE FROM %s WHERE plan_id = $1",
 		sanitizeTableName(table),
 	)
 
@@ -229,5 +231,5 @@ func (s *SqlStore) DeleteTvSub(table string, planID int) error {
 
 // sanitizeTableName provides additional safety layer (quotes table name)
 func sanitizeTableName(table string) string {
-	return fmt.Sprintf("`%s`", strings.ReplaceAll(table, "`", ""))
+	return fmt.Sprintf(`"%s"`, strings.ReplaceAll(table, `"`, ""))
 }
