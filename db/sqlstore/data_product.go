@@ -41,47 +41,24 @@ func (s *SqlStore) GetProducts(id int) ([]models.Product, error) {
 
 func (s *SqlStore) CreatePlan(plan models.Plan) (int, error) {
 	ctx := context.Background()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		s.logger.Error("Failed to begin transaction", zap.Error(err))
-		return 0, fmt.Errorf("failed to begin transaction: %v", err)
-	}
-	defer tx.Rollback()
 
-	var maxID *int
-	err = tx.QueryRowContext(ctx, "SELECT MAX(plan_id) FROM plans").Scan(&maxID)
-	if err != nil {
-		s.logger.Error("Failed to get max plan_id", zap.Error(err))
-		return 0, fmt.Errorf("failed to get max plan_id: %v", err)
-	}
-
-	nextID := 1
-	if maxID != nil {
-		nextID = *maxID + 1
-	}
-
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO plans 
-        (plan_id, product_id, amount, validity, size)
-		VALUES ($1, $2, $3, $4, $5)`,
-		nextID,
+	var insertedID int
+	err := s.db.QueryRowContext(ctx,
+		`INSERT INTO plans (product_id, amount, validity, size)
+		VALUES ($1, $2, $3, $4)
+		RETURNING plan_id`,
 		plan.ProductID,
 		plan.Amount,
 		plan.Validity,
 		plan.Size,
-	)
+	).Scan(&insertedID)
 	if err != nil {
 		s.logger.Error("Failed to insert plan", zap.Error(err))
 		return 0, fmt.Errorf("insert failed: %v", err)
 	}
 
-	if err = tx.Commit(); err != nil {
-		s.logger.Error("Failed to commit transaction", zap.Error(err))
-		return 0, fmt.Errorf("commit failed: %v", err)
-	}
-
-	s.logger.Info("Plan created successfully", zap.Int("planID", nextID))
-	return nextID, nil
+	s.logger.Info("Plan created successfully", zap.Int("planID", insertedID))
+	return insertedID, nil
 }
 
 func (s *SqlStore) UpdatePlan(planID int, updatedPlan models.PlanUpdate) error {
@@ -217,13 +194,13 @@ func (s *SqlStore) GetPlansByProductID(productID int) ([]models.Plan, error) {
 		ORDER BY
 			CASE
 				WHEN LOWER(TRIM(REPLACE(p.size, ' ', ''))) LIKE '%tb'
-				THEN CAST(REPLACE(LOWER(TRIM(REPLACE(p.size, ' ', ''))), 'tb', '') AS DECIMAL(20,6)) * 1024 * 1024
+				THEN CAST(REPLACE(LOWER(TRIM(REPLACE(p.size, ' ', ''))), 'tb', '') AS NUMERIC(20,6)) * 1024 * 1024
 				WHEN LOWER(TRIM(REPLACE(p.size, ' ', ''))) LIKE '%gb'
-				THEN CAST(REPLACE(LOWER(TRIM(REPLACE(p.size, ' ', ''))), 'gb', '') AS DECIMAL(20,6)) * 1024
+				THEN CAST(REPLACE(LOWER(TRIM(REPLACE(p.size, ' ', ''))), 'gb', '') AS NUMERIC(20,6)) * 1024
 				WHEN LOWER(TRIM(REPLACE(p.size, ' ', ''))) LIKE '%mb'
-				THEN CAST(REPLACE(LOWER(TRIM(REPLACE(p.size, ' ', ''))), 'mb', '') AS DECIMAL(20,6))
+				THEN CAST(REPLACE(LOWER(TRIM(REPLACE(p.size, ' ', ''))), 'mb', '') AS NUMERIC(20,6))
 				WHEN LOWER(TRIM(REPLACE(p.size, ' ', ''))) LIKE '%kb'
-				THEN CAST(REPLACE(LOWER(TRIM(REPLACE(p.size, ' ', ''))), 'kb', '') AS DECIMAL(20,6)) / 1024
+				THEN CAST(REPLACE(LOWER(TRIM(REPLACE(p.size, ' ', ''))), 'kb', '') AS NUMERIC(20,6)) / 1024
 				ELSE 0
 			END ASC,
 			CASE
