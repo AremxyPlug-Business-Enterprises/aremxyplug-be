@@ -9,15 +9,15 @@ type Product struct {
 }
 
 type Plan struct {
-	ID           int
-	PlanID       sql.NullInt64
-	ProductID    int
-	Size         string
-	Amount       float64
-	Validity     string
-	ProviderID   int
-	PlanType     string
-	ProfitMargin float64
+	ID           int           `json:"ID,omitempty"`
+	PlanID       sql.NullInt64 `json:"PlanID,omitempty"`
+	ProductID    int           `json:"ProductID,omitempty"`
+	Size         string        `json:"Size,omitempty"`
+	Amount       float64       `json:"Amount,omitempty"`
+	Validity     string        `json:"Validity,omitempty"`
+	ProviderID   int           `json:"ProviderID,omitempty"`
+	PlanType     string        `json:"PlanType,omitempty"`
+	ProfitMargin float64       `json:"ProfitMargin,omitempty"`
 }
 
 type PlanUpdate struct {
