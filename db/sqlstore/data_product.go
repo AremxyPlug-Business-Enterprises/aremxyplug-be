@@ -188,7 +188,6 @@ func (s *SqlStore) GetPlansByProductID(productID int) ([]models.Plan, error) {
 		WHERE 
 			p.product_id = $1 AND 
 			p.status = 'active' AND 
-			p.available = TRUE AND 
 			ap.status = 'active' AND 
 			ap.available = TRUE
 		ORDER BY
