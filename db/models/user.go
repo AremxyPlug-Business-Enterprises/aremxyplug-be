@@ -15,6 +15,7 @@ type User struct {
 	CreatedAt       time.Time `json:"created_at" bson:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at" bson:"updated_at"`
 	BVN             string    `json:"bvn" bson:"bvn"`
+	BVNPhone        string    `json:"bvn_phone,omitempty" bson:"bvn_phone,omitempty"`
 	NIN             string    `json:"nin" bson:"nin"`
 	DOB             time.Time `json:"birth_date" bson:"birth_date"`
 	IsVerified      bool      `json:"is_verified" bson:"is_verified"`
