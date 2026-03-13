@@ -30,7 +30,7 @@ func NewBvnConfig(logger *zap.Logger) *BvnConfig {
 	}
 }
 
-func (b *BvnConfig) VerifyBVN(bvn string, user models.User) (result *BVNVerificationResult, err error) {
+func (b *BvnConfig) VerifyBVN(bvn string, phone string, user models.User) (result *BVNVerificationResult, err error) {
 
 	payload := bvnRequest{
 		BVN_number: bvn,
@@ -85,6 +85,7 @@ func (b *BvnConfig) VerifyBVN(bvn string, user models.User) (result *BVNVerifica
 		return &BVNVerificationResult{
 			Success:         false,
 			NameMatched:     false,
+			PhoneMatched:    false,
 			ResponseCode:    "400",
 			ResponseMessage: "Verification failed",
 		}, nil
@@ -99,6 +100,7 @@ func (b *BvnConfig) VerifyBVN(bvn string, user models.User) (result *BVNVerifica
 		return &BVNVerificationResult{
 			Success:         true,
 			NameMatched:     false,
+			PhoneMatched:    false,
 			ResponseCode:    "400",
 			ResponseMessage: "Name does not match BVN name",
 		}, nil
@@ -106,18 +108,31 @@ func (b *BvnConfig) VerifyBVN(bvn string, user models.User) (result *BVNVerifica
 
 	b.logger.Info("User name matches BVN data", zap.String("apiFullName", apiFullName), zap.String("FullName", user.FullName))
 
+	if phone != apiResponse.Data.PhoneNumber {
+		b.logger.Error("Phone number does not match BVN data", zap.String("apiPhone", apiResponse.Data.PhoneNumber), zap.String("userPhone", phone))
+		return &BVNVerificationResult{
+			Success:         true,
+			NameMatched:     true,
+			PhoneMatched:    false,
+			ResponseCode:    "400",
+			ResponseMessage: "Phone number does not match BVN data",
+		}, nil
+	}
+
 	dob := apiResponse.Data.DateOfBirth
 	formattedDOB, err := formatDOB(dob)
 	if err != nil {
 		b.logger.Error("Failed to format date of birth", zap.Error(err))
 		return &BVNVerificationResult{}, err
 	}
+
 	return &BVNVerificationResult{
 		Success:         true,
 		NameMatched:     true,
+		PhoneMatched:    true,
 		DOB:             formattedDOB,
 		ResponseCode:    "200",
-		ResponseMessage: "BVN verification succesful",
+		ResponseMessage: "BVN verification successful",
 	}, nil
 }
 

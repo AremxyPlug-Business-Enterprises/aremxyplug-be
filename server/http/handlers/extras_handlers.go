@@ -427,6 +427,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 	type identityRequest struct {
 		BVN        string `json:"bvn,omitempty"`
 		NIN        string `json:"nin,omitempty"`
+		Phone      string `json:"phone,omitempty"`
 		Dob        string `json:"dob,omitempty"`
 		Address    string `json:"address,omitempty"`
 		Gender     string `json:"gender,omitempty"`
@@ -506,7 +507,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 	}
 
 	if hasBVN {
-		result, err := handler.verifyClient.VerifyBVN(req.BVN, *user)
+		result, err := handler.verifyClient.VerifyBVN(req.BVN, req.Phone, *user)
 		if err != nil {
 			handler.logger.Error("Failed to verify BVN", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -531,6 +532,14 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
+		if !result.PhoneMatched {
+			handler.logger.Warn("BVN phone mismatch", zap.String("bvn", req.BVN))
+			w.WriteHeader(http.StatusBadRequest)
+			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "BVN phone mismatch"}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		encBVN, err := encryption.EncryptString(req.BVN)
 		if err != nil {
 			handler.logger.Error("Failed to encrypt BVN", zap.Error(err))
@@ -541,6 +550,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		}
 
 		user.BVN = encBVN
+		user.BVNPhone = req.Phone
 		if err := handler.store.UpdateBVNField(*user); err != nil {
 			handler.logger.Error("Failed to update BVN field", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -560,6 +570,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		data := map[string]interface{}{
 			"BVN":     req.BVN,
 			"Dob":     result.DOB,
+			"Phone":   req.Phone,
 			"Address": req.Address,
 			"Gender":  req.Gender,
 		}

@@ -7,7 +7,7 @@ import (
 )
 
 type VerificationClient interface {
-	VerifyBVN(bvn string, user models.User) (*bvn.BVNVerificationResult, error)
+	VerifyBVN(bvn string, phone string, user models.User) (*bvn.BVNVerificationResult, error)
 	VerifyNIN(nin string, user models.User) (*nin.NINVerificationResult, error)
 }
 
@@ -23,8 +23,8 @@ func NewVerificationClient(bvnConfig *bvn.BvnConfig, ninConfig *nin.NINConfig) V
 	}
 }
 
-func (v *verificationClient) VerifyBVN(bvn string, user models.User) (*bvn.BVNVerificationResult, error) {
-	return v.bvnConfig.VerifyBVN(bvn, user)
+func (v *verificationClient) VerifyBVN(bvn string, phone string, user models.User) (*bvn.BVNVerificationResult, error) {
+	return v.bvnConfig.VerifyBVN(bvn, phone, user)
 }
 
 func (v *verificationClient) VerifyNIN(nin string, user models.User) (*nin.NINVerificationResult, error) {

@@ -330,7 +330,7 @@ func (m *mongoStore) UpdateUserPasswordByID(id string, password string) error {
 func (m *mongoStore) UpdateBVNField(user models.User) error {
 	ctx := context.Background()
 	filter := bson.M{"id": user.ID}
-	update := bson.M{"$set": bson.M{"bvn": user.BVN, "has_bvn": true}}
+	update := bson.M{"$set": bson.M{"bvn": user.BVN, "bvn_phone": user.BVNPhone, "has_bvn": true}}
 	_, err := m.col(userColl).
 		UpdateOne(ctx, filter, update)
 	if err != nil {

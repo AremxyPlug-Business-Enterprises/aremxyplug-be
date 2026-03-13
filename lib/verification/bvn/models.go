@@ -22,6 +22,7 @@ type userData struct {
 type BVNVerificationResult struct {
 	Success         bool   `json:"success"`          // Overall verification status
 	NameMatched     bool   `json:"name_matched"`     // Whether names match
+	PhoneMatched    bool   `json:"phone_matched"`    // Whether phone numbers match
 	DOB             string `json:"dob"`              // Date of birth (if available)
 	ResponseCode    string `json:"response_code"`    // API response code
 	ResponseMessage string `json:"response_message"` // API response message

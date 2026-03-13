@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
@@ -1158,4 +1159,31 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 		}
 		json.NewEncoder(w).Encode(response)
 	}
+}
+
+func (handler *HttpHandler) AirtimeDiscount(w http.ResponseWriter, r *http.Request) {
+
+	network := chi.URLParam(r, "network")
+
+	network = strings.ToUpper(network)
+
+	prod, err := handler.productClient.GetAirtimeProduct(network)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		handler.logger.Error("Failed to retrieve airtime product", zap.String("network", network), zap.Error(err))
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "Failed to retrieve airtime product"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"discount_percent": prod.Customer_Discount},
+	}
+	json.NewEncoder(w).Encode(response)
 }

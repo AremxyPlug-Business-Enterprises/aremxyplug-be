@@ -421,10 +421,8 @@ func productRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 		// Telecom Plans Routes
 		router.Route("/telecom", func(router chi.Router) {
 			router.Get("/list/{networkID}", httpHandler.TelcomProducts)
-			router.Post("/", httpHandler.TelecomPlans)
+			router.Get("/airtime/{network}", httpHandler.TelecomPlans)
 			router.Get("/{productID}", httpHandler.TelecomPlans)
-			router.Patch("/{planID}", httpHandler.TelecomPlans)
-			router.Delete("/{planID}", httpHandler.TelecomPlans)
 		})
 
 		// Education Pin Routes
