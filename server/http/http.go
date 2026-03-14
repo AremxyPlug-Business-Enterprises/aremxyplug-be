@@ -62,7 +62,7 @@ type ServerConfig struct {
 func MountServer(config ServerConfig) *chi.Mux {
 	router := chi.NewRouter()
 
-	allowedOrigin := []string{"http://localhost:3000", "https://test.aremxyplug.com", "https://aremxyplug.com"}
+	allowedOrigin := []string{"http://localhost:3000", "http://localhost:8080", "https://test.aremxyplug.com", "https://aremxyplug.com"}
 
 	// Middlewares
 	router.Use(cors.New(cors.Options{
@@ -421,7 +421,7 @@ func productRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 		// Telecom Plans Routes
 		router.Route("/telecom", func(router chi.Router) {
 			router.Get("/list/{networkID}", httpHandler.TelcomProducts)
-			router.Get("/airtime/{network}", httpHandler.TelecomPlans)
+			router.Get("/airtime/{network}", httpHandler.AirtimeDiscount)
 			router.Get("/{productID}", httpHandler.TelecomPlans)
 		})
 
