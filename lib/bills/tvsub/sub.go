@@ -208,8 +208,6 @@ func (t *TvConn) VerifyCard(service, iucNumber string) (verifyResponse, error) {
 	req.Header.Set("secret-key", sk)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	log.Println(url)
-	log.Printf("%s\n%s", pk, sk)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
