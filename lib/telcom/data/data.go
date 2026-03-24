@@ -251,6 +251,7 @@ func (d *DataConn) buyEasyaccessData(data DataInfo) (*telcom.DataResult, error) 
 		TransactionDescription: transactionDesc,
 		TransactionID:          transactionID,
 		RecipientName:          data.Name,
+		Profit_Margin:          data.Profit_Margin,
 		// ApiID:                  apiID,
 	}
 
@@ -359,6 +360,7 @@ func (d *DataConn) buy247Data(data DataInfo) (*telcom.DataResult, error) {
 		TransactionDescription: transactionDesc,
 		TransactionID:          transactionID,
 		RecipientName:          data.Name,
+		Profit_Margin:          data.Profit_Margin,
 		// ApiID:                  apiID,
 	}
 
