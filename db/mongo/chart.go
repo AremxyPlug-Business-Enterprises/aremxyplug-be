@@ -108,6 +108,9 @@ func (m *mongoStore) GetChart(filter map[string]interface{}, rangeType string) (
 		baseFilter = append(baseFilter, bson.E{Key: "user_id", Value: userID})
 	}
 
+	// Chart metrics should consider only successful and pending transactions.
+	baseFilter = append(baseFilter, bson.E{Key: "status", Value: bson.M{"$in": bson.A{"success", "pending"}}})
+
 	// for the inflow collection, point-redeem is a part
 
 	// Process inflow (deposit + point-redeem)
@@ -200,6 +203,9 @@ func (m *mongoStore) processCollection(ctx context.Context, collName string, gro
 	amountField := "$amount"
 	if collName == pointRedeemColl {
 		amountField = "$amount_redeemed"
+	}
+	if collName == airColl {
+		amountField = "$discount_amount"
 	}
 
 	pipeline := mongo.Pipeline{
