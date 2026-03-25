@@ -14,9 +14,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// dayStart normalizes a time to the start of its day in UTC (00:00:00.0).
+// dayStart normalizes a time to the start of its day in UTC+1 (00:00:00.0).
 func dayStart(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	// Convert to UTC+1 timezone
+	utcPlus1 := time.FixedZone("UTC+1", 1*60*60)
+	t = t.In(utcPlus1)
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, utcPlus1)
 }
 
 // dateStringGroupID returns a BSON grouping expression for $dateToString with the given format.
@@ -41,9 +44,12 @@ func (m *mongoStore) GetChart(filter map[string]interface{}, rangeType string) (
 	end, hasEnd := filter["end_date"].(time.Time)
 	useExplicitDates := hasStart || hasEnd
 
+	now := time.Now().UTC()
+	var s, e time.Time
+
 	if useExplicitDates {
-		// Explicit dates provided: normalize to day boundaries and derive grouping from span
-		var s, e time.Time
+		// Explicit date filters provided: these override default range and rangeType
+		// Normalize dates to day boundaries (UTC+1) and derive grouping from span
 		if hasStart {
 			s = dayStart(start)
 		} else {
@@ -71,36 +77,38 @@ func (m *mongoStore) GetChart(filter map[string]interface{}, rangeType string) (
 			groupID = dateStringGroupID("%Y-%m") // monthly
 		}
 	} else {
-		// No explicit dates: use predefined rangeType to set window + grouping
-		now := time.Now().UTC()
-		var s, e time.Time
+		// No explicit filters: default to TODAY (start of day UTC+1), unless rangeType overrides
+		s = dayStart(now)
+		e = s.Add(24 * time.Hour)
+		groupID = bson.D{{Key: "$hour", Value: "$created_at"}}
 
-		switch rangeType {
-		case "TODAY":
-			s = dayStart(now)
-			e = s.Add(24 * time.Hour)
-			groupID = bson.D{{Key: "$hour", Value: "$created_at"}}
-		case "WEEKLY":
-			s = now.AddDate(0, 0, -7)
-			e = now
-			groupID = dateStringGroupID("%Y-%U")
-		case "MONTHLY":
-			s = now.AddDate(0, -1, 0)
-			e = now
-			groupID = dateStringGroupID("%Y-%m")
-		case "ALL-TIME":
-			// No date restriction; group by month
-			groupID = dateStringGroupID("%Y-%m")
-		default: // DAILY or fallback
-			s = now.AddDate(0, 0, -1)
-			e = now
-			groupID = dateStringGroupID("%Y-%m-%d")
+		// Allow rangeType to override default TODAY range if explicitly provided
+		if rangeType != "" && rangeType != "TODAY" {
+			switch rangeType {
+			case "WEEKLY":
+				s = now.AddDate(0, 0, -7)
+				e = now
+				groupID = dateStringGroupID("%Y-%U")
+			case "MONTHLY":
+				s = now.AddDate(0, -1, 0)
+				e = now
+				groupID = dateStringGroupID("%Y-%m")
+			case "ALL-TIME":
+				// No date restriction; group by month
+				groupID = dateStringGroupID("%Y-%m")
+				// For ALL-TIME, skip adding date filter
+				goto skipDateFilter
+			case "DAILY":
+				s = now.AddDate(0, 0, -1)
+				e = now
+				groupID = dateStringGroupID("%Y-%m-%d")
+			}
 		}
 
-		// Add created_at filter if range is not ALL_TIME
-		if rangeType != "ALL_TIME" && !s.IsZero() && !e.IsZero() {
-			baseFilter = append(baseFilter, bson.E{Key: "created_at", Value: bson.M{"$gte": s, "$lt": e}})
-		}
+		// Add created_at filter for ranged queries (not for ALL-TIME)
+		baseFilter = append(baseFilter, bson.E{Key: "created_at", Value: bson.M{"$gte": s, "$lt": e}})
+
+		skipDateFilter:
 	}
 
 	// Optional user filter
