@@ -1,7 +1,7 @@
 package nin
 
 type ninRequest struct {
-	NIN_number string `json:"number_nin"`
+	NIN_number string `json:"number"`
 }
 
 type ninResponse struct {
