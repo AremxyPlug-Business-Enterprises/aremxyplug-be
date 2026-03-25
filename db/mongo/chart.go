@@ -77,9 +77,9 @@ func (m *mongoStore) GetChart(filter map[string]interface{}, rangeType string) (
 			groupID = dateStringGroupID("%Y-%m") // monthly
 		}
 	} else {
-		// No explicit filters: default to TODAY (start of day UTC+1), unless rangeType overrides
+		// No explicit filters: default to TODAY (start of day UTC+1 to current time), unless rangeType overrides
 		s = dayStart(now)
-		e = s.Add(24 * time.Hour)
+		e = now  // Current time, not full 24 hours
 		groupID = bson.D{{Key: "$hour", Value: "$created_at"}}
 
 		// Allow rangeType to override default TODAY range if explicitly provided
@@ -99,9 +99,10 @@ func (m *mongoStore) GetChart(filter map[string]interface{}, rangeType string) (
 				// For ALL-TIME, skip adding date filter
 				goto skipDateFilter
 			case "DAILY":
-				s = now.AddDate(0, 0, -1)
+				// Same as default TODAY: from midnight UTC+1 to current time
+				s = dayStart(now)
 				e = now
-				groupID = dateStringGroupID("%Y-%m-%d")
+				groupID = bson.D{{Key: "$hour", Value: "$created_at"}}
 			}
 		}
 
