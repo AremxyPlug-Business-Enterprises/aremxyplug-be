@@ -76,7 +76,7 @@ func main() {
 	scheduler := scheduler.NewScheduler(redisClient, store, logger)
 	taskService := tasks.NewService(store)
 	processor := events.NewProcessor(redisClient, taskService, store, logger)
-	bankDep := deposit.NewDepositConfig(store, logger, processor)
+	bankDep := deposit.NewDepositConfig(store, sqlStore, logger, processor)
 	bankTrf := transfer.NewConfig(store, logger, redisClient, processor)
 
 	config := httpSrv.ServerConfig{
@@ -124,5 +124,3 @@ func main() {
 		logger.Fatal("failed to disconnect from database", zap.Error(err))
 	}
 }
-
-

@@ -12,6 +12,7 @@ import (
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/mongo"
+	"github.com/aremxyplug-be/db/sqlstore"
 	"github.com/aremxyplug-be/lib/balance"
 	"github.com/aremxyplug-be/lib/events"
 	"github.com/aremxyplug-be/lib/randomgen"
@@ -27,6 +28,7 @@ var (
 
 type Config struct {
 	db        db.DataStore
+	sqlStore  *sqlstore.SqlStore
 	logger    *zap.Logger
 	processor *events.Processor
 }
@@ -36,9 +38,10 @@ type depositID struct {
 	ID           string `json:"id" bson:"ID"`
 }
 
-func NewDepositConfig(db db.DataStore, logger *zap.Logger, processor *events.Processor) *Config {
+func NewDepositConfig(db db.DataStore, sqlStore *sqlstore.SqlStore, logger *zap.Logger, processor *events.Processor) *Config {
 	return &Config{
 		db:        db,
+		sqlStore:  sqlStore,
 		logger:    logger,
 		processor: processor,
 	}
@@ -117,7 +120,13 @@ func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, 
 		}
 		c.logger.Debug("Fetched Balance", zap.Any("balance", bal))
 
-		deposit_amount := data.Attributes.Amount * 0.01
+		charges, err := c.sqlStore.GetWalletCharges()
+		if err != nil {
+			c.logger.Error("Deposit failed: unable to fetch wallet charges", zap.Error(err))
+			return updatedAny, DBConnectionError(err)
+		}
+
+		deposit_amount := data.Attributes.Amount * *charges.APICharge / 100
 		newBalance, depositAmount := balance.NewBalanceDeposit(bal, decimal.NewFromFloatWithExponent(deposit_amount, -2))
 		parsedBalance, _ := primitive.ParseDecimal128(newBalance.String())
 		c.logger.Debug("New Balance Calculated", zap.String("newBalance", newBalance.String()))
@@ -139,6 +148,9 @@ func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, 
 			return updatedAny, err
 		}
 
+		APICharge := fmt.Sprintf("%.2f", *charges.APICharge)
+		ServiceCharge := fmt.Sprintf("%.2f", *charges.ServiceCharge)
+
 		result := models.DepositResponse{
 			UserID:                 userID,
 			Status:                 "success",
@@ -154,6 +166,8 @@ func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, 
 			Transaction_ID:         transctionID,
 			Reference:              data.Attributes.PaymentReference,
 			CreatedAt:              createdAt,
+			APICharge:              APICharge,
+			ServiceCharge:          ServiceCharge,
 		}
 
 		if err := c.saveTransaction(result); err != nil {

@@ -82,6 +82,9 @@ type DepositResponse struct {
 	Transaction_ID         string    `json:"transaction_id" bson:"transaction_id"`                   // transactionID created
 	Reference              string    `json:"reference" bson:"reference"`                             // map to paymentReference
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`                           // ISO datetime string
+	APICharge              string    `json:"api_charge" bson:"api_charge"`                           // optional API charge
+	ServiceCharge          string    `json:"service_charge" bson:"service_charge"`                   // optional service charge
+
 }
 
 type Balance struct {
@@ -94,4 +97,9 @@ type Balance struct {
 
 func (b Balance) Decimal() (decimal.Decimal, error) {
 	return decimal.NewFromString(b.Balance.String())
+}
+
+type WalletCharges struct {
+	APICharge     *float64 `json:"api_charge,omitempty"`
+	ServiceCharge *float64 `json:"service_charge,omitempty"`
 }
