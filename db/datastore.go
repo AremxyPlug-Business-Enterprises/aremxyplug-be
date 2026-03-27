@@ -50,10 +50,10 @@ type BankStore interface {
 	GetCounterParty(accountNumber, bankname string) (models.CounterParty, error)
 	GetTransferDetails(id string) (models.TransferResponse, error)
 	GetAllTransferHistory(user string) ([]models.TransferResponse, error)
-	GetDepositDetails(id string) (models.DepositResponse, error)
+	GetDepositDetails(id string) (any, error)
 	GetAllDepositHistory(user string) ([]models.DepositResponse, error)
 	GetAllBankTransactions(user string) ([]interface{}, error)
-	SaveDeposit(detail models.DepositResponse) error
+	SaveDeposit(detail any) error
 	GetDepositID(virtualNuban string) (result interface{}, err error)
 	SaveDepositID(detail interface{}) error
 	GetBalance(userID string) (balance decimal.Decimal, err error)

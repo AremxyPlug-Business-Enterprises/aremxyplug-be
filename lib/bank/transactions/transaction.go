@@ -59,11 +59,11 @@ func (t *Transaction) GetDepositHistory(user string) ([]models.DepositResponse, 
 	return result, nil
 }
 
-func (t *Transaction) GetDepositDetails(id string) (models.DepositResponse, error) {
+func (t *Transaction) GetDepositDetails(id string) (any, error) {
 	result, err := t.store.GetDepositDetails(id)
 	if err != nil {
 		// log error
-		return models.DepositResponse{}, err
+		return nil, err
 	}
 
 	return result, nil

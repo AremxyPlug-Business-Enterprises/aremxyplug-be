@@ -82,6 +82,24 @@ type DepositResponse struct {
 	Transaction_ID         string    `json:"transaction_id" bson:"transaction_id"`                   // transactionID created
 	Reference              string    `json:"reference" bson:"reference"`                             // map to paymentReference
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`                           // ISO datetime string
+	APICharge              string    `json:"api_charge" bson:"api_charge"`                           // optional API charge
+	ServiceCharge          string    `json:"service_charge" bson:"service_charge"`                   // optional service charge
+
+}
+
+type InternalDepositResponse struct {
+	UserID                 string    `json:"user_id" bson:"user_id"`
+	Status                 string    `json:"status" bson:"status"`                                   // "success" or "failed"
+	Amount                 string    `json:"amount" bson:"amount"`                                   // amount recieved
+	WalletType             string    `json:"walletType" bson:"walletType"`                           // Nigerian NGN wallet
+	SenderName             string    `json:"sender_name" bson:"sender_name"`                         // sender's name
+	TransactionProduct     string    `json:"transaction_product" bson:"transaction_product"`         // *Virtual account
+	TransactionDescription string    `json:"transaction_description" bson:"transaction_description"` // description based on the method of deposit
+	Message                string    `json:"message" bson:"message"`                                 // map to narration
+	Order_ID               int       `json:"order_id" bson:"order_id"`                               // orderID created
+	Transaction_ID         string    `json:"transaction_id" bson:"transaction_id"`                   // transactionID created
+	Reference              string    `json:"reference" bson:"reference"`                             // map to paymentReference
+	CreatedAt              time.Time `json:"created_at" bson:"created_at"`                           // ISO datetime string
 }
 
 type Balance struct {
@@ -94,4 +112,9 @@ type Balance struct {
 
 func (b Balance) Decimal() (decimal.Decimal, error) {
 	return decimal.NewFromString(b.Balance.String())
+}
+
+type WalletCharges struct {
+	APICharge     *float64 `json:"api_charge,omitempty"`
+	ServiceCharge *float64 `json:"service_charge,omitempty"`
 }
