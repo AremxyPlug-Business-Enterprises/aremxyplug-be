@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/aremxyplug-be/db/models"
@@ -226,15 +227,43 @@ func (m *mongoStore) GetAllTransferHistory(userID string) ([]models.TransferResp
 
 }
 
-func (m *mongoStore) GetDepositDetails(id string) (models.DepositResponse, error) {
-	resp := m.getRecord(id, depositColl)
-	result := models.DepositResponse{}
-	err := resp.Decode(&result)
+func (s *mongoStore) GetDepositDetails(id string) (any, error) {
+	// First decode only transaction_product so we can choose the proper response shape.
+	var probe struct {
+		TransactionProduct string `bson:"transaction_product"`
+	}
+	result := s.getRecord(id, depositColl)
+	err := result.Decode(&probe)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return models.DepositResponse{}, nil
+		}
 		return models.DepositResponse{}, err
 	}
 
-	return result, nil
+	if strings.EqualFold(probe.TransactionProduct, "Internal Deposit") ||
+		strings.EqualFold(probe.TransactionProduct, "System Top-Up") {
+		var internalRes models.InternalDepositResponse
+		internalResult := s.getRecord(id, depositColl)
+		if err := internalResult.Decode(&internalRes); err != nil {
+			if err == mongo.ErrNoDocuments {
+				return models.InternalDepositResponse{}, nil
+			}
+			return models.InternalDepositResponse{}, err
+		}
+		return internalRes, nil
+	}
+
+	var res models.DepositResponse
+	defaultResult := s.getRecord(id, depositColl)
+	if err := defaultResult.Decode(&res); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return models.DepositResponse{}, nil
+		}
+		return models.DepositResponse{}, err
+	}
+
+	return res, nil
 }
 
 func (m *mongoStore) GetAllDepositHistory(userID string) ([]models.DepositResponse, error) {
@@ -319,7 +348,7 @@ func getTransactionTime(record interface{}) time.Time {
 		return time.Time{}
 	}
 }
-func (m *mongoStore) SaveDeposit(detail models.DepositResponse) error {
+func (m *mongoStore) SaveDeposit(detail any) error {
 	err := m.saveToDB(depositColl, detail)
 	return err
 }

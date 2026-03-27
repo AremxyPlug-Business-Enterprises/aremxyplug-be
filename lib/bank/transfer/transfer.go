@@ -106,13 +106,6 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 	trfTransactionID := randomgen.GenerateTransactionID("trf")
 	depTransactionID := randomgen.GenerateTransactionID("dep")
 
-	// get the sender's bank information
-	senderBank, err := c.db.GetVirtualNuban(data.UserID)
-	if err != nil {
-		c.logger.Error(err.Error())
-		return models.TransferResponse{}, err
-	}
-
 	bal, err := c.db.GetBalance(user.ID)
 	if err != nil {
 		c.logger.Error(err.Error())
@@ -152,12 +145,11 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 	}
 
 	// save the new deposit receipt for the reciever's account
-	dept := models.DepositResponse{
+	dept := models.InternalDepositResponse{
 		UserID:                 user.ID,
 		Amount:                 fmt.Sprintf("%v", data.Amount),
-		Bank_Name:              senderBank.Bank_Name,
-		Account_Name:           senderBank.Account_Name,
-		Account_No:             senderBank.Account_No,
+		WalletType:             "Nigerian NGN Wallet",
+		SenderName:             data.FullName,
 		TransactionProduct:     "Internal Deposit",
 		TransactionDescription: "NGN Wallet Top Up",
 		Message:                data.Reason,
