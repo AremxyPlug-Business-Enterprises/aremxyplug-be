@@ -87,6 +87,21 @@ type DepositResponse struct {
 
 }
 
+type InternalDepositResponse struct {
+	UserID                 string    `json:"user_id" bson:"user_id"`
+	Status                 string    `json:"status" bson:"status"`                                   // "success" or "failed"
+	Amount                 string    `json:"amount" bson:"amount"`                                   // amount recieved
+	WalletType             string    `json:"walletType" bson:"walletType"`                           // Nigerian NGN wallet
+	SenderName             string    `json:"sender_name" bson:"sender_name"`                         // sender's name
+	TransactionProduct     string    `json:"transaction_product" bson:"transaction_product"`         // *Virtual account
+	TransactionDescription string    `json:"transaction_description" bson:"transaction_description"` // description based on the method of deposit
+	Message                string    `json:"message" bson:"message"`                                 // map to narration
+	Order_ID               int       `json:"order_id" bson:"order_id"`                               // orderID created
+	Transaction_ID         string    `json:"transaction_id" bson:"transaction_id"`                   // transactionID created
+	Reference              string    `json:"reference" bson:"reference"`                             // map to paymentReference
+	CreatedAt              time.Time `json:"created_at" bson:"created_at"`                           // ISO datetime string
+}
+
 type Balance struct {
 	VirtualNuban string               `json:"virtualNuban" bson:"virtualNuban"`
 	UserID       string               `json:"user_id" bson:"user_id"`
