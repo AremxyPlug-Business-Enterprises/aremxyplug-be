@@ -135,6 +135,7 @@ func (handler *HttpHandler) CheckVerification(w http.ResponseWriter, r *http.Req
 				return
 			}
 			data["bvn"] = bvn
+			data["phone"] = user.BVNPhone
 		}
 
 		if user.HasNIN {
@@ -147,6 +148,7 @@ func (handler *HttpHandler) CheckVerification(w http.ResponseWriter, r *http.Req
 				return
 			}
 			data["nin"] = nin
+			data["phone"] = user.PhoneNumber
 		}
 
 		if user.Gender != "" {
@@ -161,7 +163,6 @@ func (handler *HttpHandler) CheckVerification(w http.ResponseWriter, r *http.Req
 			data["dob"] = user.DOB.Format("2006-01-02")
 		}
 
-		data["phone"] = user.PhoneNumber
 		data["email"] = user.Email
 
 		w.WriteHeader(http.StatusBadRequest)
@@ -188,6 +189,7 @@ func (handler *HttpHandler) CheckVerification(w http.ResponseWriter, r *http.Req
 			return
 		}
 		data["bvn"] = bvn
+		data["phone"] = user.BVNPhone
 	}
 
 	if user.HasNIN {
@@ -200,6 +202,7 @@ func (handler *HttpHandler) CheckVerification(w http.ResponseWriter, r *http.Req
 			return
 		}
 		data["nin"] = nin
+		data["phone"] = user.PhoneNumber
 	}
 
 	if user.Gender != "" {
@@ -214,7 +217,6 @@ func (handler *HttpHandler) CheckVerification(w http.ResponseWriter, r *http.Req
 		data["dob"] = user.DOB.Format("2006-01-02")
 	}
 
-	data["phone"] = user.PhoneNumber
 	data["email"] = user.Email
 
 	w.WriteHeader(http.StatusOK)

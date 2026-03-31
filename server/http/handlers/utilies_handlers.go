@@ -401,6 +401,17 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			json.NewEncoder(w).Encode(response)
 			return
 		}
+		if tvDetails == nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Warn("Tv Plan details not found", zap.String("decoderType", data.DecoderType), zap.String("package", data.Package), zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Did not find TV Plan details"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
 
 		amount := decimal.NewFromFloat(float64(data.Amount))
 		profit_margin := amount.Mul(decimal.NewFromFloat(*tvDetails.Profit_Margin / 100.0))

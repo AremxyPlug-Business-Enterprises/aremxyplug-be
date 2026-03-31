@@ -568,11 +568,11 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		}
 
 		data := map[string]interface{}{
-			"BVN":     req.BVN,
-			"Dob":     result.DOB,
-			"Phone":   req.Phone,
-			"Address": req.Address,
-			"Gender":  req.Gender,
+			"bvn":     req.BVN,
+			"dob":     result.DOB,
+			"phone":   req.Phone,
+			"address": req.Address,
+			"gender":  req.Gender,
 		}
 
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{
@@ -638,10 +638,10 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		}
 
 		data := map[string]interface{}{
-			"NIN":     req.NIN,
-			"Dob":     result.Birthdate,
-			"Address": req.Address,
-			"Gender":  req.Gender,
+			"nin":     req.NIN,
+			"dob":     result.Birthdate,
+			"address": req.Address,
+			"gender":  req.Gender,
 		}
 
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{

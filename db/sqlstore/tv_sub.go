@@ -66,7 +66,7 @@ func (s *SqlStore) GetTVSubs(table string) ([]models.TVSub, error) {
 	return plans, nil
 }
 
-func (s *SqlStore) GetTVSubByPackageName(table string, packageName string) (*models.TVSub, error) {
+func (s *SqlStore) GetTVSubByPackage(table string, packageName string) (*models.TVSub, error) {
 	ctx := context.Background()
 
 	if err := validateTableName(table); err != nil {
@@ -74,7 +74,7 @@ func (s *SqlStore) GetTVSubByPackageName(table string, packageName string) (*mod
 	}
 
 	query := fmt.Sprintf(
-		"SELECT plan_id, package, package_name, amount, profit_margin FROM %s WHERE package_name = $1",
+		"SELECT plan_id, package, package_name, amount, profit_margin FROM %s WHERE package = $1",
 		sanitizeTableName(table),
 	)
 	row := s.db.QueryRowContext(ctx, query, packageName)
