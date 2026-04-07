@@ -40,7 +40,7 @@ func (s *TVSubServiceImpl) GetTVSubs(tableName string) ([]models.TVSub, error) {
 
 func (s *TVSubServiceImpl) GetTVSubByPackageName(tableName string, packageName string) (*models.TVSub, error) {
 	s.logger.Info("Fetching TV subscription by package name", zap.String("packageName", packageName))
-	tvSub, err := s.store.GetTVSubByPackageName(tableName, packageName)
+	tvSub, err := s.store.GetTVSubByPackage(tableName, packageName)
 	if err != nil {
 		s.logger.Error("Error fetching TV subscription by package name", zap.String("packageName", packageName), zap.Error(err))
 		return nil, err
