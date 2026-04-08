@@ -349,7 +349,7 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 
 		}
-		data.Name = userDetails.Username
+		data.Name = userDetails.FullName
 
 		if data.Amount == 0 {
 			w.WriteHeader(http.StatusBadRequest)
