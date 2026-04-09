@@ -126,7 +126,7 @@ func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, 
 			return updatedAny, DBConnectionError(err)
 		}
 
-		deposit_amount := data.Attributes.Amount * *charges.APICharge / 100
+		deposit_amount := data.Attributes.Amount * *charges.ServiceCharge / 100
 		newBalance, depositAmount := balance.NewBalanceDeposit(bal, decimal.NewFromFloatWithExponent(deposit_amount, -2))
 		parsedBalance, _ := primitive.ParseDecimal128(newBalance.String())
 		c.logger.Debug("New Balance Calculated", zap.String("newBalance", newBalance.String()))
