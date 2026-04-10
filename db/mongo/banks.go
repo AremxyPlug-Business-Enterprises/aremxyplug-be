@@ -242,7 +242,7 @@ func (s *mongoStore) GetDepositDetails(id string) (any, error) {
 	}
 
 	if strings.EqualFold(probe.TransactionProduct, "Internal Deposit") ||
-		strings.EqualFold(probe.TransactionProduct, "System Top-Up") {
+		strings.EqualFold(probe.TransactionProduct, "System Top-Up") || strings.EqualFold(probe.TransactionProduct, "System Debit") {
 		var internalRes models.InternalDepositResponse
 		internalResult := s.getRecord(id, depositColl)
 		if err := internalResult.Decode(&internalRes); err != nil {
