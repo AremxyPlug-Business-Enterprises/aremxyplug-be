@@ -13,8 +13,8 @@ import (
 
 var ErrAlreadyCompleted = errors.New("task already completed")
 
-func (m *mongoStore) GetProgress(userID string, task models.TaskType) (*models.ProgressDoc, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetProgress(ctx context.Context, userID string, task models.TaskType) (*models.ProgressDoc, error) {
+	ctx = m.ensureCtx(ctx)
 	var doc models.ProgressDoc
 	err := m.col(tasksColl).FindOne(ctx, bson.M{"user_id": userID, "task_code": task}).Decode(&doc)
 	if err != nil {
@@ -27,9 +27,8 @@ func (m *mongoStore) GetProgress(userID string, task models.TaskType) (*models.P
 }
 
 // IncrementCumulative atomically increments a cumulative task and returns the updated doc.
-func (m *mongoStore) IncrementCumulative(userID string, def models.TaskDef, delta int64, txID string) (*models.ProgressDoc, error) {
-
-	ctx := context.Background()
+func (m *mongoStore) IncrementCumulative(ctx context.Context, userID string, def models.TaskDef, delta int64, txID string) (*models.ProgressDoc, error) {
+	ctx = m.ensureCtx(ctx)
 
 	now := time.Now().UTC()
 
@@ -60,7 +59,7 @@ func (m *mongoStore) IncrementCumulative(userID string, def models.TaskDef, delt
 	var doc models.ProgressDoc
 	if err := m.col(tasksColl).FindOneAndUpdate(ctx, filter, update, opts).Decode(&doc); err != nil {
 		if mongo.IsDuplicateKeyError(err) {
-			return m.GetProgress(userID, def.Code)
+			return m.GetProgress(ctx, userID, def.Code)
 		}
 		return nil, err
 	}
@@ -68,9 +67,8 @@ func (m *mongoStore) IncrementCumulative(userID string, def models.TaskDef, delt
 }
 
 // SetProgressForOneTime sets progress for one-time tasks (only increases if higher), returns doc.
-func (m *mongoStore) SetProgressForOneTime(userID string, def models.TaskDef, value int64, txID string) (*models.ProgressDoc, error) {
-
-	ctx := context.Background()
+func (m *mongoStore) SetProgressForOneTime(ctx context.Context, userID string, def models.TaskDef, value int64, txID string) (*models.ProgressDoc, error) {
+	ctx = m.ensureCtx(ctx)
 
 	now := time.Now().UTC()
 	filter := bson.M{"user_id": userID, "task_code": def.Code}
@@ -105,9 +103,8 @@ func (m *mongoStore) SetProgressForOneTime(userID string, def models.TaskDef, va
 }
 
 // TryMarkCompleted tries to atomically set completed=true; returns true if it changed.
-func (m *mongoStore) TryMarkCompleted(userID string, task models.TaskType) (bool, error) {
-
-	ctx := context.Background()
+func (m *mongoStore) TryMarkCompleted(ctx context.Context, userID string, task models.TaskType) (bool, error) {
+	ctx = m.ensureCtx(ctx)
 
 	now := time.Now().UTC()
 	filter := bson.M{"user_id": userID, "task_code": task, "completed": false}
@@ -136,8 +133,8 @@ func (m *mongoStore) TryMarkCompleted(userID string, task models.TaskType) (bool
 }
 
 // ListUserProgress retrieves all task progress documents for a user.
-func (m *mongoStore) ListUserProgress(userID string) ([]models.ProgressDoc, error) {
-	ctx := context.Background()
+func (m *mongoStore) ListUserProgress(ctx context.Context, userID string) ([]models.ProgressDoc, error) {
+	ctx = m.ensureCtx(ctx)
 	cursor, err := m.col(tasksColl).Find(ctx, bson.M{"user_id": userID})
 	if err != nil {
 		return nil, err

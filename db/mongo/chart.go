@@ -32,9 +32,8 @@ func dateStringGroupID(format string) bson.D {
 	}
 }
 
-func (m *mongoStore) GetChart(filter map[string]interface{}, rangeType string) (models.StatsResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func (m *mongoStore) GetChart(ctx context.Context, filter map[string]interface{}, rangeType string) (models.StatsResponse, error) {
+	ctx = m.ensureCtx(ctx)
 
 	// Build baseFilter (Mongo query) and determine grouping strategy
 	var baseFilter bson.D
@@ -79,7 +78,7 @@ func (m *mongoStore) GetChart(filter map[string]interface{}, rangeType string) (
 	} else {
 		// No explicit filters: default to TODAY (start of day UTC+1 to current time), unless rangeType overrides
 		s = dayStart(now)
-		e = now  // Current time, not full 24 hours
+		e = now // Current time, not full 24 hours
 		groupID = bson.D{{Key: "$hour", Value: "$created_at"}}
 
 		// Allow rangeType to override default TODAY range if explicitly provided
@@ -109,7 +108,7 @@ func (m *mongoStore) GetChart(filter map[string]interface{}, rangeType string) (
 		// Add created_at filter for ranged queries (not for ALL-TIME)
 		baseFilter = append(baseFilter, bson.E{Key: "created_at", Value: bson.M{"$gte": s, "$lt": e}})
 
-		skipDateFilter:
+	skipDateFilter:
 	}
 
 	// Optional user filter

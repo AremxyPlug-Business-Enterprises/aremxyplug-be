@@ -2,6 +2,7 @@ package airtime
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -34,7 +35,10 @@ func NewAirtimeConn(store db.TelcomStore, logger *zap.Logger) *AirtimeConn {
 	}
 }
 
-func (a *AirtimeConn) BuyAirtime(airtime AirtimeInfo) (*telcom.AirtimeResponse, error) {
+func (a *AirtimeConn) BuyAirtime(ctx context.Context, airtime AirtimeInfo) (*telcom.AirtimeResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	id, err := randomgen.GenerateOrderID()
 	if err != nil {
@@ -87,7 +91,7 @@ func (a *AirtimeConn) BuyAirtime(airtime AirtimeInfo) (*telcom.AirtimeResponse, 
 		Provider_Discount:      airtime.Provider_Discount,
 	}
 
-	resp, err := a.buy(airtime)
+	resp, err := a.buy(ctx, airtime)
 	if err != nil {
 		a.logger.Error("error returned from server", zap.Any("error:", err))
 		return nil, err
@@ -119,15 +123,18 @@ func (a *AirtimeConn) BuyAirtime(airtime AirtimeInfo) (*telcom.AirtimeResponse, 
 	result.ReferenceNumber = strconv.Itoa(apiResponse.Data.RechargeID)
 
 	// save transaction
-	if err := a.saveTransaction(result); err != nil {
+	if err := a.saveTransaction(ctx, result); err != nil {
 		return result, logAndReturnError(a.logger, "error saving transaction, an error occurred")
 	}
 
 	return result, nil
 }
 
-func (a *AirtimeConn) GetTransactionDetail(id string) (telcom.AirtimeResponse, error) {
-	result, err := a.getTransacationDetails(id)
+func (a *AirtimeConn) GetTransactionDetail(ctx context.Context, id string) (telcom.AirtimeResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := a.getTransacationDetails(ctx, id)
 	if err != nil {
 		return telcom.AirtimeResponse{}, err
 	}
@@ -156,8 +163,11 @@ func (a *AirtimeConn) QueryTransaction(id string) (*telcom.AirtimeResponse, erro
 }
 */
 
-func (a *AirtimeConn) GetUserTransaction(username string) ([]telcom.AirtimeResponse, error) {
-	resp, err := a.getAllTransactions(username)
+func (a *AirtimeConn) GetUserTransaction(ctx context.Context, username string) ([]telcom.AirtimeResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	resp, err := a.getAllTransactions(ctx, username)
 	if err != nil {
 		return nil, err
 	}
@@ -165,8 +175,11 @@ func (a *AirtimeConn) GetUserTransaction(username string) ([]telcom.AirtimeRespo
 	return resp, nil
 }
 
-func (a *AirtimeConn) GetAllTransactions() ([]telcom.AirtimeResponse, error) {
-	result, err := a.getAllTransactions("")
+func (a *AirtimeConn) GetAllTransactions(ctx context.Context) ([]telcom.AirtimeResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := a.getAllTransactions(ctx, "")
 	if err != nil {
 		a.logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("Database request error: " + err.Error())
@@ -175,7 +188,10 @@ func (a *AirtimeConn) GetAllTransactions() ([]telcom.AirtimeResponse, error) {
 	return result, nil
 }
 
-func (a *AirtimeConn) buy(data AirtimeInfo) (*http.Response, error) {
+func (a *AirtimeConn) buy(ctx context.Context, data AirtimeInfo) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	productcode := ""
 
@@ -219,7 +235,7 @@ func (a *AirtimeConn) buy(data AirtimeInfo) (*http.Response, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", api, bytes.NewBuffer(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", api, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
 	}
@@ -234,18 +250,27 @@ func (a *AirtimeConn) buy(data AirtimeInfo) (*http.Response, error) {
 	return resp, nil
 }
 
-func (a *AirtimeConn) saveTransaction(detail *telcom.AirtimeResponse) error {
-	err := a.db.SaveAirtimeTransaction(detail)
+func (a *AirtimeConn) saveTransaction(ctx context.Context, detail *telcom.AirtimeResponse) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := a.db.SaveAirtimeTransaction(ctx, detail)
 	return err
 }
 
-func (a *AirtimeConn) getTransacationDetails(id string) (telcom.AirtimeResponse, error) {
-	result, err := a.db.GetAirtimeTransactionDetails(id)
+func (a *AirtimeConn) getTransacationDetails(ctx context.Context, id string) (telcom.AirtimeResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := a.db.GetAirtimeTransactionDetails(ctx, id)
 	return result, err
 }
 
-func (a *AirtimeConn) getAllTransactions(userID string) ([]telcom.AirtimeResponse, error) {
-	results, err := a.db.GetAllAirtimeTransactions(userID)
+func (a *AirtimeConn) getAllTransactions(ctx context.Context, userID string) ([]telcom.AirtimeResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	results, err := a.db.GetAllAirtimeTransactions(ctx, userID)
 	return results, err
 }
 

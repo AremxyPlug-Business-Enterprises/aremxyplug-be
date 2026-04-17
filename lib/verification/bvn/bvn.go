@@ -2,6 +2,7 @@ package bvn
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,7 +31,10 @@ func NewBvnConfig(logger *zap.Logger) *BvnConfig {
 	}
 }
 
-func (b *BvnConfig) VerifyBVN(bvn string, phone string, user models.User) (result *BVNVerificationResult, err error) {
+func (b *BvnConfig) VerifyBVN(ctx context.Context, bvn string, phone string, user models.User) (result *BVNVerificationResult, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	payload := bvnRequest{
 		BVN_number: bvn,
@@ -43,7 +47,7 @@ func (b *BvnConfig) VerifyBVN(bvn string, phone string, user models.User) (resul
 	}
 
 	url := fmt.Sprintf("%s/%s", baseUrl, "bvn_validation")
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return &BVNVerificationResult{}, err
 	}

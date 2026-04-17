@@ -2,6 +2,7 @@ package electricity
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,7 +38,10 @@ func NewElectricConn(db db.UtilitiesStore, logger *zap.Logger) *ElectricConn {
 }
 
 // pay electricity bill
-func (e *ElectricConn) PayBill(data ElectricInfo) (*models.ElectricResult, error) {
+func (e *ElectricConn) PayBill(ctx context.Context, data ElectricInfo) (*models.ElectricResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	data.RequestID = randomgen.GenerateRequestID()
 	orderID, err := randomgen.GenerateOrderID()
@@ -46,7 +50,7 @@ func (e *ElectricConn) PayBill(data ElectricInfo) (*models.ElectricResult, error
 	}
 	transactionID := randomgen.GenerateTransactionID("ele")
 
-	resp, err := e.payBill(data)
+	resp, err := e.payBill(ctx, data)
 	if err != nil {
 		return nil, e.logAndReturnError("error communicating with server", err)
 	}
@@ -110,7 +114,7 @@ func (e *ElectricConn) PayBill(data ElectricInfo) (*models.ElectricResult, error
 		TXN:                    data.TXN,
 	}
 
-	if err := e.saveTransaction(result); err != nil {
+	if err := e.saveTransaction(ctx, result); err != nil {
 		return nil, e.logAndReturnError("error saving transaction to database", err)
 	}
 
@@ -118,9 +122,12 @@ func (e *ElectricConn) PayBill(data ElectricInfo) (*models.ElectricResult, error
 }
 
 // query eletricity bill
-func (e *ElectricConn) QueryTransaction(id string) (models.ElectricResult, error) {
+func (e *ElectricConn) QueryTransaction(ctx context.Context, id string) (models.ElectricResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	resp, err := e.queryTransaction(id)
+	resp, err := e.queryTransaction(ctx, id)
 	if err != nil {
 		return models.ElectricResult{}, e.logAndReturnError("error communicating with server", err)
 	}
@@ -135,7 +142,7 @@ func (e *ElectricConn) QueryTransaction(id string) (models.ElectricResult, error
 		return models.ElectricResult{}, nil
 	}
 
-	result, err := e.getTransactionDetails(apiResponse.RequestID)
+	result, err := e.getTransactionDetails(ctx, apiResponse.RequestID)
 	if err != nil {
 		return models.ElectricResult{}, e.logAndReturnError("failed to get user's transactions", err)
 	}
@@ -144,8 +151,11 @@ func (e *ElectricConn) QueryTransaction(id string) (models.ElectricResult, error
 }
 
 // get transaction history
-func (e *ElectricConn) GetUserTransactions(username string) ([]models.ElectricResult, error) {
-	result, err := e.getAllTransaction(username)
+func (e *ElectricConn) GetUserTransactions(ctx context.Context, username string) ([]models.ElectricResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := e.getAllTransaction(ctx, username)
 	if err != nil {
 		return nil, e.logAndReturnError("failed to get user's transactions", err)
 	}
@@ -153,8 +163,11 @@ func (e *ElectricConn) GetUserTransactions(username string) ([]models.ElectricRe
 	return result, nil
 }
 
-func (e *ElectricConn) GetTransactionDetails(id string) (models.ElectricResult, error) {
-	result, err := e.getTransactionDetails(id)
+func (e *ElectricConn) GetTransactionDetails(ctx context.Context, id string) (models.ElectricResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := e.getTransactionDetails(ctx, id)
 	if err != nil {
 		return models.ElectricResult{}, e.logAndReturnError("failed to get transaction details", err)
 	}
@@ -163,9 +176,12 @@ func (e *ElectricConn) GetTransactionDetails(id string) (models.ElectricResult, 
 }
 
 // GetAllTransaction returns all transactions, to be used by admin
-func (e *ElectricConn) GetAllTransactions() ([]models.ElectricResult, error) {
+func (e *ElectricConn) GetAllTransactions(ctx context.Context) ([]models.ElectricResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	result, err := e.getAllTransaction("")
+	result, err := e.getAllTransaction(ctx, "")
 	if err != nil {
 		return nil, e.logAndReturnError("failed to get transactions from database", err)
 	}
@@ -174,7 +190,10 @@ func (e *ElectricConn) GetAllTransactions() ([]models.ElectricResult, error) {
 
 }
 
-func (e *ElectricConn) payBill(data ElectricInfo) (*http.Response, error) {
+func (e *ElectricConn) payBill(ctx context.Context, data ElectricInfo) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	amount := strconv.Itoa(data.Amount)
 	phone := data.Phone
@@ -191,7 +210,7 @@ func (e *ElectricConn) payBill(data ElectricInfo) (*http.Response, error) {
 	body := bytes.NewBufferString(formdata.Encode())
 	url := fmt.Sprintf("%s/%s", api, "pay")
 
-	req, err := http.NewRequest("POST", url, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
 		return nil, err
 	}
@@ -208,24 +227,33 @@ func (e *ElectricConn) payBill(data ElectricInfo) (*http.Response, error) {
 	return resp, nil
 }
 
-func (e *ElectricConn) saveTransaction(details *models.ElectricResult) error {
-	err := e.db.SaveElectricTransaction(details)
+func (e *ElectricConn) saveTransaction(ctx context.Context, details *models.ElectricResult) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := e.db.SaveElectricTransaction(ctx, details)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (e *ElectricConn) getTransactionDetails(id string) (models.ElectricResult, error) {
-	result, err := e.db.GetElectricSubDetails(id)
+func (e *ElectricConn) getTransactionDetails(ctx context.Context, id string) (models.ElectricResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := e.db.GetElectricSubDetails(ctx, id)
 	if err != nil {
 		return models.ElectricResult{}, err
 	}
 	return result, nil
 }
 
-func (e *ElectricConn) getAllTransaction(username string) ([]models.ElectricResult, error) {
-	result, err := e.db.GetAllElectricSubTransactions(username)
+func (e *ElectricConn) getAllTransaction(ctx context.Context, username string) ([]models.ElectricResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := e.db.GetAllElectricSubTransactions(ctx, username)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +261,10 @@ func (e *ElectricConn) getAllTransaction(username string) ([]models.ElectricResu
 	return result, nil
 }
 
-func (e *ElectricConn) queryTransaction(requestID string) (*http.Response, error) {
+func (e *ElectricConn) queryTransaction(ctx context.Context, requestID string) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	formdata := url.Values{
 		"request_id": {requestID},
@@ -242,7 +273,7 @@ func (e *ElectricConn) queryTransaction(requestID string) (*http.Response, error
 	body := bytes.NewBufferString(formdata.Encode())
 	url := fmt.Sprintf("%s/%s", api, "requery")
 
-	req, err := http.NewRequest("POST", url, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
 		return nil, e.logAndReturnError("failed to create request", err)
 	}
@@ -262,7 +293,10 @@ func (e *ElectricConn) logAndReturnError(errorMsg string, err error) error {
 }
 
 // return an error message for when the meter number is not correct
-func (e *ElectricConn) VerifyMeterNo(discoType, meterNo, meterType string) (verifyResponse, error) {
+func (e *ElectricConn) VerifyMeterNo(ctx context.Context, discoType, meterNo, meterType string) (verifyResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if meterNo == "" {
 		return verifyResponse{}, errors.New("no meter number provided")
@@ -277,7 +311,7 @@ func (e *ElectricConn) VerifyMeterNo(discoType, meterNo, meterType string) (veri
 	body := bytes.NewBufferString(formdata.Encode())
 	url := fmt.Sprintf("%s/%s", api, "merchant-verify")
 
-	req, err := http.NewRequest("POST", url, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
 		return verifyResponse{}, err
 	}

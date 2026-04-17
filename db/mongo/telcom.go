@@ -12,9 +12,9 @@ import (
 )
 
 // SaveTransaction saves a data transaction to the database.
-func (m *mongoStore) SaveDataTransaction(details interface{}) error {
-
-	err := m.saveToDB(dataColl, details)
+func (m *mongoStore) SaveDataTransaction(ctx context.Context, details interface{}) error {
+	ctx = m.ensureCtx(ctx)
+	err := m.saveToDB(ctx, dataColl, details)
 	if err != nil {
 		return err
 	}
@@ -23,10 +23,11 @@ func (m *mongoStore) SaveDataTransaction(details interface{}) error {
 }
 
 // getRecordDetails returns a data transaction detail.
-func (m *mongoStore) GetDataTransactionDetails(id string) (telcom.DataResult, error) {
+func (m *mongoStore) GetDataTransactionDetails(ctx context.Context, id string) (telcom.DataResult, error) {
+	ctx = m.ensureCtx(ctx)
 	res := telcom.DataResult{}
 
-	findResult := m.getRecord(id, dataColl)
+	findResult := m.getRecord(ctx, id, dataColl)
 	err := findResult.Decode(&res)
 
 	if err != nil {
@@ -43,11 +44,11 @@ func (m *mongoStore) GetDataTransactionDetails(id string) (telcom.DataResult, er
 }
 
 // getAllRecords returns all the data transactions associated to a user, if an empty string is passed it returns all data transactions.
-func (m *mongoStore) GetAllDataTransactions(userID string) ([]telcom.DataResult, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetAllDataTransactions(ctx context.Context, userID string) ([]telcom.DataResult, error) {
+	ctx = m.ensureCtx(ctx)
 	res := []telcom.DataResult{}
 
-	cur, err := m.getAllRecords(dataColl, userID)
+	cur, err := m.getAllRecords(ctx, dataColl, userID)
 	if err != nil {
 		return []telcom.DataResult{}, err
 	}
@@ -65,10 +66,11 @@ func (m *mongoStore) GetAllDataTransactions(userID string) ([]telcom.DataResult,
 
 }
 
-func (m *mongoStore) GetSpecTransDetails(id string) (telcom.SpectranetResult, error) {
+func (m *mongoStore) GetSpecTransDetails(ctx context.Context, id string) (telcom.SpectranetResult, error) {
+	ctx = m.ensureCtx(ctx)
 	res := telcom.SpectranetResult{}
 
-	findResult := m.getRecord(id, dataColl)
+	findResult := m.getRecord(ctx, id, dataColl)
 	err := findResult.Decode(&res)
 
 	if err != nil {
@@ -83,11 +85,11 @@ func (m *mongoStore) GetSpecTransDetails(id string) (telcom.SpectranetResult, er
 	return res, nil
 }
 
-func (m *mongoStore) GetAllSpecDataTransactions(userID string) ([]telcom.SpectranetResult, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetAllSpecDataTransactions(ctx context.Context, userID string) ([]telcom.SpectranetResult, error) {
+	ctx = m.ensureCtx(ctx)
 	res := []telcom.SpectranetResult{}
 
-	cur, err := m.getAllRecords(dataColl, userID)
+	cur, err := m.getAllRecords(ctx, dataColl, userID)
 	if err != nil {
 		return []telcom.SpectranetResult{}, err
 	}
@@ -104,10 +106,11 @@ func (m *mongoStore) GetAllSpecDataTransactions(userID string) ([]telcom.Spectra
 	return res, nil
 }
 
-func (m *mongoStore) GetSmileTransDetails(id string) (telcom.SmileResult, error) {
+func (m *mongoStore) GetSmileTransDetails(ctx context.Context, id string) (telcom.SmileResult, error) {
+	ctx = m.ensureCtx(ctx)
 	res := telcom.SmileResult{}
 
-	findResult := m.getRecord(id, dataColl)
+	findResult := m.getRecord(ctx, id, dataColl)
 	err := findResult.Decode(&res)
 
 	if err != nil {
@@ -122,11 +125,11 @@ func (m *mongoStore) GetSmileTransDetails(id string) (telcom.SmileResult, error)
 	return res, nil
 }
 
-func (m *mongoStore) GetAllSmileDataTransactions(userID string) ([]telcom.SmileResult, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetAllSmileDataTransactions(ctx context.Context, userID string) ([]telcom.SmileResult, error) {
+	ctx = m.ensureCtx(ctx)
 	res := []telcom.SmileResult{}
 
-	cur, err := m.getAllRecords(dataColl, userID)
+	cur, err := m.getAllRecords(ctx, dataColl, userID)
 	if err != nil {
 		return []telcom.SmileResult{}, err
 	}
@@ -143,18 +146,20 @@ func (m *mongoStore) GetAllSmileDataTransactions(userID string) ([]telcom.SmileR
 	return res, nil
 }
 
-func (m *mongoStore) SaveAirtimeTransaction(details *telcom.AirtimeResponse) error {
-	err := m.saveToDB(airColl, details)
+func (m *mongoStore) SaveAirtimeTransaction(ctx context.Context, details *telcom.AirtimeResponse) error {
+	ctx = m.ensureCtx(ctx)
+	err := m.saveToDB(ctx, airColl, details)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (m *mongoStore) GetAirtimeTransactionDetails(id string) (telcom.AirtimeResponse, error) {
+func (m *mongoStore) GetAirtimeTransactionDetails(ctx context.Context, id string) (telcom.AirtimeResponse, error) {
+	ctx = m.ensureCtx(ctx)
 	res := telcom.AirtimeResponse{}
 
-	result := m.getRecord(id, airColl)
+	result := m.getRecord(ctx, id, airColl)
 
 	err := result.Decode(&res)
 
@@ -169,11 +174,11 @@ func (m *mongoStore) GetAirtimeTransactionDetails(id string) (telcom.AirtimeResp
 	return res, nil
 }
 
-func (m *mongoStore) GetAllAirtimeTransactions(userID string) ([]telcom.AirtimeResponse, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetAllAirtimeTransactions(ctx context.Context, userID string) ([]telcom.AirtimeResponse, error) {
+	ctx = m.ensureCtx(ctx)
 	res := []telcom.AirtimeResponse{}
 
-	cur, err := m.getAllRecords(airColl, userID)
+	cur, err := m.getAllRecords(ctx, airColl, userID)
 	if err != nil {
 		return []telcom.AirtimeResponse{}, err
 	}
@@ -190,8 +195,8 @@ func (m *mongoStore) GetAllAirtimeTransactions(userID string) ([]telcom.AirtimeR
 	return res, nil
 }
 
-func (m *mongoStore) SaveTelcomRecipient(userID string, data telcom.Recipient) error {
-	ctx := context.Background()
+func (m *mongoStore) SaveTelcomRecipient(ctx context.Context, userID string, data telcom.Recipient) error {
+	ctx = m.ensureCtx(ctx)
 	coll := m.col("telcom-recipient")
 
 	// 1) Check if active recipient with same phone exists -> reject
@@ -270,8 +275,8 @@ func (m *mongoStore) nextRecipientID(ctx context.Context, userID string) (int, e
 	return result.Seq, nil
 }
 
-func (m *mongoStore) GetTelcomRecipients(userID string) (telcom.TelcomRecipient, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetTelcomRecipients(ctx context.Context, userID string) (telcom.TelcomRecipient, error) {
+	ctx = m.ensureCtx(ctx)
 	coll := m.col("telcom-recipient")
 
 	// fetch full doc
@@ -296,8 +301,8 @@ func (m *mongoStore) GetTelcomRecipients(userID string) (telcom.TelcomRecipient,
 	return doc, nil
 }
 
-func (m *mongoStore) EditTelcomRecipient(userID string, data telcom.Recipient) error {
-	ctx := context.Background()
+func (m *mongoStore) EditTelcomRecipient(ctx context.Context, userID string, data telcom.Recipient) error {
+	ctx = m.ensureCtx(ctx)
 	coll := m.col("telcom-recipient")
 
 	// If changing phone, ensure another active recipient does not already use it
@@ -343,8 +348,8 @@ func (m *mongoStore) EditTelcomRecipient(userID string, data telcom.Recipient) e
 	return err
 }
 
-func (m *mongoStore) DeleteTelcomRecipient(recipientID int, userID string) error {
-	ctx := context.Background()
+func (m *mongoStore) DeleteTelcomRecipient(ctx context.Context, recipientID int, userID string) error {
+	ctx = m.ensureCtx(ctx)
 	coll := m.col("telcom-recipient")
 
 	filter := bson.M{

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -24,12 +25,13 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	if r.Method == "POST" {
 
 		user := *userDetails
 
-		hasAcc, err := handler.hasVirtualAccount(user.ID)
+		hasAcc, err := handler.hasVirtualAccount(ctx, user.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -44,7 +46,7 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		account, err := handler.virtualAcc.VirtualAccount(user)
+		account, err := handler.virtualAcc.VirtualAccount(ctx, user)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"error": err.Error()}}
@@ -59,7 +61,7 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 			Published: false,
 		}
 
-		if err := handler.processor.ProcessEvent(r.Context(), &ev); err != nil {
+		if err := handler.processor.ProcessEvent(ctx, &ev); err != nil {
 			handler.logger.Error("error processing virtual account creation event", zap.String("user_id", user.ID), zap.Error(err))
 		}
 
@@ -75,7 +77,7 @@ func (handler *HttpHandler) VirtualAccount(w http.ResponseWriter, r *http.Reques
 	if r.Method == "GET" {
 
 		userID := userDetails.ID
-		virtualNuban, err := handler.getVirtualAccDetails(userID)
+		virtualNuban, err := handler.getVirtualAccDetails(ctx, userID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -228,8 +230,11 @@ func (handler *HttpHandler) CheckVerification(w http.ResponseWriter, r *http.Req
 	json.NewEncoder(w).Encode(response)
 }
 
-func (handler *HttpHandler) getVirtualAccDetails(id string) (models.AccountDetails, error) {
-	acc_details, err := handler.store.GetVirtualNuban(id)
+func (handler *HttpHandler) getVirtualAccDetails(ctx context.Context, id string) (models.AccountDetails, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	acc_details, err := handler.store.GetVirtualNuban(ctx, id)
 	if err != nil {
 		handler.logger.Error(err.Error())
 		return models.AccountDetails{}, err
@@ -238,8 +243,11 @@ func (handler *HttpHandler) getVirtualAccDetails(id string) (models.AccountDetai
 	return acc_details, nil
 }
 
-func (handler *HttpHandler) hasVirtualAccount(id string) (bool, error) {
-	detail, err := handler.store.GetVirtualNuban(id)
+func (handler *HttpHandler) hasVirtualAccount(ctx context.Context, id string) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	detail, err := handler.store.GetVirtualNuban(ctx, id)
 	if err != nil {
 		return false, err
 	}

@@ -22,8 +22,10 @@ func validateTableName(table string) error {
 }
 
 // GetPlans retrieves all plans from specified table
-func (s *SqlStore) GetTVSubs(table string) ([]models.TVSub, error) {
-	ctx := context.Background()
+func (s *SqlStore) GetTVSubs(ctx context.Context, table string) ([]models.TVSub, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if err := validateTableName(table); err != nil {
 		return nil, fmt.Errorf("invalid table name: %w", err)
@@ -66,8 +68,10 @@ func (s *SqlStore) GetTVSubs(table string) ([]models.TVSub, error) {
 	return plans, nil
 }
 
-func (s *SqlStore) GetTVSubByPackage(table string, packageName string) (*models.TVSub, error) {
-	ctx := context.Background()
+func (s *SqlStore) GetTVSubByPackage(ctx context.Context, table string, packageName string) (*models.TVSub, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if err := validateTableName(table); err != nil {
 		return nil, fmt.Errorf("invalid table name: %w", err)
@@ -99,8 +103,10 @@ func (s *SqlStore) GetTVSubByPackage(table string, packageName string) (*models.
 }
 
 // CreatePlan inserts a new plan into specified table
-func (s *SqlStore) CreateTvSub(table string, plan models.TVSub) (int, error) {
-	ctx := context.Background()
+func (s *SqlStore) CreateTvSub(ctx context.Context, table string, plan models.TVSub) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if err := validateTableName(table); err != nil {
 		return 0, fmt.Errorf("invalid table name: %w", err)
@@ -130,8 +136,10 @@ func (s *SqlStore) CreateTvSub(table string, plan models.TVSub) (int, error) {
 }
 
 // UpdatePlan modifies fields of an existing plan in specified table
-func (s *SqlStore) UpdateTvSub(table string, planID int, upd models.TVSubUpdate) error {
-	ctx := context.Background()
+func (s *SqlStore) UpdateTvSub(ctx context.Context, table string, planID int, upd models.TVSubUpdate) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if err := validateTableName(table); err != nil {
 		return fmt.Errorf("invalid table name: %w", err)
@@ -196,8 +204,10 @@ func (s *SqlStore) UpdateTvSub(table string, planID int, upd models.TVSubUpdate)
 }
 
 // DeletePlan removes a plan by ID from specified table
-func (s *SqlStore) DeleteTvSub(table string, planID int) error {
-	ctx := context.Background()
+func (s *SqlStore) DeleteTvSub(ctx context.Context, table string, planID int) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if err := validateTableName(table); err != nil {
 		return fmt.Errorf("invalid table name: %w", err)

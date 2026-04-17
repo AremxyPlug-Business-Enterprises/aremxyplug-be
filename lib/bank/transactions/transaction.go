@@ -1,6 +1,8 @@
 package transactions
 
 import (
+	"context"
+
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
 	"github.com/shopspring/decimal"
@@ -18,8 +20,11 @@ func NewTransaction(store db.DataStore) *Transaction {
 	}
 }
 
-func (t *Transaction) GetTransferDetails(id string) (models.TransferResponse, error) {
-	result, err := t.store.GetTransferDetails(id)
+func (t *Transaction) GetTransferDetails(ctx context.Context, id string) (models.TransferResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := t.store.GetTransferDetails(ctx, id)
 	if err != nil {
 		// log error
 		return models.TransferResponse{}, err
@@ -28,8 +33,11 @@ func (t *Transaction) GetTransferDetails(id string) (models.TransferResponse, er
 	return result, nil
 }
 
-func (t *Transaction) GetTransferHistory(user string) ([]models.TransferResponse, error) {
-	result, err := t.store.GetAllTransferHistory(user)
+func (t *Transaction) GetTransferHistory(ctx context.Context, user string) ([]models.TransferResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := t.store.GetAllTransferHistory(ctx, user)
 	if err != nil {
 		// log error
 		return nil, err
@@ -38,8 +46,11 @@ func (t *Transaction) GetTransferHistory(user string) ([]models.TransferResponse
 	return result, nil
 }
 
-func (t *Transaction) GetAllTransactionHistory() ([]interface{}, error) {
-	result, err := t.store.GetAllBankTransactions("")
+func (t *Transaction) GetAllTransactionHistory(ctx context.Context) ([]interface{}, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := t.store.GetAllBankTransactions(ctx, "")
 	if err != nil {
 		// log error
 		return nil, err
@@ -49,8 +60,11 @@ func (t *Transaction) GetAllTransactionHistory() ([]interface{}, error) {
 
 }
 
-func (t *Transaction) GetDepositHistory(user string) ([]models.DepositResponse, error) {
-	result, err := t.store.GetAllDepositHistory(user)
+func (t *Transaction) GetDepositHistory(ctx context.Context, user string) ([]models.DepositResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := t.store.GetAllDepositHistory(ctx, user)
 	if err != nil {
 		// log error
 		return nil, err
@@ -59,8 +73,11 @@ func (t *Transaction) GetDepositHistory(user string) ([]models.DepositResponse, 
 	return result, nil
 }
 
-func (t *Transaction) GetDepositDetails(id string) (any, error) {
-	result, err := t.store.GetDepositDetails(id)
+func (t *Transaction) GetDepositDetails(ctx context.Context, id string) (any, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := t.store.GetDepositDetails(ctx, id)
 	if err != nil {
 		// log error
 		return nil, err
@@ -70,8 +87,11 @@ func (t *Transaction) GetDepositDetails(id string) (any, error) {
 }
 
 // should be called at any point where the user get their balance
-func (t *Transaction) GetBalance(userID string) (decimal.Decimal, error) {
-	bal, err := t.store.GetBalance(userID)
+func (t *Transaction) GetBalance(ctx context.Context, userID string) (decimal.Decimal, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	bal, err := t.store.GetBalance(ctx, userID)
 	if err != nil {
 		return decimal.NewFromFloat(0), err
 	}
@@ -79,8 +99,11 @@ func (t *Transaction) GetBalance(userID string) (decimal.Decimal, error) {
 }
 
 // To be used after making payment
-func (t *Transaction) UpdateBalance(userID string, amount float64) error {
-	err := t.store.UpdateBalance(userID, decimal.NewFromFloatWithExponent(amount, -2))
+func (t *Transaction) UpdateBalance(ctx context.Context, userID string, amount float64) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := t.store.UpdateBalance(ctx, userID, decimal.NewFromFloatWithExponent(amount, -2))
 	if err != nil {
 		return err
 	}

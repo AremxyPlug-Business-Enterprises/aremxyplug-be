@@ -7,8 +7,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func (m *mongoStore) SaveTVSubcriptionTransaction(details *models.TV_Result) error {
-	err := m.saveToDB(tvColl, details)
+func (m *mongoStore) SaveTVSubcriptionTransaction(ctx context.Context, details *models.TV_Result) error {
+	ctx = m.ensureCtx(ctx)
+	err := m.saveToDB(ctx, tvColl, details)
 	if err != nil {
 		return err
 	}
@@ -16,10 +17,11 @@ func (m *mongoStore) SaveTVSubcriptionTransaction(details *models.TV_Result) err
 	return nil
 }
 
-func (m *mongoStore) GetTvSubscriptionDetails(id string) (models.TV_Result, error) {
+func (m *mongoStore) GetTvSubscriptionDetails(ctx context.Context, id string) (models.TV_Result, error) {
+	ctx = m.ensureCtx(ctx)
 	res := models.TV_Result{}
 
-	result := m.getRecord(id, tvColl)
+	result := m.getRecord(ctx, id, tvColl)
 
 	err := result.Decode(&res)
 
@@ -34,11 +36,11 @@ func (m *mongoStore) GetTvSubscriptionDetails(id string) (models.TV_Result, erro
 	return res, nil
 }
 
-func (m *mongoStore) GetAllTvSubTransactions(userID string) ([]models.TV_Result, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetAllTvSubTransactions(ctx context.Context, userID string) ([]models.TV_Result, error) {
+	ctx = m.ensureCtx(ctx)
 	res := []models.TV_Result{}
 
-	cur, err := m.getAllRecords(tvColl, userID)
+	cur, err := m.getAllRecords(ctx, tvColl, userID)
 	if err != nil {
 		return []models.TV_Result{}, err
 	}
@@ -55,8 +57,9 @@ func (m *mongoStore) GetAllTvSubTransactions(userID string) ([]models.TV_Result,
 	return res, nil
 }
 
-func (m *mongoStore) SaveElectricTransaction(details *models.ElectricResult) error {
-	err := m.saveToDB(electricColl, details)
+func (m *mongoStore) SaveElectricTransaction(ctx context.Context, details *models.ElectricResult) error {
+	ctx = m.ensureCtx(ctx)
+	err := m.saveToDB(ctx, electricColl, details)
 	if err != nil {
 		return err
 	}
@@ -64,10 +67,11 @@ func (m *mongoStore) SaveElectricTransaction(details *models.ElectricResult) err
 	return nil
 }
 
-func (m *mongoStore) GetElectricSubDetails(id string) (models.ElectricResult, error) {
+func (m *mongoStore) GetElectricSubDetails(ctx context.Context, id string) (models.ElectricResult, error) {
+	ctx = m.ensureCtx(ctx)
 	res := models.ElectricResult{}
 
-	result := m.getRecord(id, electricColl)
+	result := m.getRecord(ctx, id, electricColl)
 
 	err := result.Decode(&res)
 
@@ -82,11 +86,11 @@ func (m *mongoStore) GetElectricSubDetails(id string) (models.ElectricResult, er
 	return res, nil
 }
 
-func (m *mongoStore) GetAllElectricSubTransactions(userID string) ([]models.ElectricResult, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetAllElectricSubTransactions(ctx context.Context, userID string) ([]models.ElectricResult, error) {
+	ctx = m.ensureCtx(ctx)
 	res := []models.ElectricResult{}
 
-	cur, err := m.getAllRecords(electricColl, userID)
+	cur, err := m.getAllRecords(ctx, electricColl, userID)
 	if err != nil {
 		return []models.ElectricResult{}, err
 	}
@@ -104,8 +108,9 @@ func (m *mongoStore) GetAllElectricSubTransactions(userID string) ([]models.Elec
 }
 
 // SaveEduTransactions saves the result of the edu transaction to the database.
-func (m *mongoStore) SaveEduTransaction(details *models.EduResponse) error {
-	err := m.saveToDB(eduColl, details)
+func (m *mongoStore) SaveEduTransaction(ctx context.Context, details *models.EduResponse) error {
+	ctx = m.ensureCtx(ctx)
+	err := m.saveToDB(ctx, eduColl, details)
 	if err != nil {
 		return err
 	}
@@ -113,10 +118,11 @@ func (m *mongoStore) SaveEduTransaction(details *models.EduResponse) error {
 	return nil
 }
 
-func (m *mongoStore) GetEduTransactionDetails(id string) (models.EduResponse, error) {
+func (m *mongoStore) GetEduTransactionDetails(ctx context.Context, id string) (models.EduResponse, error) {
+	ctx = m.ensureCtx(ctx)
 	res := models.EduResponse{}
 
-	result := m.getRecord(id, eduColl)
+	result := m.getRecord(ctx, id, eduColl)
 
 	err := result.Decode(&res)
 
@@ -132,11 +138,11 @@ func (m *mongoStore) GetEduTransactionDetails(id string) (models.EduResponse, er
 
 }
 
-func (m *mongoStore) GetAllEduTransactions(userID string) ([]models.EduResponse, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetAllEduTransactions(ctx context.Context, userID string) ([]models.EduResponse, error) {
+	ctx = m.ensureCtx(ctx)
 	res := []models.EduResponse{}
 
-	cur, err := m.getAllRecords(eduColl, userID)
+	cur, err := m.getAllRecords(ctx, eduColl, userID)
 	if err != nil {
 		return []models.EduResponse{}, err
 	}

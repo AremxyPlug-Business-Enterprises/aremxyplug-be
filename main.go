@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/aremxyplug-be/config"
@@ -41,6 +43,9 @@ func main() {
 	secrets := config.GetSecrets()
 	bvnConfig := bvn.NewBvnConfig(logger)
 	ninConfig := nin.NewNINConfig(logger)
+
+	appCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	// Get data store
 	store, client, err := mongo.New(secrets.MongdbUrl, secrets.DbName, logger)
@@ -105,22 +110,40 @@ func main() {
 	}
 
 	// Initialize bank list if needed
-	if err := scheduler.ListBanks(); err != nil {
+	if err := scheduler.ListBanks(appCtx); err != nil {
 		logger.Fatal("failed to initialize bank list", zap.Error(err))
 	}
 
-	go scheduler.StartBankListScheduler(24 * time.Hour)
-	go scheduler.HarmonizeHoldsWithDB(10 * time.Minute)
+	go scheduler.StartBankListScheduler(appCtx, 24*time.Hour)
+	go scheduler.HarmonizeHoldsWithDB(appCtx, 10*time.Minute)
 
 	httpRouter := httpSrv.MountServer(config)
-	// Start HTTP server
 	httpAddr := fmt.Sprintf(":%s", secrets.AppPort)
 	logger.Info(fmt.Sprintf("HTTP service running on %v.", httpAddr))
-	if err := http.ListenAndServe(httpAddr, httpRouter); err != nil {
-		logger.With(zap.Error(err)).Fatal("start http server")
+
+	srv := &http.Server{
+		Addr:    httpAddr,
+		Handler: httpRouter,
 	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.ListenAndServe()
+	}()
+
+	select {
+	case <-appCtx.Done():
+	case err := <-errCh:
+		if err != nil && err != http.ErrServerClosed {
+			logger.With(zap.Error(err)).Fatal("start http server")
+		}
+	}
+
 	logger.Info("closing application...")
-	if err := client.Disconnect(context.Background()); err != nil {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_ = srv.Shutdown(shutdownCtx)
+	if err := client.Disconnect(shutdownCtx); err != nil {
 		logger.Fatal("failed to disconnect from database", zap.Error(err))
 	}
 }

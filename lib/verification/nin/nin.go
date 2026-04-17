@@ -2,6 +2,7 @@ package nin
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,7 +32,10 @@ func NewNINConfig(logger *zap.Logger) *NINConfig {
 	}
 }
 
-func (n *NINConfig) VerifyNIN(nin string, user models.User) (result *NINVerificationResult, err error) {
+func (n *NINConfig) VerifyNIN(ctx context.Context, nin string, user models.User) (result *NINVerificationResult, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	payload := ninRequest{
 		NIN_number: nin,
@@ -44,7 +48,7 @@ func (n *NINConfig) VerifyNIN(nin string, user models.User) (result *NINVerifica
 	}
 
 	url := fmt.Sprintf("%s/%s", baseUrl, "vnin-basic")
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return &NINVerificationResult{}, err
 	}

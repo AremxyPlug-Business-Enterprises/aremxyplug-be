@@ -94,9 +94,12 @@ func NewConfig(store db.DataStore, logger *zap.Logger, redis *redis.RedisConn, p
 // 	return transferResponse, nil
 // }
 
-func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferResponse, error) {
+func (c *Config) TransferToAremxyPlug(ctx context.Context, data AremxyPlugTransfer) (models.TransferResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	user, err := c.db.GetUserByUsernameOrEmail(data.Email, data.Username)
+	user, err := c.db.GetUserByUsernameOrEmail(ctx, data.Email, data.Username)
 	if err != nil {
 		c.logger.Error(err.Error())
 		return models.TransferResponse{}, err
@@ -106,7 +109,7 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 	trfTransactionID := randomgen.GenerateTransactionID("trf")
 	depTransactionID := randomgen.GenerateTransactionID("dep")
 
-	bal, err := c.db.GetBalance(user.ID)
+	bal, err := c.db.GetBalance(ctx, user.ID)
 	if err != nil {
 		c.logger.Error(err.Error())
 		return models.TransferResponse{}, err
@@ -116,7 +119,7 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 
 	newBalance := bal.Add(decimal.NewFromFloatWithExponent(data.Amount, -2))
 
-	if err := c.db.UpdateBalance(user.ID, newBalance); err != nil {
+	if err := c.db.UpdateBalance(ctx, user.ID, newBalance); err != nil {
 		c.logger.Error(err.Error())
 		return models.TransferResponse{}, err
 	}
@@ -139,7 +142,7 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 		CreatedAt:              time.Now().UTC(),
 	}
 
-	if err := c.saveTransaction(trf); err != nil {
+	if err := c.saveTransaction(ctx, trf); err != nil {
 		c.logger.Error(err.Error())
 		return trf, DBConnectionError(err)
 	}
@@ -161,7 +164,7 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 	}
 
 	// need to use redis to update balance here as well
-	if err := c.db.SaveDeposit(dept); err != nil {
+	if err := c.db.SaveDeposit(ctx, dept); err != nil {
 		c.logger.Error(err.Error())
 		return models.TransferResponse{}, err
 	}
@@ -169,7 +172,7 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 	if c.processor != nil {
 		// Process deposit event for receiver
 		go func(uID string, amt string, txID string) {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
 			ev := &events.Event{
 				Type:      "transaction.completed",
@@ -186,7 +189,7 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 
 		// Process transfer event for sender
 		go func(uID string, amt string, txID string) {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
 			ev := &events.Event{
 				Type:      "transaction.completed",
@@ -206,24 +209,27 @@ func (c *Config) TransferToAremxyPlug(data AremxyPlugTransfer) (models.TransferR
 
 }
 
-func (c *Config) TransferToBank(info TransferInfo) (models.TransferResponse, error) {
+func (c *Config) TransferToBank(ctx context.Context, info TransferInfo) (models.TransferResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	// first check if the details is already in the database. if it is just procced to the point of transfer
-	counterparty, err := c.getCounterParty(info.Account_Number, info.Bank_name)
+	counterparty, err := c.getCounterParty(ctx, info.Account_Number, info.Bank_name)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			c.logger.Info("Counterparty not found, creating new one", zap.String("account_number", info.Account_Number), zap.String("bank_name", info.Bank_name))
-			bankDetail, err := c.db.GetBankDetail(info.Bank_name)
+			bankDetail, err := c.db.GetBankDetail(ctx, info.Bank_name)
 			if err != nil {
 				c.logger.Error("Failed to get bank details", zap.Error(err))
 				return models.TransferResponse{}, err
 			}
 			c.logger.Info("Bank details for verifying account", zap.Any("bankDetail", bankDetail))
-			details, err := c.verifyAccount(bankDetail.NIPCode, info.Account_Number)
+			details, err := c.verifyAccount(ctx, bankDetail.NIPCode, info.Account_Number)
 			if err != nil {
 				return models.TransferResponse{}, err
 			}
-			counterparty, err = c.createCounterParty(details)
+			counterparty, err = c.createCounterParty(ctx, details)
 			if err != nil {
 				return models.TransferResponse{}, err
 			}
@@ -277,7 +283,7 @@ func (c *Config) TransferToBank(info TransferInfo) (models.TransferResponse, err
 		return models.TransferResponse{}, JSONError(err)
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return models.TransferResponse{}, ErrCreatingHTTPRequest
 	}
@@ -365,7 +371,7 @@ func (c *Config) TransferToBank(info TransferInfo) (models.TransferResponse, err
 
 	}
 
-	if err := c.saveTransaction(result); err != nil {
+	if err := c.saveTransaction(ctx, result); err != nil {
 		c.logger.Error(err.Error())
 		return result, DBConnectionError(err)
 	}
@@ -374,11 +380,14 @@ func (c *Config) TransferToBank(info TransferInfo) (models.TransferResponse, err
 
 }
 
-func (c *Config) verifyAccount(sortCode, accNumber string) (verifyAccountResponse, error) {
+func (c *Config) verifyAccount(ctx context.Context, sortCode, accNumber string) (verifyAccountResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	url := fmt.Sprintf("%s/%s/%s/%s/%s", api, "payments", "verify-account", sortCode, accNumber)
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		c.logger.Error(err.Error())
 		return verifyAccountResponse{}, ErrCreatingHTTPRequest
@@ -426,7 +435,10 @@ func (c *Config) verifyAccount(sortCode, accNumber string) (verifyAccountRespons
 
 }
 
-func (c *Config) createCounterParty(info verifyAccountResponse) (models.CounterParty, error) {
+func (c *Config) createCounterParty(ctx context.Context, info verifyAccountResponse) (models.CounterParty, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	url := fmt.Sprintf("%s/%s", api, "counterparties")
 
@@ -444,7 +456,7 @@ func (c *Config) createCounterParty(info verifyAccountResponse) (models.CounterP
 		return models.CounterParty{}, err
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return models.CounterParty{}, ErrCreatingHTTPRequest
 	}
@@ -490,7 +502,7 @@ func (c *Config) createCounterParty(info verifyAccountResponse) (models.CounterP
 		NIPCode:       apiResponse.Data.Attributes.Bank.NipCode,
 	}
 
-	if err := c.saveCounterParty(result); err != nil {
+	if err := c.saveCounterParty(ctx, result); err != nil {
 		c.logger.Error(err.Error())
 		return result, DBConnectionError(err)
 	}
@@ -499,11 +511,14 @@ func (c *Config) createCounterParty(info verifyAccountResponse) (models.CounterP
 }
 
 // endpoint to verify a transfer from the API, we will save all transactions regardless.
-func (c *Config) verifyTransfer(id string) (transferResult, error) {
+func (c *Config) verifyTransfer(ctx context.Context, id string) (transferResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	url := fmt.Sprintf("%s/%s/%s", api, "verify", id)
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return transferResult{}, ErrCreatingHTTPRequest
 	}
@@ -536,16 +551,22 @@ func (c *Config) verifyTransfer(id string) (transferResult, error) {
 	return result, nil
 }
 
-func (c *Config) saveTransaction(details models.TransferResponse) error {
-	err := c.db.SaveTransfer(details)
+func (c *Config) saveTransaction(ctx context.Context, details models.TransferResponse) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := c.db.SaveTransfer(ctx, details)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *Config) saveCounterParty(conterparty models.CounterParty) error {
-	err := c.db.SaveCounterParty(conterparty)
+func (c *Config) saveCounterParty(ctx context.Context, conterparty models.CounterParty) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := c.db.SaveCounterParty(ctx, conterparty)
 	if err != nil {
 		return err
 	}
@@ -553,8 +574,11 @@ func (c *Config) saveCounterParty(conterparty models.CounterParty) error {
 	return nil
 }
 
-func (c *Config) getCounterParty(accountname, bankname string) (models.CounterParty, error) {
-	counterparty, err := c.db.GetCounterParty(accountname, bankname)
+func (c *Config) getCounterParty(ctx context.Context, accountname, bankname string) (models.CounterParty, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	counterparty, err := c.db.GetCounterParty(ctx, accountname, bankname)
 	if err != nil {
 		return models.CounterParty{}, err
 	}

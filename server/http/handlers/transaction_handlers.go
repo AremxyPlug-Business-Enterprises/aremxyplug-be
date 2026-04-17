@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -26,6 +27,7 @@ func (handler *HttpHandler) GetTransactions(w http.ResponseWriter, r *http.Reque
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 	id := userDetails.ID
 
 	orderID := chi.URLParam(r, "orderID")
@@ -106,7 +108,7 @@ func (handler *HttpHandler) GetTransactions(w http.ResponseWriter, r *http.Reque
 		}
 
 		// --- Query Transactions ---
-		transactions, err := handler.store.GetTransactions(filter, page, pageSize)
+		transactions, err := handler.store.GetTransactions(ctx, filter, page, pageSize)
 		if err != nil {
 			if err == mongo.ErrInvalidCategory || err == mongo.ErrInvalidFlow || err == mongo.ErrInvalidSubcat {
 				handler.logger.Warn("Invalid filter parameter", zap.Error(err))
@@ -164,7 +166,7 @@ func (handler *HttpHandler) GetTransactions(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		transaction, err := handler.fetchTransactionByProduct(orderID, product)
+		transaction, err := handler.fetchTransactionByProduct(ctx, orderID, product)
 		if err != nil {
 			if err.Error() == "invalid product type" {
 				handler.logger.Warn("Invalid product type", zap.String("product", product))
@@ -214,6 +216,7 @@ func (handler *HttpHandler) GetWalletSummary(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	id := userDetails.ID
+	ctx := r.Context()
 
 	query := r.URL.Query()
 	page := 1
@@ -267,7 +270,7 @@ func (handler *HttpHandler) GetWalletSummary(w http.ResponseWriter, r *http.Requ
 
 	filter["user_id"] = id
 
-	summary, err := handler.store.GetWalletSummary(filter, page)
+	summary, err := handler.store.GetWalletSummary(ctx, filter, page)
 	if err != nil {
 		handler.logger.Error("Error fetching wallet summary", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -311,6 +314,7 @@ func (handler *HttpHandler) GetSalesSummary(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	id := userDetails.ID
+	ctx := r.Context()
 
 	query := r.URL.Query()
 	category := query.Get("category")
@@ -352,7 +356,7 @@ func (handler *HttpHandler) GetSalesSummary(w http.ResponseWriter, r *http.Reque
 		filter[k] = v
 	}
 
-	summary, err := handler.store.GetSalesSummary(category, filter, page)
+	summary, err := handler.store.GetSalesSummary(ctx, category, filter, page)
 	if err != nil {
 		handler.logger.Error("Error fetching sales summary", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -393,7 +397,7 @@ func (handler *HttpHandler) GetSalesOverview(w http.ResponseWriter, r *http.Requ
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-
+	ctx := r.Context()
 	filter := map[string]interface{}{
 		"user_id": userDetails.ID,
 	}
@@ -415,7 +419,7 @@ func (handler *HttpHandler) GetSalesOverview(w http.ResponseWriter, r *http.Requ
 		filter[k] = v
 	}
 
-	overview, err := handler.store.GetSalesOverview(filter)
+	overview, err := handler.store.GetSalesOverview(ctx, filter)
 	if err != nil {
 		handler.logger.Error("Error fetching sales overview", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -458,40 +462,40 @@ func addDateFilters(q url.Values) (filter map[string]interface{}, err error) {
 	return filter, nil
 }
 
-func (handler *HttpHandler) fetchTransactionByProduct(orderID, product string) (interface{}, error) {
+func (handler *HttpHandler) fetchTransactionByProduct(ctx context.Context, orderID, product string) (interface{}, error) {
 	store := handler.store
 
 	switch product {
 	case "airtime":
-		return store.GetAirtimeTransactionDetails(orderID)
+		return store.GetAirtimeTransactionDetails(ctx, orderID)
 
 	case "data":
 		// Try Spectranet, Smile, or default Data in order
-		if res, err := store.GetSpecTransDetails(orderID); err == nil {
+		if res, err := store.GetSpecTransDetails(ctx, orderID); err == nil {
 			return res, nil
 		}
-		if res, err := store.GetSmileTransDetails(orderID); err == nil {
+		if res, err := store.GetSmileTransDetails(ctx, orderID); err == nil {
 			return res, nil
 		}
-		return store.GetDataTransactionDetails(orderID)
+		return store.GetDataTransactionDetails(ctx, orderID)
 
 	case "deposit":
-		return store.GetDepositDetails(orderID)
+		return store.GetDepositDetails(ctx, orderID)
 
 	case "transfer":
-		return store.GetTransferDetails(orderID)
+		return store.GetTransferDetails(ctx, orderID)
 
 	case "edu":
-		return store.GetEduTransactionDetails(orderID)
+		return store.GetEduTransactionDetails(ctx, orderID)
 
 	case "tv-sub":
-		return store.GetTvSubscriptionDetails(orderID)
+		return store.GetTvSubscriptionDetails(ctx, orderID)
 
 	case "electric-sub":
-		return store.GetElectricSubDetails(orderID)
+		return store.GetElectricSubDetails(ctx, orderID)
 
 	case "point":
-		return store.GetPointRedeemDetails(orderID)
+		return store.GetPointRedeemDetails(ctx, orderID)
 
 	default:
 		return nil, fmt.Errorf("invalid product type")
@@ -508,6 +512,7 @@ func (handler *HttpHandler) Chart(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	query := r.URL.Query()
 
@@ -534,7 +539,7 @@ func (handler *HttpHandler) Chart(w http.ResponseWriter, r *http.Request) {
 		rangeType = "DAILY"
 	}
 
-	chartData, err := handler.store.GetChart(filter, rangeType)
+	chartData, err := handler.store.GetChart(ctx, filter, rangeType)
 	if err != nil {
 		handler.logger.Error("Failed to get chart data", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)

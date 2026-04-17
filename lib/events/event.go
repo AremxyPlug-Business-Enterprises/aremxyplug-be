@@ -67,7 +67,7 @@ func (p *Processor) ProcessEvent(ctx context.Context, ev *Event) error {
 
 	// Prevent duplicate processing for the same user/type/txID (or event ID fallback)
 	if dedupKey := p.eventDedupKey(ev); dedupKey != "" {
-		set, err := p.redis.SetNXWithTTL(dedupKey, "1", 30*24*time.Hour)
+		set, err := p.redis.SetNXWithTTL(ctx, dedupKey, "1", 30*24*time.Hour)
 		if err != nil {
 			p.Logger.Warn("failed to set event dedup key", zap.String("user", ev.UserID), zap.String("key", dedupKey), zap.Error(err))
 		} else if !set {
@@ -79,7 +79,7 @@ func (p *Processor) ProcessEvent(ctx context.Context, ev *Event) error {
 	// Iterate over each task event derived from the business event
 	for _, te := range tes {
 		// 2. Apply task logic
-		completed, taskCode, progressDoc, err := p.TaskSvc.ApplyEvent(ev.UserID, te)
+		completed, taskCode, progressDoc, err := p.TaskSvc.ApplyEvent(ctx, ev.UserID, te)
 		if err != nil {
 			p.Logger.Error("task apply failed",
 				zap.Error(err),
@@ -154,7 +154,7 @@ func (p *Processor) ProcessEvent(ctx context.Context, ev *Event) error {
 }
 
 func (p *Processor) maybeSetUserBeta(ctx context.Context, userID string) {
-	allCompleted, err := p.TaskSvc.AllTasksCompleted(userID)
+	allCompleted, err := p.TaskSvc.AllTasksCompleted(ctx, userID)
 	if err != nil {
 		p.Logger.Warn("failed to check task completion", zap.String("user", userID), zap.Error(err))
 		return
@@ -163,7 +163,7 @@ func (p *Processor) maybeSetUserBeta(ctx context.Context, userID string) {
 		return
 	}
 
-	user, err := p.store.GetUserByID(userID)
+	user, err := p.store.GetUserByID(ctx, userID)
 	if err != nil {
 		p.Logger.Warn("failed to load user for beta update", zap.String("user", userID), zap.Error(err))
 		return
@@ -172,7 +172,7 @@ func (p *Processor) maybeSetUserBeta(ctx context.Context, userID string) {
 		return
 	}
 
-	if err := p.store.UpdateUserBeta(userID, true); err != nil {
+	if err := p.store.UpdateUserBeta(ctx, userID, true); err != nil {
 		p.Logger.Error("failed to update user beta flag", zap.String("user", userID), zap.Error(err))
 		return
 	}

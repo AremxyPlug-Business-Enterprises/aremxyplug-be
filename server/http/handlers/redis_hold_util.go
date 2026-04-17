@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -14,7 +15,10 @@ import (
 
 // placeRedisHoldAndMeta places a hold in Redis and sets minimal meta for a transaction. Returns txnID or writes error response and returns error.
 // amount can be string, float64, or int
-func (handler *HttpHandler) placeRedisHoldAndMeta(w http.ResponseWriter, userID string, amountRaw interface{}, bal decimal.Decimal) (string, error) {
+func (handler *HttpHandler) placeRedisHoldAndMeta(ctx context.Context, w http.ResponseWriter, userID string, amountRaw interface{}, bal decimal.Decimal) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	txnID := uuid.New().String()
 	var amount float64
 	switch v := amountRaw.(type) {
@@ -55,7 +59,7 @@ func (handler *HttpHandler) placeRedisHoldAndMeta(w http.ResponseWriter, userID 
 	}
 	holdTTL := 48 * time.Hour
 	amountDec := decimal.NewFromFloat(amount)
-	if err := handler.redisClient.HoldFunds(userID, txnID, amountDec, holdTTL); err != nil {
+	if err := handler.redisClient.HoldFunds(ctx, userID, txnID, amountDec, holdTTL); err != nil {
 		handler.logger.Error("Failed to place hold in redis", zap.Error(err), zap.String("user", userID))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{

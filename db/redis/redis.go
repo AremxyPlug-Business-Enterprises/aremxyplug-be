@@ -26,6 +26,13 @@ type RedisConn struct {
 	logger *zap.Logger
 }
 
+func (r *RedisConn) ensureCtx(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
 func NewRedisConn(logger *zap.Logger) (*RedisConn, error) {
 	db, _ := strconv.Atoi(redisDB)
 
@@ -58,8 +65,8 @@ func (r *RedisConn) Client() *redis.Client {
 }
 
 // Set key without TTL (keeps existing behaviour)
-func (r *RedisConn) Set(key string, value interface{}) error {
-	ctx := context.Background()
+func (r *RedisConn) Set(ctx context.Context, key string, value interface{}) error {
+	ctx = r.ensureCtx(ctx)
 	var v interface{} = value
 	// if not string or []byte, marshal to json
 	switch value.(type) {
@@ -75,8 +82,8 @@ func (r *RedisConn) Set(key string, value interface{}) error {
 }
 
 // SetWithTTL sets key with TTL (keeps existing behaviour)
-func (r *RedisConn) SetWithTTL(key string, value interface{}, ttl time.Duration) error {
-	ctx := context.Background()
+func (r *RedisConn) SetWithTTL(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	ctx = r.ensureCtx(ctx)
 	var v interface{} = value
 	switch value.(type) {
 	case string, []byte:
@@ -91,8 +98,8 @@ func (r *RedisConn) SetWithTTL(key string, value interface{}, ttl time.Duration)
 
 // SetNXWithTTL sets a key if it does not exist, with a TTL.
 // Returns true if the key was set, false if it already existed.
-func (r *RedisConn) SetNXWithTTL(key string, value interface{}, ttl time.Duration) (bool, error) {
-	ctx := context.Background()
+func (r *RedisConn) SetNXWithTTL(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
+	ctx = r.ensureCtx(ctx)
 	var v interface{} = value
 	switch value.(type) {
 	case string, []byte:
@@ -107,8 +114,8 @@ func (r *RedisConn) SetNXWithTTL(key string, value interface{}, ttl time.Duratio
 }
 
 // Get key - returns (nil, nil) when key missing (preserves original behaviour)
-func (r *RedisConn) Get(key string) (interface{}, error) {
-	ctx := context.Background()
+func (r *RedisConn) Get(ctx context.Context, key string) (interface{}, error) {
+	ctx = r.ensureCtx(ctx)
 	r.logger.Info("Getting key from Redis", zap.String("key", key))
 	val, err := r.client.Get(ctx, key).Result()
 	r.logger.Info("Key retrieved from Redis", zap.String("key", key))
@@ -125,8 +132,8 @@ func (r *RedisConn) Get(key string) (interface{}, error) {
 }
 
 // IncrWithTTL increments and sets TTL the first time (same behaviour)
-func (r *RedisConn) IncrWithTTL(key string, ttl time.Duration) (int64, error) {
-	ctx := context.Background()
+func (r *RedisConn) IncrWithTTL(ctx context.Context, key string, ttl time.Duration) (int64, error) {
+	ctx = r.ensureCtx(ctx)
 	count, err := r.client.Incr(ctx, key).Result()
 	if err != nil {
 		return 0, err
@@ -138,15 +145,15 @@ func (r *RedisConn) IncrWithTTL(key string, ttl time.Duration) (int64, error) {
 }
 
 // Del key
-func (r *RedisConn) Del(key string) error {
-	ctx := context.Background()
+func (r *RedisConn) Del(ctx context.Context, key string) error {
+	ctx = r.ensureCtx(ctx)
 	r.logger.Info("Deleting key from Redis", zap.String("key", key))
 	return r.client.Del(ctx, key).Err()
 }
 
 // Exists checks if key exists
-func (r *RedisConn) Exists(key string) (bool, error) {
-	ctx := context.Background()
+func (r *RedisConn) Exists(ctx context.Context, key string) (bool, error) {
+	ctx = r.ensureCtx(ctx)
 	n, err := r.client.Exists(ctx, key).Result()
 	if err != nil {
 		return false, err
@@ -211,8 +218,8 @@ func (r *RedisConn) Close() error {
 	return r.client.Close()
 }
 
-func (r *RedisConn) HoldFunds(userID, txID string, amount decimal.Decimal, ttl time.Duration) error {
-	ctx := context.Background()
+func (r *RedisConn) HoldFunds(ctx context.Context, userID, txID string, amount decimal.Decimal, ttl time.Duration) error {
+	ctx = r.ensureCtx(ctx)
 
 	holdKey := fmt.Sprintf("hold:%s:%s", userID, txID)
 
@@ -236,8 +243,8 @@ func (r *RedisConn) HoldFunds(userID, txID string, amount decimal.Decimal, ttl t
 }
 
 // ReleaseHold increments balance by hold amount and deletes hold. Returns true if hold existed.
-func (r *RedisConn) ReleaseHold(userID, txID string) (bool, error) {
-	ctx := context.Background()
+func (r *RedisConn) ReleaseHold(ctx context.Context, userID, txID string) (bool, error) {
+	ctx = r.ensureCtx(ctx)
 
 	holdKey := fmt.Sprintf("hold:%s:%s", userID, txID)
 
@@ -255,8 +262,8 @@ func (r *RedisConn) ReleaseHold(userID, txID string) (bool, error) {
 }
 
 // ConfirmHold deletes the hold without changing balance (finalize deduction)
-func (r *RedisConn) ConfirmHold(userID, txID string) (bool, error) {
-	ctx := context.Background()
+func (r *RedisConn) ConfirmHold(ctx context.Context, userID, txID string) (bool, error) {
+	ctx = r.ensureCtx(ctx)
 
 	holdKey := fmt.Sprintf("hold:%s:%s", userID, txID)
 
@@ -272,8 +279,8 @@ func (r *RedisConn) ConfirmHold(userID, txID string) (bool, error) {
 	return false, nil
 }
 
-func (r *RedisConn) GetHeldFundsLua(userID string) (decimal.Decimal, error) {
-	ctx := context.Background()
+func (r *RedisConn) GetHeldFundsLua(ctx context.Context, userID string) (decimal.Decimal, error) {
+	ctx = r.ensureCtx(ctx)
 	pattern := fmt.Sprintf("hold:%s:*", userID)
 
 	res, err := sumHoldsScript.Run(ctx, r.client, []string{pattern}).Result()
@@ -294,8 +301,8 @@ func (r *RedisConn) GetHeldFundsLua(userID string) (decimal.Decimal, error) {
 }
 
 // PutJob pushes a job JSON to a queue (left push)
-func (r *RedisConn) PutJob(queue string, payload interface{}) error {
-	ctx := context.Background()
+func (r *RedisConn) PutJob(ctx context.Context, queue string, payload interface{}) error {
+	ctx = r.ensureCtx(ctx)
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -304,8 +311,8 @@ func (r *RedisConn) PutJob(queue string, payload interface{}) error {
 }
 
 // Blocking pop (right pop) returns the raw job JSON
-func (r *RedisConn) PopJobBlocking(queue string, timeout time.Duration) (string, error) {
-	ctx := context.Background()
+func (r *RedisConn) PopJobBlocking(ctx context.Context, queue string, timeout time.Duration) (string, error) {
+	ctx = r.ensureCtx(ctx)
 	// If timeout==0 use 0 -> block indefinitely
 	res, err := r.client.BRPop(ctx, timeout, queue).Result()
 	if err != nil {
@@ -319,21 +326,21 @@ func (r *RedisConn) PopJobBlocking(queue string, timeout time.Duration) (string,
 }
 
 // Helper: set external mapping transfer:ext:{apiRef} -> txID
-func (r *RedisConn) SetExternalMapping(apiRef, txID string, ttl time.Duration) error {
-	ctx := context.Background()
+func (r *RedisConn) SetExternalMapping(ctx context.Context, apiRef, txID string, ttl time.Duration) error {
+	ctx = r.ensureCtx(ctx)
 	key := fmt.Sprintf("transfer:ext:%s", apiRef)
 	return r.client.Set(ctx, key, txID, ttl).Err()
 }
 
-func (r *RedisConn) GetTxIDByExternalRef(apiRef string) (string, error) {
-	ctx := context.Background()
+func (r *RedisConn) GetTxIDByExternalRef(ctx context.Context, apiRef string) (string, error) {
+	ctx = r.ensureCtx(ctx)
 	key := fmt.Sprintf("transfer:ext:%s", apiRef)
 	return r.client.Get(ctx, key).Result()
 }
 
 // SetMeta stores transfer metadata (user_id, amount) as JSON at transfer:meta:{txID}
-func (r *RedisConn) SetMeta(txID string, meta interface{}, ttl time.Duration) error {
-	ctx := context.Background()
+func (r *RedisConn) SetMeta(ctx context.Context, txID string, meta interface{}, ttl time.Duration) error {
+	ctx = r.ensureCtx(ctx)
 	key := fmt.Sprintf("transfer:meta:%s", txID)
 	b, err := json.Marshal(meta)
 	if err != nil {
@@ -343,8 +350,8 @@ func (r *RedisConn) SetMeta(txID string, meta interface{}, ttl time.Duration) er
 }
 
 // GetMeta retrieves transfer meta and unmarshals into dest (pass pointer). returns (found, error)
-func (r *RedisConn) GetMeta(txID string, dest interface{}) (bool, error) {
-	ctx := context.Background()
+func (r *RedisConn) GetMeta(ctx context.Context, txID string, dest interface{}) (bool, error) {
+	ctx = r.ensureCtx(ctx)
 	key := fmt.Sprintf("transfer:meta:%s", txID)
 	val, err := r.client.Get(ctx, key).Result()
 	if err != nil {

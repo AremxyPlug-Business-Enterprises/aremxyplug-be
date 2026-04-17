@@ -17,16 +17,16 @@ type TxnIndex struct {
 }
 
 // SaveTxnIndex inserts a mapping from TXNID to its source collection
-func (m *mongoStore) SaveTxnIndex(txID, collection string) error {
-	ctx := context.Background()
+func (m *mongoStore) SaveTxnIndex(ctx context.Context, txID, collection string) error {
+	ctx = m.ensureCtx(ctx)
 	idx := TxnIndex{TxnID: txID, Collection: collection}
 	_, err := m.col("txn_index").InsertOne(ctx, idx)
 	return err
 }
 
 // GetTxnCollection returns the collection name for a given TXNID
-func (m *mongoStore) GetTxnCollection(txID string) (string, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetTxnCollection(ctx context.Context, txID string) (string, error) {
+	ctx = m.ensureCtx(ctx)
 	var idx TxnIndex
 	err := m.col("txn_index").FindOne(ctx, bson.M{"txn": txID}).Decode(&idx)
 	if err != nil {
@@ -35,26 +35,28 @@ func (m *mongoStore) GetTxnCollection(txID string) (string, error) {
 	return idx.Collection, nil
 }
 
-func (m *mongoStore) GetReceiptByExternalRef(externalRef string) (models.TransferResponse, error) {
+func (m *mongoStore) GetReceiptByExternalRef(ctx context.Context, externalRef string) (models.TransferResponse, error) {
+	ctx = m.ensureCtx(ctx)
 	var receipt models.TransferResponse
-	err := m.col(transferColl).FindOne(context.Background(), bson.M{"reference": externalRef}).Decode(&receipt)
+	err := m.col(transferColl).FindOne(ctx, bson.M{"reference": externalRef}).Decode(&receipt)
 	if err != nil {
 		return models.TransferResponse{}, err
 	}
 	return receipt, nil
 }
 
-func (m *mongoStore) GetReceiptByTxID(txID string) (models.TransferResponse, error) {
+func (m *mongoStore) GetReceiptByTxID(ctx context.Context, txID string) (models.TransferResponse, error) {
+	ctx = m.ensureCtx(ctx)
 	var receipt models.TransferResponse
-	err := m.col(transferColl).FindOne(context.Background(), bson.M{"txn": txID}).Decode(&receipt)
+	err := m.col(transferColl).FindOne(ctx, bson.M{"txn": txID}).Decode(&receipt)
 	if err != nil {
 		return models.TransferResponse{}, err
 	}
 	return receipt, nil
 }
 
-func (m *mongoStore) UpdateRecieptByTxID(txnID string) error {
-	ctx := context.Background()
+func (m *mongoStore) UpdateRecieptByTxID(ctx context.Context, txnID string) error {
+	ctx = m.ensureCtx(ctx)
 	status := "failed"
 
 	// Fallback: scan all collections if not found in index
@@ -78,7 +80,8 @@ func (m *mongoStore) UpdateRecieptByTxID(txnID string) error {
 	return nil // Not found, but no error
 }
 
-func (m *mongoStore) UpdateReceiptFinal(txID, status, sessionID string) error {
+func (m *mongoStore) UpdateReceiptFinal(ctx context.Context, txID, status, sessionID string) error {
+	ctx = m.ensureCtx(ctx)
 	setStatus := ""
 
 	if status == "SUCCESS" {
@@ -87,7 +90,7 @@ func (m *mongoStore) UpdateReceiptFinal(txID, status, sessionID string) error {
 	if status == "FAILED" {
 		setStatus = "failed"
 	}
-	_, err := m.col(transferColl).UpdateOne(context.Background(), bson.M{"txn": txID}, bson.M{
+	_, err := m.col(transferColl).UpdateOne(ctx, bson.M{"txn": txID}, bson.M{
 		"$set": bson.M{
 			"status":     setStatus,
 			"session_id": sessionID,
@@ -96,8 +99,8 @@ func (m *mongoStore) UpdateReceiptFinal(txID, status, sessionID string) error {
 	return err
 }
 
-func (m *mongoStore) UpdateUserBalanceFromRedis(userID string, balance decimal.Decimal) error {
-	ctx := context.Background()
+func (m *mongoStore) UpdateUserBalanceFromRedis(ctx context.Context, userID string, balance decimal.Decimal) error {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"user_id": userID}
 
 	bal, err := primitive.ParseDecimal128(balance.String())
@@ -119,23 +122,26 @@ func (m *mongoStore) UpdateUserBalanceFromRedis(userID string, balance decimal.D
 	return nil
 }
 
-func (m *mongoStore) UpdateReceiptStatus(txID, status string) error {
-	_, err := m.col(transferColl).UpdateOne(context.Background(), bson.M{"txn": txID}, bson.M{
+func (m *mongoStore) UpdateReceiptStatus(ctx context.Context, txID, status string) error {
+	ctx = m.ensureCtx(ctx)
+	_, err := m.col(transferColl).UpdateOne(ctx, bson.M{"txn": txID}, bson.M{
 		"$set": bson.M{"status": status},
 	})
 	return err
 }
 
-func (m *mongoStore) UpdateReceiptExternalRef(externalRef, status string) error {
-	_, err := m.col(transferColl).UpdateOne(context.Background(), bson.M{"reference": externalRef}, bson.M{
+func (m *mongoStore) UpdateReceiptExternalRef(ctx context.Context, externalRef, status string) error {
+	ctx = m.ensureCtx(ctx)
+	_, err := m.col(transferColl).UpdateOne(ctx, bson.M{"reference": externalRef}, bson.M{
 		"$set": bson.M{"status": status},
 	})
 	return err
 }
 
-func (m *mongoStore) GetUserFromVirtualNuban(virtualNuban string) (string, error) {
+func (m *mongoStore) GetUserFromVirtualNuban(ctx context.Context, virtualNuban string) (string, error) {
+	ctx = m.ensureCtx(ctx)
 	var result models.AccountDetails
-	err := m.col(virtualColl).FindOne(context.Background(), bson.M{"virtual_nuban": virtualNuban}).Decode(&result)
+	err := m.col(virtualColl).FindOne(ctx, bson.M{"virtual_nuban": virtualNuban}).Decode(&result)
 	if err != nil {
 		return "", err
 	}

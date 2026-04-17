@@ -69,6 +69,13 @@ func (m *mongoStore) col(collectionName string) *mongo.Collection {
 	return m.mongoClient.Database(m.databaseName).Collection(collectionName)
 }
 
+func (m *mongoStore) ensureCtx(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
 func (m *mongoStore) InitIndexes() error {
 	ctx := context.Background()
 	db := m.mongoClient.Database(m.databaseName)
@@ -152,9 +159,8 @@ func (m *mongoStore) InitIndexes() error {
 	return nil
 }
 
-func (m *mongoStore) SaveUser(user models.User) error {
-
-	ctx := context.Background()
+func (m *mongoStore) SaveUser(ctx context.Context, user models.User) error {
+	ctx = m.ensureCtx(ctx)
 	user.ExpireAt = time.Now().Add(time.Duration(15) * time.Minute)
 
 	col := m.col(userColl)
@@ -167,12 +173,13 @@ func (m *mongoStore) SaveUser(user models.User) error {
 	return nil
 }
 
-func (m *mongoStore) GetUserByEmail(email string) (*models.User, error) {
+func (m *mongoStore) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{
 		"email": email,
 	}
 	user := &models.User{}
-	err := m.col(userColl).FindOne(context.Background(), filter).Decode(user)
+	err := m.col(userColl).FindOne(ctx, filter).Decode(user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, err
@@ -182,12 +189,13 @@ func (m *mongoStore) GetUserByEmail(email string) (*models.User, error) {
 	return user, nil
 }
 
-func (m *mongoStore) GetUserByPhone(phone string) (*models.User, error) {
+func (m *mongoStore) GetUserByPhone(ctx context.Context, phone string) (*models.User, error) {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{
 		"phonenumber": phone,
 	}
 	user := &models.User{}
-	err := m.col(userColl).FindOne(context.Background(), filter).Decode(user)
+	err := m.col(userColl).FindOne(ctx, filter).Decode(user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, err
@@ -197,12 +205,13 @@ func (m *mongoStore) GetUserByPhone(phone string) (*models.User, error) {
 	return user, nil
 }
 
-func (m *mongoStore) GetUserByUsername(username string) (*models.User, error) {
+func (m *mongoStore) GetUserByUsername(ctx context.Context, username string) (*models.User, error) {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{
 		"username": username,
 	}
 	user := &models.User{}
-	err := m.col(userColl).FindOne(context.Background(), filter).Decode(user)
+	err := m.col(userColl).FindOne(ctx, filter).Decode(user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, err
@@ -212,21 +221,21 @@ func (m *mongoStore) GetUserByUsername(username string) (*models.User, error) {
 	return user, nil
 }
 
-func (m *mongoStore) GetUserByID(id string) (*models.User, error) {
-
+func (m *mongoStore) GetUserByID(ctx context.Context, id string) (*models.User, error) {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{
 		"id": id,
 	}
 	user := &models.User{}
-	err := m.col(userColl).FindOne(context.Background(), filter).Decode(user)
+	err := m.col(userColl).FindOne(ctx, filter).Decode(user)
 	if err != nil {
 		return nil, err
 	}
 	return user, nil
 }
 
-func (m *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*models.User, error) {
-
+func (m *mongoStore) GetUserByUsernameOrEmail(ctx context.Context, email string, username string) (*models.User, error) {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{}
 
 	if email != "" {
@@ -244,7 +253,7 @@ func (m *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*m
 	err := m.mongoClient.
 		Database(m.databaseName).
 		Collection(userColl).
-		FindOne(context.Background(), filter).
+		FindOne(ctx, filter).
 		Decode(user)
 	if err != nil {
 		return nil, err
@@ -253,7 +262,8 @@ func (m *mongoStore) GetUserByUsernameOrEmail(email string, username string) (*m
 
 }
 
-func (m *mongoStore) GetUserByUsernameOrEmailOrPhone(username, email, phone string) (*models.User, error) {
+func (m *mongoStore) GetUserByUsernameOrEmailOrPhone(ctx context.Context, username, email, phone string) (*models.User, error) {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{
 		"$or": []bson.M{
 			{"email": email},
@@ -265,7 +275,7 @@ func (m *mongoStore) GetUserByUsernameOrEmailOrPhone(username, email, phone stri
 	err := m.mongoClient.
 		Database(m.databaseName).
 		Collection(userColl).
-		FindOne(context.Background(), filter).
+		FindOne(ctx, filter).
 		Decode(user)
 	if err != nil {
 		return nil, err
@@ -273,8 +283,8 @@ func (m *mongoStore) GetUserByUsernameOrEmailOrPhone(username, email, phone stri
 	return user, nil
 
 }
-func (m *mongoStore) CreateMessage(message *models.Message) error {
-	ctx := context.Background()
+func (m *mongoStore) CreateMessage(ctx context.Context, message *models.Message) error {
+	ctx = m.ensureCtx(ctx)
 	var modelInDB models.Message
 	err := m.col(messagesColl).
 		FindOne(ctx, bson.M{"id": message.ID}).
@@ -301,8 +311,8 @@ func (m *mongoStore) CreateMessage(message *models.Message) error {
 }
 
 // update user password
-func (m *mongoStore) UpdateUserPassword(email string, password string) error {
-	ctx := context.Background()
+func (m *mongoStore) UpdateUserPassword(ctx context.Context, email string, password string) error {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"email": email}
 	update := bson.M{"$set": bson.M{"password": password}}
 	_, err := m.mongoClient.
@@ -315,8 +325,8 @@ func (m *mongoStore) UpdateUserPassword(email string, password string) error {
 	return nil
 }
 
-func (m *mongoStore) UpdateUserPasswordByID(id string, password string) error {
-	ctx := context.Background()
+func (m *mongoStore) UpdateUserPasswordByID(ctx context.Context, id string, password string) error {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"id": id}
 	update := bson.M{"$set": bson.M{"password": password}}
 	_, err := m.col(userColl).
@@ -327,8 +337,8 @@ func (m *mongoStore) UpdateUserPasswordByID(id string, password string) error {
 	return nil
 }
 
-func (m *mongoStore) UpdateBVNField(user models.User) error {
-	ctx := context.Background()
+func (m *mongoStore) UpdateBVNField(ctx context.Context, user models.User) error {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"id": user.ID}
 	update := bson.M{"$set": bson.M{"bvn": user.BVN, "bvn_phone": user.BVNPhone, "has_bvn": true}}
 	_, err := m.col(userColl).
@@ -339,8 +349,8 @@ func (m *mongoStore) UpdateBVNField(user models.User) error {
 	return nil
 }
 
-func (m *mongoStore) UpdateNINField(user models.User) error {
-	ctx := context.Background()
+func (m *mongoStore) UpdateNINField(ctx context.Context, user models.User) error {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"id": user.ID}
 	update := bson.M{"$set": bson.M{"nin": user.NIN, "has_nin": true}}
 	_, err := m.col(userColl).
@@ -351,8 +361,8 @@ func (m *mongoStore) UpdateNINField(user models.User) error {
 	return nil
 }
 
-func (m *mongoStore) UpdateEmail(id, email string) error {
-	ctx := context.Background()
+func (m *mongoStore) UpdateEmail(ctx context.Context, id, email string) error {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"id": id}
 	update := bson.M{"$set": bson.M{"email": email}}
 	coll := m.col(userColl)
@@ -365,8 +375,8 @@ func (m *mongoStore) UpdateEmail(id, email string) error {
 
 }
 
-func (m *mongoStore) UpdatePhone(id, phone string) error {
-	ctx := context.Background()
+func (m *mongoStore) UpdatePhone(ctx context.Context, id, phone string) error {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"id": id}
 	update := bson.M{"$set": bson.M{"phone_number": phone}}
 	coll := m.col(userColl)
@@ -378,8 +388,8 @@ func (m *mongoStore) UpdatePhone(id, phone string) error {
 	return nil
 }
 
-func (m *mongoStore) UpdateUserBeta(id string, beta bool) error {
-	ctx := context.Background()
+func (m *mongoStore) UpdateUserBeta(ctx context.Context, id string, beta bool) error {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"id": id}
 	update := bson.M{"$set": bson.M{"beta": beta}}
 	_, err := m.col(userColl).UpdateOne(ctx, filter, update)
@@ -390,9 +400,9 @@ func (m *mongoStore) UpdateUserBeta(id string, beta bool) error {
 	return nil
 }
 
-func (m *mongoStore) VerifyUser(identifier string) (*models.User, error) {
+func (m *mongoStore) VerifyUser(ctx context.Context, identifier string) (*models.User, error) {
 	userColl := m.col(userColl)
-	ctx := context.Background()
+	ctx = m.ensureCtx(ctx)
 
 	filter := bson.M{
 		"$or": []bson.M{
@@ -434,9 +444,8 @@ func (m *mongoStore) VerifyUser(identifier string) (*models.User, error) {
 	return user, nil
 }
 
-func (m *mongoStore) UpdateUserAddress(userID string, gender string, dob string, address string, postalCode string) error {
-
-	ctx := context.Background()
+func (m *mongoStore) UpdateUserAddress(ctx context.Context, userID string, gender string, dob string, address string, postalCode string) error {
+	ctx = m.ensureCtx(ctx)
 
 	birth_date, err := time.Parse("2006-01-02", dob)
 	if err != nil {
@@ -460,9 +469,8 @@ func (m *mongoStore) UpdateUserAddress(userID string, gender string, dob string,
 	return nil
 }
 
-func (m *mongoStore) getRecord(id, collectionName string) *mongo.SingleResult {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+func (m *mongoStore) getRecord(ctx context.Context, id, collectionName string) *mongo.SingleResult {
+	ctx = m.ensureCtx(ctx)
 	oID, err := strconv.Atoi(id)
 	if err != nil {
 		return &mongo.SingleResult{}
@@ -476,9 +484,8 @@ func (m *mongoStore) getRecord(id, collectionName string) *mongo.SingleResult {
 
 }
 
-func (m *mongoStore) saveToDB(collectionName string, details interface{}) error {
-	ctx := context.Background()
-
+func (m *mongoStore) saveToDB(ctx context.Context, collectionName string, details interface{}) error {
+	ctx = m.ensureCtx(ctx)
 	_, err := m.col(collectionName).InsertOne(ctx, details)
 	if err != nil {
 		return err
@@ -487,8 +494,8 @@ func (m *mongoStore) saveToDB(collectionName string, details interface{}) error 
 	return nil
 }
 
-func (m *mongoStore) getAllRecords(collectionName, userID string) (*mongo.Cursor, error) {
-	ctx := context.Background()
+func (m *mongoStore) getAllRecords(ctx context.Context, collectionName, userID string) (*mongo.Cursor, error) {
+	ctx = m.ensureCtx(ctx)
 	var filter bson.D
 
 	if userID == "" {
@@ -501,8 +508,8 @@ func (m *mongoStore) getAllRecords(collectionName, userID string) (*mongo.Cursor
 	return cur, err
 }
 
-func (m *mongoStore) SaveOTP(data models.OTP) error {
-	ctx := context.Background()
+func (m *mongoStore) SaveOTP(ctx context.Context, data models.OTP) error {
+	ctx = m.ensureCtx(ctx)
 	data.ExpireAt = time.Now().Add(time.Duration(5) * time.Minute)
 
 	col := m.col("OTP")
@@ -515,8 +522,8 @@ func (m *mongoStore) SaveOTP(data models.OTP) error {
 	return nil
 }
 
-func (m *mongoStore) GetOTP(email string) (models.OTP, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetOTP(ctx context.Context, email string) (models.OTP, error) {
+	ctx = m.ensureCtx(ctx)
 	data := models.OTP{}
 	filter := bson.D{primitive.E{Key: "email", Value: email}}
 	opts := options.FindOne().SetSort(bson.D{{Key: "expireAt", Value: -1}})
@@ -532,8 +539,8 @@ func (m *mongoStore) GetOTP(email string) (models.OTP, error) {
 	return data, nil
 }
 
-func (m *mongoStore) SaveSMS(data models.SMSOTP) error {
-	ctx := context.Background()
+func (m *mongoStore) SaveSMS(ctx context.Context, data models.SMSOTP) error {
+	ctx = m.ensureCtx(ctx)
 	data.ExpireAt = time.Now().Add(time.Duration(5) * time.Minute)
 
 	col := m.col("SMS")
@@ -546,9 +553,8 @@ func (m *mongoStore) SaveSMS(data models.SMSOTP) error {
 	return nil
 }
 
-func (m *mongoStore) GetSMS(phone string) (models.SMSOTP, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+func (m *mongoStore) GetSMS(ctx context.Context, phone string) (models.SMSOTP, error) {
+	ctx = m.ensureCtx(ctx)
 	data := models.SMSOTP{}
 	filter := bson.D{primitive.E{Key: "phone", Value: phone}}
 	opts := options.FindOne().SetSort(bson.D{{Key: "expireAt", Value: -1}})
@@ -564,10 +570,9 @@ func (m *mongoStore) GetSMS(phone string) (models.SMSOTP, error) {
 	return data, nil
 }
 
-func (m *mongoStore) CheckID(id int) (int64, error) {
-
+func (m *mongoStore) CheckID(ctx context.Context, id int) (int64, error) {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"id": id}
-	ctx := context.Background()
 
 	count, err := m.col(userColl).CountDocuments(ctx, filter)
 	if err != nil {

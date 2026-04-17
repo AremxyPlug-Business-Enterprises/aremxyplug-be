@@ -2,6 +2,7 @@ package bankacc
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -50,7 +51,10 @@ func NewBankConfig(store db.DataStore, logger *zap.Logger) *BankConfig {
 	}
 }
 
-func (b *BankConfig) VirtualAccount(user models.User) (models.AccountDetails, error) {
+func (b *BankConfig) VirtualAccount(ctx context.Context, user models.User) (models.AccountDetails, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	// create a new virtual accout for new users as soon as their account is confirmed
 	// should be called at the moment that a user's account is verified
@@ -76,7 +80,7 @@ func (b *BankConfig) VirtualAccount(user models.User) (models.AccountDetails, er
 		return models.AccountDetails{}, JSONError(err)
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return models.AccountDetails{}, ErrCreatingHTTPRequest
 	}
@@ -134,11 +138,11 @@ func (b *BankConfig) VirtualAccount(user models.User) (models.AccountDetails, er
 		VirtualAccountID: virtualAccount,
 	}
 
-	if err := b.saveAccount(result); err != nil {
+	if err := b.saveAccount(ctx, result); err != nil {
 		b.logger.Error("Error saving account details to the database:", zap.Error(err))
 		return models.AccountDetails{}, DBConnectionError(err)
 	}
-	if err := b.dbConn.CreateInitialBalance(user.ID, virtualAccount); err != nil {
+	if err := b.dbConn.CreateInitialBalance(ctx, user.ID, virtualAccount); err != nil {
 		b.logger.Error("Error creating initial balance:", zap.Error(err))
 		return models.AccountDetails{}, DBConnectionError(err)
 	}
@@ -147,7 +151,10 @@ func (b *BankConfig) VirtualAccount(user models.User) (models.AccountDetails, er
 
 }
 
-func (b *BankConfig) CreateDepositAccount() error {
+func (b *BankConfig) CreateDepositAccount(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	url := fmt.Sprintf("%s/%s", api, "accounts")
 	payload := createDeposit{
@@ -174,7 +181,7 @@ func (b *BankConfig) CreateDepositAccount() error {
 		return JSONError(err)
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		b.logger.Error(err.Error())
 		fmt.Println("Error creating a http request:", err)
@@ -245,8 +252,11 @@ func (b *BankConfig) CreateDepositAccount() error {
 	return nil
 }
 
-func (b *BankConfig) saveAccount(account models.AccountDetails) error {
-	err := b.dbConn.SaveVirtualAccount(account)
+func (b *BankConfig) saveAccount(ctx context.Context, account models.AccountDetails) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := b.dbConn.SaveVirtualAccount(ctx, account)
 	if err != nil {
 		return err
 	}

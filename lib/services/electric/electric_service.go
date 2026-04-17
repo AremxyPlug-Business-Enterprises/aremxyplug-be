@@ -1,13 +1,15 @@
 package electric
 
 import (
+	"context"
+
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/sqlstore"
 	"go.uber.org/zap"
 )
 
 type ElectricProducts interface {
-	GetElectricDetails(discoType string) (*models.ElectricDetails, error)
+	GetElectricDetails(ctx context.Context, discoType string) (*models.ElectricDetails, error)
 }
 
 type ElectricServiceImpl struct {
@@ -22,9 +24,9 @@ func NewElectricService(store *sqlstore.SqlStore, logger *zap.Logger) ElectricPr
 	}
 }
 
-func (s *ElectricServiceImpl) GetElectricDetails(discoType string) (*models.ElectricDetails, error) {
+func (s *ElectricServiceImpl) GetElectricDetails(ctx context.Context, discoType string) (*models.ElectricDetails, error) {
 	s.logger.Info("Fetching electric details", zap.String("discoType", discoType))
-	details, err := s.store.GetElectricDetails(discoType)
+	details, err := s.store.GetElectricDetails(ctx, discoType)
 	if err != nil {
 		s.logger.Error("Error fetching electric details", zap.String("discoType", discoType), zap.Error(err))
 		return nil, err

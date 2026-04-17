@@ -120,20 +120,20 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 	router.Route("/api/v1", func(router chi.Router) {
 
-		router.Post("/webhook", httpHandler.WebhookHandler)
+		router.With(middleware.Timeout(15*time.Second)).Post("/webhook", httpHandler.WebhookHandler)
 
 		// refresh token
-		router.Get("/refresh-token", httpHandler.RefreshToken)
+		router.With(middleware.Timeout(10*time.Second)).Get("/refresh-token", httpHandler.RefreshToken)
 
 		// SignUp
-		router.Post("/signup", httpHandler.SignUp)
+		router.With(middleware.Timeout(20*time.Second)).Post("/signup", httpHandler.SignUp)
 		// Login
-		router.Post("/login", httpHandler.Login)
+		router.With(middleware.Timeout(15*time.Second)).Post("/login", httpHandler.Login)
 		// forgot password
-		router.Post("/forgot-password", httpHandler.ForgotPassword)
+		router.With(middleware.Timeout(20*time.Second)).Post("/forgot-password", httpHandler.ForgotPassword)
 
 		// reset password
-		router.Post("/reset-password", httpHandler.ResetPassword)
+		router.With(middleware.Timeout(20*time.Second)).Post("/reset-password", httpHandler.ResetPassword)
 
 		sendOTPRoutes(router, httpHandler)
 
@@ -143,43 +143,43 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		authRouter := router.With(config.Auth.Authorize)
 
-		authRouter.Post("/logout", httpHandler.Logout)
+		authRouter.With(middleware.Timeout(10*time.Second)).Post("/logout", httpHandler.Logout)
 
-		authRouter.Patch("/update-password", httpHandler.UpdatePassword)
+		authRouter.With(middleware.Timeout(20*time.Second)).Patch("/update-password", httpHandler.UpdatePassword)
 		// Data Routes
-		dataRoutes(authRouter, httpHandler)
+		dataRoutes(authRouter.With(middleware.Timeout(40*time.Second)), httpHandler)
 		// smile data routes
-		smileDataRoutes(authRouter, httpHandler)
+		smileDataRoutes(authRouter.With(middleware.Timeout(40*time.Second)), httpHandler)
 		// spectranet data routes
-		spectranetDataRoutes(authRouter, httpHandler)
+		spectranetDataRoutes(authRouter.With(middleware.Timeout(40*time.Second)), httpHandler)
 
-		authRouter.Post("/verify", httpHandler.VerifyIdentity)
+		authRouter.With(middleware.Timeout(45*time.Second)).Post("/verify", httpHandler.VerifyIdentity)
 
 		// Edu Routes
-		eduRoutes(authRouter, httpHandler)
+		eduRoutes(authRouter.With(middleware.Timeout(45*time.Second)), httpHandler)
 
 		//  Airtime Routes
-		airtimeRoutes(authRouter, httpHandler)
+		airtimeRoutes(authRouter.With(middleware.Timeout(45*time.Second)), httpHandler)
 
 		// TvSubscription, Electricity bills Routes
-		billRoutes(authRouter, httpHandler)
+		billRoutes(authRouter.With(middleware.Timeout(60*time.Second)), httpHandler)
 
 		// bank routes
-		bankRoutes(authRouter, httpHandler)
+		bankRoutes(authRouter.With(middleware.Timeout(60*time.Second)), httpHandler)
 
-		pinRoute(authRouter, httpHandler)
+		pinRoute(authRouter.With(middleware.Timeout(20*time.Second)), httpHandler)
 
-		extraRoutes(authRouter, httpHandler)
+		extraRoutes(authRouter.With(middleware.Timeout(30*time.Second)), httpHandler)
 
-		virtualAccRoutes(authRouter, httpHandler)
+		virtualAccRoutes(authRouter.With(middleware.Timeout(60*time.Second)), httpHandler)
 
-		getBalance(authRouter, httpHandler)
+		getBalance(authRouter.With(middleware.Timeout(10*time.Second)), httpHandler)
 
-		checkVerification(authRouter, httpHandler)
+		checkVerification(authRouter.With(middleware.Timeout(15*time.Second)), httpHandler)
 
-		productRoutes(authRouter, httpHandler)
+		productRoutes(authRouter.With(middleware.Timeout(15*time.Second)), httpHandler)
 
-		getTransactions(authRouter, httpHandler)
+		getTransactions(authRouter.With(middleware.Timeout(20*time.Second)), httpHandler)
 
 		updateRoutes(authRouter, httpHandler)
 
@@ -187,11 +187,11 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		getUsersInfo(authRouter, httpHandler)
 
-		authRouter.Get("/chart", httpHandler.Chart)
+		authRouter.With(middleware.Timeout(20*time.Second)).Get("/chart", httpHandler.Chart)
 
 		authRouter.Get("/ws/events", httpHandler.UserEventsWS)
 
-		authRouter.Get("/tasks/progress", httpHandler.GetTaskProgress)
+		authRouter.With(middleware.Timeout(10*time.Second)).Get("/tasks/progress", httpHandler.GetTaskProgress)
 	})
 
 	return router
@@ -353,31 +353,31 @@ func virtualAccRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 
 func verifyOTPRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/verify-otp", func(router chi.Router) {
-		router.Post("/signin", httpHandler.VerifyOTP)
-		router.Post("/signup", httpHandler.VerifyOTP)
-		router.Post("/resetpassword", httpHandler.VerifyOTP)
-		router.Post("/resetpin", httpHandler.VerifyOTP)
+		router.With(middleware.Timeout(20*time.Second)).Post("/signin", httpHandler.VerifyOTP)
+		router.With(middleware.Timeout(20*time.Second)).Post("/signup", httpHandler.VerifyOTP)
+		router.With(middleware.Timeout(20*time.Second)).Post("/resetpassword", httpHandler.VerifyOTP)
+		router.With(middleware.Timeout(20*time.Second)).Post("/resetpin", httpHandler.VerifyOTP)
 	})
 }
 
 func sendOTPRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/send-otp", func(router chi.Router) {
-		router.Post("/signin", httpHandler.SendOTP)
-		router.Post("/signup", httpHandler.SendOTP)
-		router.Post("/resetpassword", httpHandler.SendOTP)
-		router.Post("/resetpin", httpHandler.SendOTP)
+		router.With(middleware.Timeout(20*time.Second)).Post("/signin", httpHandler.SendOTP)
+		router.With(middleware.Timeout(20*time.Second)).Post("/signup", httpHandler.SendOTP)
+		router.With(middleware.Timeout(20*time.Second)).Post("/resetpassword", httpHandler.SendOTP)
+		router.With(middleware.Timeout(20*time.Second)).Post("/resetpin", httpHandler.SendOTP)
 	})
 }
 
 func smsRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/sms", func(router chi.Router) {
 		router.Route("/send", func(router chi.Router) {
-			router.Post("/", httpHandler.SendSMSOTP)
+			router.With(middleware.Timeout(20*time.Second)).Post("/", httpHandler.SendSMSOTP)
 		})
 		router.Route("/verify", func(router chi.Router) {
-			router.Post("/signup", httpHandler.VerifySMSOTP)
-			router.Post("/signin", httpHandler.VerifySMSOTP)
-			router.Post("/resetpassword", httpHandler.VerifySMSOTP)
+			router.With(middleware.Timeout(20*time.Second)).Post("/signup", httpHandler.VerifySMSOTP)
+			router.With(middleware.Timeout(20*time.Second)).Post("/signin", httpHandler.VerifySMSOTP)
+			router.With(middleware.Timeout(20*time.Second)).Post("/resetpassword", httpHandler.VerifySMSOTP)
 		})
 	})
 }

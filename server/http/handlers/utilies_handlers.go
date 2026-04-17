@@ -13,7 +13,6 @@ import (
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
-	"github.com/aremxyplug-be/lib/randomgen"
 	"github.com/aremxyplug-be/lib/responseFormat"
 	"github.com/aremxyplug-be/lib/telcom/edu"
 	"github.com/go-chi/chi/v5"
@@ -32,6 +31,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := userDetails.ID
+	ctx := r.Context()
 
 	if r.Method == "POST" {
 		data := edu.EduInfo{}
@@ -59,7 +59,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, bal, _, err := handler.getBalance(userDetails.ID)
+		_, bal, _, err := handler.getBalance(ctx, userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError) // Assume DB error
 			handler.logger.Error("Failed to get balance", zap.Error(err))
@@ -116,7 +116,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 
 		// get the edu record from the db. associate the profit_margin to the profit_margin
 		// field in the EduInfo struct. this will be used to calculate the profit margin for the transaction and update the balance of the user accordingly
-		edu, err := handler.productClient.GetEduRecord(productID)
+		edu, err := handler.productClient.GetEduRecord(ctx, productID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to fetch EduProduct by ID", zap.Int("productID", productID), zap.Error(err))
@@ -131,7 +131,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 
 		data.Profit_Margin = decimal.NewFromFloat(*edu.Profit_Margin).StringFixed(2)
 
-		txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, amount, bal)
+		txnID, err := handler.placeRedisHoldAndMeta(ctx, w, userDetails.ID, amount, bal)
 		if err != nil {
 			return
 		}
@@ -139,50 +139,28 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 		data.UserID = id
 		data.Name = userDetails.FullName
 		data.TXN = txnID
-		/*
-			res, err := handler.eduClient.BuyEduPin(data)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				handler.logger.Error("Failed to buy EduPin", zap.Error(err))
-				response := responseFormat.CustomResponse{
-					Status:  http.StatusInternalServerError,
-					Message: "error",
-					Data:    map[string]interface{}{"data": "Failed to purchase education pin"},
-				}
-				json.NewEncoder(w).Encode(response)
-				return
+		res, err := handler.eduClient.BuyEduPin(ctx, data)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			handler.logger.Error("Failed to buy EduPin", zap.Error(err))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusInternalServerError,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "Failed to purchase education pin"},
 			}
-		*/
-		orderID, _ := randomgen.GenerateOrderID()
-		transactionID := randomgen.GenerateTransactionID("edu")
-
-		res := &models.EduResponse{
-			UserID:                 id,
-			Status:                 "success",
-			Exam_Type:              data.Exam_Type,
-			Quantity:               data.Quantity,
-			PhoneNumber:            data.Phone_Number,
-			Email:                  data.Email,
-			Amount:                 float64(amount),
-			FullName:               data.Name,
-			TransactionProduct:     "Education Pins",
-			TransactionDescription: data.Exam_Type,
-			OrderID:                orderID,
-			TransactionID:          transactionID,
-			CreatedAt:              time.Now().UTC(),
-			ReferenceNumber:        "ID06466049509",
+			json.NewEncoder(w).Encode(response)
+			return
 		}
 
-		// based on the response status to update or hold balance.
 		switch res.Status {
 		case "success":
 			// confirm the hold in Redis (finalize funds)
-			if ok, err := handler.redisClient.ConfirmHold(userDetails.ID, txnID); err != nil || !ok {
+			if ok, err := handler.redisClient.ConfirmHold(ctx, userDetails.ID, txnID); err != nil || !ok {
 				handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
 
 			}
 
-			if err := handler.updateBalance(id, newBal); err != nil {
+			if err := handler.updateBalance(ctx, id, newBal); err != nil {
 				if err == ErrorRedisBalanceUpdate {
 					// Log and continue
 					handler.logger.Warn("Balance update failed in Redis", zap.Error(err))
@@ -200,13 +178,13 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 
 			pointsEarned := 2
 
-			if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
+			if err := handler.addPoints(ctx, w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 			}
 
 			// Emit utility.payment event
 			if handler.processor != nil {
-				handler.addevent(id, data.Amount, res.TransactionID, "purchase.completed")
+				handler.addevent(ctx, id, data.Amount, res.TransactionID, "purchase.completed")
 			}
 
 			w.WriteHeader(http.StatusOK)
@@ -230,7 +208,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 		case "failed":
 
 			// release the hold in Redis
-			if ok, err := handler.redisClient.ReleaseHold(userDetails.ID, txnID); err != nil || !ok {
+			if ok, err := handler.redisClient.ReleaseHold(ctx, userDetails.ID, txnID); err != nil || !ok {
 				handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
 			}
 			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
@@ -249,7 +227,7 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.eduClient.QueryTransaction("id")
+		res, err := handler.eduClient.QueryTransaction(ctx, "id")
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Api response error", zap.Error(err))
@@ -275,9 +253,10 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 
 // GetEduInfo returns the details of an airtime transaction.
 func (handler *HttpHandler) GetEduInfo(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	id := chi.URLParam(r, "id")
 
-	res, err := handler.dataClient.GetTransactionDetail(id)
+	res, err := handler.eduClient.GetTransactionDetail(ctx, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Failed to get education transaction detail", zap.String("id", id), zap.Error(err))
@@ -301,8 +280,9 @@ func (handler *HttpHandler) GetEduInfo(w http.ResponseWriter, r *http.Request) {
 
 // To be used by admins to view transactions in the databases
 func (handler *HttpHandler) GetEduTransactions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
-	resp, err := handler.eduClient.GetAllTransaction("user")
+	resp, err := handler.eduClient.GetAllTransaction(ctx, "user")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error getting user's transactions", zap.Error(err))
@@ -325,6 +305,7 @@ func (handler *HttpHandler) GetEduTransactions(w http.ResponseWriter, r *http.Re
 }
 
 func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
@@ -363,7 +344,7 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		_, bal, _, err := handler.getBalance(userDetails.ID)
+		_, bal, _, err := handler.getBalance(ctx, userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError) // Assume DB error
 			handler.logger.Error("Failed to get balance", zap.Error(err))
@@ -389,7 +370,7 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		tvDetails, err := handler.productClient.GetTVSubByPackageName(data.DecoderType, data.Package)
+		tvDetails, err := handler.productClient.GetTVSubByPackageName(ctx, data.DecoderType, data.Package)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to fetch TV subscription details", zap.String("decoderType", data.DecoderType), zap.String("package", data.Package), zap.Error(err))
@@ -419,17 +400,17 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 
 		data.Profit_Margin = amount.Sub(discounted_amount).StringFixed(2)
 
-		txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, data.Amount, bal)
+		txnID, err := handler.placeRedisHoldAndMeta(ctx, w, userDetails.ID, data.Amount, bal)
 		if err != nil {
 			return
 		}
 
 		data.UserID = id
 		data.TXN = txnID
-		res, err := handler.tvClient.BuySub(data)
+		res, err := handler.tvClient.BuySub(ctx, data)
 		if err != nil {
 			// Release the hold on error
-			if ok, releaseErr := handler.redisClient.ReleaseHold(userDetails.ID, txnID); releaseErr != nil {
+			if ok, releaseErr := handler.redisClient.ReleaseHold(ctx, userDetails.ID, txnID); releaseErr != nil {
 				handler.logger.Error("Failed to release hold on BuySub error", zap.Error(releaseErr))
 			} else if !ok {
 				handler.logger.Warn("Hold not found on BuySub error", zap.String("txnID", txnID))
@@ -461,12 +442,12 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 		switch res.Status {
 		case "success":
 			// confirm the hold in Redis (finalize funds)
-			if ok, err := handler.redisClient.ConfirmHold(userDetails.ID, txnID); err != nil || !ok {
+			if ok, err := handler.redisClient.ConfirmHold(ctx, userDetails.ID, txnID); err != nil || !ok {
 				handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
 
 			}
 
-			if err := handler.updateBalance(id, newBal); err != nil {
+			if err := handler.updateBalance(ctx, id, newBal); err != nil {
 				if err == ErrorRedisBalanceUpdate {
 					// Log and continue
 					handler.logger.Warn("Balance update failed in Redis", zap.Error(err))
@@ -484,7 +465,7 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 
 			pointsEarned := 2
 
-			if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
+			if err := handler.addPoints(ctx, w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 			}
 
@@ -508,7 +489,7 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 		case "failed":
 
 			// release the hold in Redis
-			if ok, err := handler.redisClient.ReleaseHold(userDetails.ID, txnID); err != nil {
+			if ok, err := handler.redisClient.ReleaseHold(ctx, userDetails.ID, txnID); err != nil {
 				handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
 			} else if !ok {
 				handler.logger.Warn("Failed to release hold in Redis: not found", zap.String("txnID", txnID))
@@ -529,7 +510,7 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.tvClient.GetUserTransactions("user")
+		res, err := handler.tvClient.GetUserTransactions(ctx, "user")
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to get user's TV transactions", zap.Error(err))
@@ -553,7 +534,8 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 }
 
 func (handler *HttpHandler) GetTvSubscriptions(w http.ResponseWriter, r *http.Request) {
-	resp, err := handler.tvClient.GetAllTransactions()
+	ctx := r.Context()
+	resp, err := handler.tvClient.GetAllTransactions(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error getting user's TV transactions", zap.Error(err))
@@ -576,9 +558,10 @@ func (handler *HttpHandler) GetTvSubscriptions(w http.ResponseWriter, r *http.Re
 }
 
 func (handler *HttpHandler) GetTvSubDetails(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	id := chi.URLParam(r, "id")
 
-	res, err := handler.tvClient.GetTransactionDetails(id)
+	res, err := handler.tvClient.GetTransactionDetails(ctx, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Failed to get TV subscription details", zap.String("id", id), zap.Error(err))
@@ -601,6 +584,7 @@ func (handler *HttpHandler) GetTvSubDetails(w http.ResponseWriter, r *http.Reque
 }
 
 func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
@@ -626,7 +610,7 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 		}
 		data.FullName = userDetails.Username
 
-		_, bal, _, err := handler.getBalance(userDetails.ID)
+		_, bal, _, err := handler.getBalance(ctx, userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to get balance", zap.Error(err))
@@ -664,7 +648,7 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		electricDetails, err := handler.productClient.GetElectricDetails(data.DiscoType)
+		electricDetails, err := handler.productClient.GetElectricDetails(ctx, data.DiscoType)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to get electric details", zap.Error(err))
@@ -683,13 +667,13 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 
 		data.Profit_Margin = amount.Sub(discounted_amount).StringFixed(2)
 
-		txnID, err := handler.placeRedisHoldAndMeta(w, id, data.Amount, bal)
+		txnID, err := handler.placeRedisHoldAndMeta(ctx, w, id, data.Amount, bal)
 		if err != nil {
 			return
 		}
 
 		data.UserID = userDetails.ID
-		res, err := handler.electClient.PayBill(data)
+		res, err := handler.electClient.PayBill(ctx, data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to buy Electricity subscription", zap.Error(err))
@@ -706,12 +690,12 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 		switch res.Status {
 		case "success":
 			// confirm the hold in Redis (finalize funds)
-			if ok, err := handler.redisClient.ConfirmHold(userDetails.ID, txnID); err != nil || !ok {
+			if ok, err := handler.redisClient.ConfirmHold(ctx, userDetails.ID, txnID); err != nil || !ok {
 				handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
 
 			}
 
-			if err := handler.updateBalance(id, newBal); err != nil {
+			if err := handler.updateBalance(ctx, id, newBal); err != nil {
 				if err == ErrorRedisBalanceUpdate {
 					// Log and continue
 					handler.logger.Warn("Balance update failed in Redis", zap.Error(err))
@@ -729,7 +713,7 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 
 			pointsEarned := 2
 
-			if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
+			if err := handler.addPoints(ctx, w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 			}
 
@@ -753,7 +737,7 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 		case "failed":
 
 			// release the hold in Redis
-			if ok, err := handler.redisClient.ReleaseHold(userDetails.ID, txnID); err != nil || !ok {
+			if ok, err := handler.redisClient.ReleaseHold(ctx, userDetails.ID, txnID); err != nil || !ok {
 				handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
 			}
 			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
@@ -772,7 +756,7 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.electClient.GetUserTransactions(userDetails.Username)
+		res, err := handler.electClient.GetUserTransactions(ctx, userDetails.Username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to get user's electric bill transactions", zap.Error(err))
@@ -796,7 +780,8 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 }
 
 func (handler *HttpHandler) GetElectricBills(w http.ResponseWriter, r *http.Request) {
-	resp, err := handler.electClient.GetAllTransactions()
+	ctx := r.Context()
+	resp, err := handler.electClient.GetAllTransactions(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error getting user's electric bill transactions", zap.Error(err))
@@ -819,9 +804,10 @@ func (handler *HttpHandler) GetElectricBills(w http.ResponseWriter, r *http.Requ
 }
 
 func (handler *HttpHandler) GetElectricBillDetails(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	id := chi.URLParam(r, "id")
 
-	res, err := handler.electClient.GetTransactionDetails(id)
+	res, err := handler.electClient.GetTransactionDetails(ctx, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Failed to get electric bill transaction details", zap.String("id", id), zap.Error(err))
@@ -844,6 +830,7 @@ func (handler *HttpHandler) GetElectricBillDetails(w http.ResponseWriter, r *htt
 }
 
 func (handler *HttpHandler) TvSubHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	// Extract the product type from the URL path
 	product := chi.URLParam(r, "product")
 
@@ -872,7 +859,7 @@ func (handler *HttpHandler) TvSubHandler(w http.ResponseWriter, r *http.Request)
 	case "POST":
 		handler.handleCreateTVSub(w, r, product)
 	case "GET":
-		handler.handleGetTVSubs(w, product)
+		handler.handleGetTVSubs(ctx, w, product)
 	case "PATCH":
 		handler.handleUpdateTVSub(w, r, product)
 	case "DELETE":
@@ -888,10 +875,13 @@ func (handler *HttpHandler) TvSubHandler(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (handler *HttpHandler) addevent(usedID string, amt string, txnID string, eventType string) {
+func (handler *HttpHandler) addevent(ctx context.Context, usedID string, amt string, txnID string, eventType string) {
 	if handler.processor != nil {
+		if ctx == nil {
+			ctx = context.Background()
+		}
 		go func(uID string, amt string, txID string, eType string) {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
 			ev := &events.Event{
 				Type:      eType,
@@ -909,6 +899,7 @@ func (handler *HttpHandler) addevent(usedID string, amt string, txnID string, ev
 }
 
 func (handler *HttpHandler) handleCreateTVSub(w http.ResponseWriter, r *http.Request, product string) {
+	ctx := r.Context()
 	data := models.TVSub{}
 
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -947,7 +938,7 @@ func (handler *HttpHandler) handleCreateTVSub(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	ID, err := handler.productClient.CreateTVSub(product, data)
+	ID, err := handler.productClient.CreateTVSub(ctx, product, data)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error creating TV subscription", zap.Error(err))
@@ -970,8 +961,8 @@ func (handler *HttpHandler) handleCreateTVSub(w http.ResponseWriter, r *http.Req
 	json.NewEncoder(w).Encode(response)
 }
 
-func (handler *HttpHandler) handleGetTVSubs(w http.ResponseWriter, product string) {
-	res, err := handler.productClient.GetTVSubs(product)
+func (handler *HttpHandler) handleGetTVSubs(ctx context.Context, w http.ResponseWriter, product string) {
+	res, err := handler.productClient.GetTVSubs(ctx, product)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error fetching TV subscriptions", zap.Error(err))
@@ -994,6 +985,7 @@ func (handler *HttpHandler) handleGetTVSubs(w http.ResponseWriter, product strin
 }
 
 func (handler *HttpHandler) handleUpdateTVSub(w http.ResponseWriter, r *http.Request, product string) {
+	ctx := r.Context()
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -1032,7 +1024,7 @@ func (handler *HttpHandler) handleUpdateTVSub(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	err := handler.productClient.UpdateTVSub(product, subID, data)
+	err := handler.productClient.UpdateTVSub(ctx, product, subID, data)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error updating TV subscription", zap.Error(err))
@@ -1055,6 +1047,7 @@ func (handler *HttpHandler) handleUpdateTVSub(w http.ResponseWriter, r *http.Req
 }
 
 func (handler *HttpHandler) handleDeleteTVSub(w http.ResponseWriter, r *http.Request, product string) {
+	ctx := r.Context()
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -1080,7 +1073,7 @@ func (handler *HttpHandler) handleDeleteTVSub(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	err := handler.productClient.DeleteTVSub(product, subID)
+	err := handler.productClient.DeleteTVSub(ctx, product, subID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error deleting TV subscription", zap.Error(err))
@@ -1103,6 +1096,7 @@ func (handler *HttpHandler) handleDeleteTVSub(w http.ResponseWriter, r *http.Req
 }
 
 func (handler *HttpHandler) VerifyBill(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	data := struct {
 		DiscoType        string `json:"disco_type"`
 		Meter_No         string `json:"meter_no"`
@@ -1153,7 +1147,7 @@ func (handler *HttpHandler) VerifyBill(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Call your electricity verification function here
-		result, err := handler.electClient.VerifyMeterNo(data.DiscoType, data.Meter_No, data.Meter_Type)
+		result, err := handler.electClient.VerifyMeterNo(ctx, data.DiscoType, data.Meter_No, data.Meter_Type)
 		if err != nil {
 			handler.logger.Error("electricity bill verification failed", zap.Error(err))
 			w.WriteHeader(http.StatusBadRequest)
@@ -1192,7 +1186,7 @@ func (handler *HttpHandler) VerifyBill(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Call your decoder verification function here
-		result, err := handler.tvClient.VerifyCard(data.DecoderType, data.SmartCard_Number)
+		result, err := handler.tvClient.VerifyCard(ctx, data.DecoderType, data.SmartCard_Number)
 		if err != nil {
 			handler.logger.Error("decoder verification failed", zap.Error(err))
 			w.WriteHeader(http.StatusBadRequest)
@@ -1227,6 +1221,7 @@ func (handler *HttpHandler) VerifyBill(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *HttpHandler) EduProduct(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	switch r.Method {
 	case "PATCH":
@@ -1263,7 +1258,7 @@ func (handler *HttpHandler) EduProduct(w http.ResponseWriter, r *http.Request) {
 			Amount: data.Amount,
 		}
 
-		err := handler.productClient.UpdateRecord(data.ID, record)
+		err := handler.productClient.UpdateRecord(ctx, data.ID, record)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to update EduProduct", zap.Error(err))
@@ -1300,7 +1295,7 @@ func (handler *HttpHandler) EduProduct(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		res, err := handler.productClient.GetEduRecord(productID)
+		res, err := handler.productClient.GetEduRecord(ctx, productID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to fetch EduProduct by ID", zap.Int("productID", productID), zap.Error(err))
@@ -1349,7 +1344,7 @@ func (handler *HttpHandler) EduProduct(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		err = handler.productClient.DeleteRecord(productID)
+		err = handler.productClient.DeleteRecord(ctx, productID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to delete EduProduct", zap.Int("productID", productID), zap.Error(err))

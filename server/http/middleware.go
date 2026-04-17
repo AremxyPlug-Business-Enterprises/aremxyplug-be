@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -27,7 +26,7 @@ func RateLimitMiddleware(cfg RateLimitConfig) func(next http.Handler) http.Handl
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-			ctx := context.Background()
+			ctx := r.Context()
 
 			// ============================
 			// 1. GET Client IP

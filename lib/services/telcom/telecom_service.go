@@ -1,20 +1,22 @@
 package telecom
 
 import (
+	"context"
+
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/sqlstore"
 	"go.uber.org/zap"
 )
 
 type TelecomProducts interface {
-	GetProducts(id int) ([]models.Product, error)
-	CreatePlan(plan models.Plan) (int, error)
-	UpdatePlan(id int, data models.PlanUpdate) error
-	DeletePlan(id int) error
-	GetPlans(id int) ([]models.Plan, error)
-	GetPlanByID(planID int) (*models.Plan, error)
-	GetAirtimeProduct(network string) (models.AirtimeProduct, error)
-	GetEduRecord(id int) (models.EduRecord, error)
+	GetProducts(ctx context.Context, id int) ([]models.Product, error)
+	CreatePlan(ctx context.Context, plan models.Plan) (int, error)
+	UpdatePlan(ctx context.Context, id int, data models.PlanUpdate) error
+	DeletePlan(ctx context.Context, id int) error
+	GetPlans(ctx context.Context, id int) ([]models.Plan, error)
+	GetPlanByID(ctx context.Context, planID int) (*models.Plan, error)
+	GetAirtimeProduct(ctx context.Context, network string) (models.AirtimeProduct, error)
+	GetEduRecord(ctx context.Context, id int) (models.EduRecord, error)
 }
 
 type TelecomServiceImpl struct {
@@ -29,9 +31,9 @@ func NewTelecomService(store *sqlstore.SqlStore, logger *zap.Logger) TelecomProd
 	}
 }
 
-func (s *TelecomServiceImpl) GetProducts(id int) ([]models.Product, error) {
+func (s *TelecomServiceImpl) GetProducts(ctx context.Context, id int) ([]models.Product, error) {
 	s.logger.Info("Fetching products")
-	products, err := s.store.GetProducts(id)
+	products, err := s.store.GetProductsWithContext(ctx, id)
 	if err != nil {
 		s.logger.Error("Error fetching products", zap.Error(err))
 		return nil, err
@@ -40,9 +42,9 @@ func (s *TelecomServiceImpl) GetProducts(id int) ([]models.Product, error) {
 	return products, nil
 }
 
-func (s *TelecomServiceImpl) CreatePlan(plan models.Plan) (int, error) {
+func (s *TelecomServiceImpl) CreatePlan(ctx context.Context, plan models.Plan) (int, error) {
 	s.logger.Info("Creating plan")
-	id, err := s.store.CreatePlan(plan)
+	id, err := s.store.CreatePlanWithContext(ctx, plan)
 	if err != nil {
 		s.logger.Error("Error creating plan", zap.Error(err))
 		return 0, err
@@ -51,9 +53,9 @@ func (s *TelecomServiceImpl) CreatePlan(plan models.Plan) (int, error) {
 	return id, nil
 }
 
-func (s *TelecomServiceImpl) UpdatePlan(id int, data models.PlanUpdate) error {
+func (s *TelecomServiceImpl) UpdatePlan(ctx context.Context, id int, data models.PlanUpdate) error {
 	s.logger.Info("Updating plan", zap.Int("id", id))
-	err := s.store.UpdatePlan(id, data)
+	err := s.store.UpdatePlanWithContext(ctx, id, data)
 	if err != nil {
 		s.logger.Error("Error updating plan", zap.Error(err))
 		return err
@@ -62,9 +64,9 @@ func (s *TelecomServiceImpl) UpdatePlan(id int, data models.PlanUpdate) error {
 	return nil
 }
 
-func (s *TelecomServiceImpl) DeletePlan(id int) error {
+func (s *TelecomServiceImpl) DeletePlan(ctx context.Context, id int) error {
 	s.logger.Info("Deleting plan", zap.Int("id", id))
-	err := s.store.DeletePlan(id)
+	err := s.store.DeletePlanWithContext(ctx, id)
 	if err != nil {
 		s.logger.Error("Error deleting plan", zap.Error(err))
 		return err
@@ -73,9 +75,9 @@ func (s *TelecomServiceImpl) DeletePlan(id int) error {
 	return nil
 }
 
-func (s *TelecomServiceImpl) GetPlans(id int) ([]models.Plan, error) {
+func (s *TelecomServiceImpl) GetPlans(ctx context.Context, id int) ([]models.Plan, error) {
 	s.logger.Info("Fetching plans")
-	plans, err := s.store.GetPlansByProductID(id)
+	plans, err := s.store.GetPlansByProductIDWithContext(ctx, id)
 	if err != nil {
 		s.logger.Error("Error fetching plans", zap.Error(err))
 		return nil, err
@@ -84,9 +86,9 @@ func (s *TelecomServiceImpl) GetPlans(id int) ([]models.Plan, error) {
 	return plans, nil
 }
 
-func (s *TelecomServiceImpl) GetPlanByID(planID int) (*models.Plan, error) {
+func (s *TelecomServiceImpl) GetPlanByID(ctx context.Context, planID int) (*models.Plan, error) {
 	s.logger.Info("Fetching plan by ID", zap.Int("id", planID))
-	plan, err := s.store.GetPlanByID(planID)
+	plan, err := s.store.GetPlanByIDWithContext(ctx, planID)
 	if err != nil {
 		s.logger.Error("Error fetching plan by ID", zap.Error(err))
 		return nil, err
@@ -95,9 +97,9 @@ func (s *TelecomServiceImpl) GetPlanByID(planID int) (*models.Plan, error) {
 	return plan, nil
 }
 
-func (s *TelecomServiceImpl) GetAirtimeProduct(network string) (models.AirtimeProduct, error) {
+func (s *TelecomServiceImpl) GetAirtimeProduct(ctx context.Context, network string) (models.AirtimeProduct, error) {
 	s.logger.Info("Fetching airtime product", zap.String("network", network))
-	airtimeProduct, err := s.store.GetAirtimeProduct(network)
+	airtimeProduct, err := s.store.GetAirtimeProduct(ctx, network)
 	if err != nil {
 		s.logger.Error("Error fetching airtime product", zap.Error(err))
 		return models.AirtimeProduct{}, err
@@ -106,9 +108,9 @@ func (s *TelecomServiceImpl) GetAirtimeProduct(network string) (models.AirtimePr
 	return airtimeProduct, nil
 }
 
-func (s *TelecomServiceImpl) GetEduRecord(id int) (models.EduRecord, error) {
+func (s *TelecomServiceImpl) GetEduRecord(ctx context.Context, id int) (models.EduRecord, error) {
 	s.logger.Info("Fetching records")
-	record, err := s.store.GetEduRecord(id)
+	record, err := s.store.GetEduRecord(ctx, id)
 	if err != nil {
 		s.logger.Error("Error fetching records", zap.Error(err))
 		return models.EduRecord{}, err

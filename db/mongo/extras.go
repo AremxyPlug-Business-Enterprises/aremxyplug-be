@@ -27,9 +27,9 @@ var (
 	referralColl         = "referrals"
 )
 
-func (m *mongoStore) updateReferralCount(referrersCode string) error {
+func (m *mongoStore) updateReferralCount(ctx context.Context, referrersCode string) error {
 	// TODO: using the referral code as the filter, update the count field on the user document
-	ctx := context.Background()
+	ctx = m.ensureCtx(ctx)
 
 	filter := bson.D{primitive.E{Key: "id", Value: referrersCode}}
 	updateFilter := bson.D{
@@ -49,8 +49,8 @@ func (m *mongoStore) updateReferralCount(referrersCode string) error {
 	return nil
 }
 
-func (m *mongoStore) CreateUserReferral(newUserID, referralCode string) error {
-	ctx := context.Background()
+func (m *mongoStore) CreateUserReferral(ctx context.Context, newUserID, referralCode string) error {
+	ctx = m.ensureCtx(ctx)
 
 	referral := models.Referral{
 		UserID:     newUserID,
@@ -68,7 +68,7 @@ func (m *mongoStore) CreateUserReferral(newUserID, referralCode string) error {
 			referral.ReferrerID = referrer.ID
 
 			// Update referrer's referral count
-			if err := m.updateReferralCount(referrer.ID); err != nil {
+			if err := m.updateReferralCount(ctx, referrer.ID); err != nil {
 				m.logger.Error("failed to update referrer count", zap.Error(err))
 				if err == ErrMatchedCount {
 					m.logger.Error("no matched document", zap.Error(err))
@@ -86,8 +86,8 @@ func (m *mongoStore) CreateUserReferral(newUserID, referralCode string) error {
 	return nil
 }
 
-func (m *mongoStore) GetReferredUsers(referrerID string) ([]models.ReferredUserInfo, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetReferredUsers(ctx context.Context, referrerID string) ([]models.ReferredUserInfo, error) {
+	ctx = m.ensureCtx(ctx)
 
 	pipeline := mongo.Pipeline{
 		// Match referrals where this user is the referrer
@@ -132,8 +132,8 @@ func (m *mongoStore) GetReferredUsers(referrerID string) ([]models.ReferredUserI
 	return results, nil
 }
 
-func (m *mongoStore) GetPoint(userID string) (models.PointSummary, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetPoint(ctx context.Context, userID string) (models.PointSummary, error) {
+	ctx = m.ensureCtx(ctx)
 	var summary models.PointSummary
 
 	// 1. Get total point balance from pointColl
@@ -194,9 +194,9 @@ func (m *mongoStore) GetPoint(userID string) (models.PointSummary, error) {
 	return summary, nil
 }
 
-func (m *mongoStore) CreatePointDoc(userID string) error {
+func (m *mongoStore) CreatePointDoc(ctx context.Context, userID string) error {
 	// TODO: Create a document on the collection points for the user on signUp
-	ctx := context.Background()
+	ctx = m.ensureCtx(ctx)
 
 	point := models.Points{
 		UserID:    userID,
@@ -212,8 +212,8 @@ func (m *mongoStore) CreatePointDoc(userID string) error {
 	return nil
 }
 
-func (m *mongoStore) LogPointTransaction(transaction models.PointTransaction) error {
-	ctx := context.Background()
+func (m *mongoStore) LogPointTransaction(ctx context.Context, transaction models.PointTransaction) error {
+	ctx = m.ensureCtx(ctx)
 
 	// Create a new point transaction document
 	transaction.CreatedAt = time.Now().UTC()
@@ -227,8 +227,8 @@ func (m *mongoStore) LogPointTransaction(transaction models.PointTransaction) er
 	return nil
 }
 
-func (m *mongoStore) GetPointTransactions(userID string, page int) ([]models.PointTransaction, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetPointTransactions(ctx context.Context, userID string, page int) ([]models.PointTransaction, error) {
+	ctx = m.ensureCtx(ctx)
 
 	// Set the page size and calculate the skip value
 	pageSize := 10
@@ -251,8 +251,8 @@ func (m *mongoStore) GetPointTransactions(userID string, page int) ([]models.Poi
 	return transactions, nil
 }
 
-func (m *mongoStore) GetPointRedeemDetails(orderID string) (models.PointRedeem, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetPointRedeemDetails(ctx context.Context, orderID string) (models.PointRedeem, error) {
+	ctx = m.ensureCtx(ctx)
 	var redeem models.PointRedeem
 	oID, err := strconv.Atoi(orderID)
 	if err != nil {
@@ -273,8 +273,8 @@ func (m *mongoStore) GetPointRedeemDetails(orderID string) (models.PointRedeem, 
 	return redeem, nil
 }
 
-func (m *mongoStore) GetTotalPointsRedeemed(userID string) (int, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetTotalPointsRedeemed(ctx context.Context, userID string) (int, error) {
+	ctx = m.ensureCtx(ctx)
 
 	// Aggregate sum of all points redeemed for this user
 	pipeline := mongo.Pipeline{
@@ -311,8 +311,8 @@ func (m *mongoStore) GetTotalPointsRedeemed(userID string) (int, error) {
 	return totalRedeemed, nil
 }
 
-func (m *mongoStore) RedeemPoints(userID string, pointsToRedeem int, redeemRate int) (amountRedeemed int, e error) {
-	ctx := context.Background()
+func (m *mongoStore) RedeemPoints(ctx context.Context, userID string, pointsToRedeem int, redeemRate int) (amountRedeemed int, e error) {
+	ctx = m.ensureCtx(ctx)
 
 	filter := bson.M{"user_id": userID}
 	points := models.Points{}
@@ -356,8 +356,8 @@ func (m *mongoStore) RedeemPoints(userID string, pointsToRedeem int, redeemRate 
 	return amountRedeemed, nil
 }
 
-func (m *mongoStore) CreatePointRedeemDoc(redeem models.PointRedeem) error {
-	ctx := context.Background()
+func (m *mongoStore) CreatePointRedeemDoc(ctx context.Context, redeem models.PointRedeem) error {
+	ctx = m.ensureCtx(ctx)
 
 	// Create a new point redeem document
 	redeem.CreatedAt = time.Now().UTC()
@@ -372,9 +372,8 @@ func (m *mongoStore) CreatePointRedeemDoc(redeem models.PointRedeem) error {
 }
 
 // Update user's point balance after transaction
-func (m *mongoStore) UpdatePointAndTransactionTime(userID string, pointsEarned int) error {
-
-	ctx := context.Background()
+func (m *mongoStore) UpdatePointAndTransactionTime(ctx context.Context, userID string, pointsEarned int) error {
+	ctx = m.ensureCtx(ctx)
 	// Update Points Document
 	filter := bson.M{"user_id": userID}
 	update := bson.D{
@@ -399,9 +398,8 @@ func (m *mongoStore) UpdatePointAndTransactionTime(userID string, pointsEarned i
 	return nil
 }
 
-func (m *mongoStore) UpdatePointAfterVerify(userID string) error {
-
-	ctx := context.Background()
+func (m *mongoStore) UpdatePointAfterVerify(ctx context.Context, userID string) error {
+	ctx = m.ensureCtx(ctx)
 	session, err := m.mongoClient.StartSession()
 	if err != nil {
 		return fmt.Errorf("failed to start session: %v", err)

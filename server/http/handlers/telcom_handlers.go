@@ -19,6 +19,7 @@ import (
 
 // Airtime is use to carry out buying of airtime(POST) and returning all the transactions made by the user(GET)
 func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -87,7 +88,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			network = "9MOBILE"
 		}
 		// Get product details from database
-		airtimeProduct, err := handler.productClient.GetAirtimeProduct(network)
+		airtimeProduct, err := handler.productClient.GetAirtimeProduct(ctx, network)
 		if err != nil {
 			handler.logger.Error("Failed to get airtime product details", zap.String("network", network), zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -118,7 +119,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		profit_margin := airtimeProduct.Profit_Margin
 		profit := amt_decimal.Mul(decimal.NewFromFloat(profit_margin / 100.0)).StringFixed(2)
 
-		_, balance, _, err := handler.getBalance(id)
+		_, balance, _, err := handler.getBalance(ctx, id)
 		handler.logger.Info("fallback to DB for user balance", zap.String("userID", id), zap.Error(err))
 		if err != nil {
 			handler.logger.Error("Failed to retrieve user balance from DB", zap.Error(err))
@@ -151,7 +152,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		data.FullName = fullName
 		data.UserID = id
 
-		txnID, err := handler.placeRedisHoldAndMeta(w, id, discounted_amount, balance)
+		txnID, err := handler.placeRedisHoldAndMeta(ctx, w, id, discounted_amount, balance)
 		if err != nil {
 			return
 		}
@@ -159,10 +160,10 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		data.TXN = txnID
 		data.Profit_Margin = profit
 
-		res, err := handler.vtuClient.BuyAirtime(data)
+		res, err := handler.vtuClient.BuyAirtime(ctx, data)
 		if err != nil {
 			// Release hold on error
-			handler.redisClient.ReleaseHold(id, txnID)
+			handler.redisClient.ReleaseHold(ctx, id, txnID)
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to purchase airtime", zap.Error(err))
 			response := responseFormat.CustomResponse{
@@ -176,10 +177,10 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 
 		switch res.Status {
 		case "success":
-			if ok, err := handler.redisClient.ConfirmHold(id, txnID); err != nil || !ok {
+			if ok, err := handler.redisClient.ConfirmHold(ctx, id, txnID); err != nil || !ok {
 				handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
 			}
-			if err := handler.updateBalance(id, newBal); err != nil {
+			if err := handler.updateBalance(ctx, id, newBal); err != nil {
 				if err == ErrorRedisBalanceUpdate {
 					// Log and continue
 					handler.logger.Warn("Airtime balance update failed in Redis", zap.Error(err))
@@ -195,13 +196,13 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			pointsEarned := 2
-			if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
+			if err := handler.addPoints(ctx, w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 			}
 
 			// Emit utility.payment event
 			if handler.processor != nil {
-				handler.addevent(id, data.Amount, res.TransactionID, "airtime.purchase")
+				handler.addevent(ctx, id, data.Amount, res.TransactionID, "airtime.purchase")
 			}
 
 			w.WriteHeader(http.StatusOK)
@@ -221,7 +222,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case "failed":
-			if ok, err := handler.redisClient.ReleaseHold(id, txnID); err != nil {
+			if ok, err := handler.redisClient.ReleaseHold(ctx, id, txnID); err != nil {
 				handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
 			} else if !ok {
 				handler.logger.Warn("Failed to release hold in Redis: not found", zap.String("txnID", txnID))
@@ -240,7 +241,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.vtuClient.GetUserTransaction(id)
+		res, err := handler.vtuClient.GetUserTransaction(ctx, id)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to get user's airtime transactions", zap.String("user_id", id), zap.Error(err))
@@ -264,7 +265,8 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 
 // GetAirtimeTransactions return all the airtime transactions in the database, to be used by admin.
 func (handler *HttpHandler) GetAirtimeTransactions(w http.ResponseWriter, r *http.Request) {
-	resp, err := handler.vtuClient.GetAllTransactions()
+	ctx := r.Context()
+	resp, err := handler.vtuClient.GetAllTransactions(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Failed to get all airtime transactions", zap.Error(err))
@@ -287,9 +289,10 @@ func (handler *HttpHandler) GetAirtimeTransactions(w http.ResponseWriter, r *htt
 
 // GetAirtimeInfo returns the details of an airtime transaction.
 func (handler *HttpHandler) GetAirtimeInfo(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	id := chi.URLParam(r, "id")
 
-	res, err := handler.dataClient.GetTransactionDetail(id)
+	res, err := handler.dataClient.GetTransactionDetail(ctx, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Failed to get transaction detail", zap.String("transactionID", id), zap.Error(err))
@@ -311,6 +314,7 @@ func (handler *HttpHandler) GetAirtimeInfo(w http.ResponseWriter, r *http.Reques
 }
 
 func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
@@ -335,7 +339,7 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		if err := handler.vtuClient.SaveRecipient(userID, data); err != nil {
+		if err := handler.vtuClient.SaveRecipient(ctx, userID, data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("failed while saving recipient", zap.Error(err))
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -359,7 +363,7 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		if err := handler.vtuClient.UpdateRecipient(userID, data); err != nil {
+		if err := handler.vtuClient.UpdateRecipient(ctx, userID, data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("failed while updating recipient", zap.Error(err))
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -373,7 +377,7 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 	}
 
 	if r.Method == "GET" {
-		recipients, err := handler.vtuClient.GetRecipients(userID)
+		recipients, err := handler.vtuClient.GetRecipients(ctx, userID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("failed to get recipients", zap.Error(err))
@@ -400,7 +404,7 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		if err := handler.vtuClient.DeleteRecipient(recipient.ID, userID); err != nil {
+		if err := handler.vtuClient.DeleteRecipient(ctx, recipient.ID, userID); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("failed to delete recipient", zap.Error(err))
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -417,6 +421,7 @@ func (handler *HttpHandler) TelcomRecipient(w http.ResponseWriter, r *http.Reque
 
 // Data send a call to the API to buy data(POST) or return users transaction history(GET)
 func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
@@ -447,7 +452,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, userBalance, _, err := handler.getBalance(userDetails.ID)
+		_, userBalance, _, err := handler.getBalance(ctx, userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Failed to retrieve user balance", zap.Error(err))
@@ -460,7 +465,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		plan, err := handler.productClient.GetPlanByID(data.Plan)
+		plan, err := handler.productClient.GetPlanByID(ctx, data.Plan)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to get plan amount", zap.Error(err))
@@ -496,12 +501,12 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		data.Validity = plan.Validity
 		data.Profit_Margin = decimal.NewFromFloat(plan.ProfitMargin).StringFixed(2)
 
-		txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, data.Amount, userBalance)
+		txnID, err := handler.placeRedisHoldAndMeta(ctx, w, userDetails.ID, data.Amount, userBalance)
 		if err != nil {
 			return
 		}
 
-		res, err := handler.dataClient.BuyData(data)
+		res, err := handler.dataClient.BuyData(ctx, data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to purchase data", zap.Error(err))
@@ -517,12 +522,12 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		switch res.Status {
 		case "success":
 			// confirm the hold in Redis (finalize funds)
-			if ok, err := handler.redisClient.ConfirmHold(userDetails.ID, txnID); err != nil || !ok {
+			if ok, err := handler.redisClient.ConfirmHold(ctx, userDetails.ID, txnID); err != nil || !ok {
 				handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
 
 			}
 
-			if err := handler.updateBalance(id, newBal); err != nil {
+			if err := handler.updateBalance(ctx, id, newBal); err != nil {
 				if err == ErrorRedisBalanceUpdate {
 					// Log and continue
 					handler.logger.Warn("Data balance update failed in Redis", zap.Error(err))
@@ -540,13 +545,13 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 
 			pointsEarned := 2
 
-			if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
+			if err := handler.addPoints(ctx, w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 			}
 
 			// Emit utility.payment event
 			if handler.processor != nil {
-				handler.addevent(id, data.Amount, res.TransactionID, "data.purchase")
+				handler.addevent(ctx, id, data.Amount, res.TransactionID, "data.purchase")
 			}
 
 			w.WriteHeader(http.StatusOK)
@@ -568,7 +573,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 		case "failed":
 
 			// release the hold in Redis
-			if ok, err := handler.redisClient.ReleaseHold(userDetails.ID, txnID); err != nil || !ok {
+			if ok, err := handler.redisClient.ReleaseHold(ctx, userDetails.ID, txnID); err != nil || !ok {
 				handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
 			}
 			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": res}}
@@ -586,7 +591,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.dataClient.GetUserTransactions(id)
+		res, err := handler.dataClient.GetUserTransactions(ctx, id)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to get user's data transactions", zap.String("user_id", id), zap.Error(err))
@@ -611,10 +616,11 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 
 // GetDataInfo checks and returns the details of a given transaction.
 func (handler *HttpHandler) GetDataInfo(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	id := chi.URLParam(r, "id")
 
-	res, err := handler.dataClient.GetTransactionDetail(id)
+	res, err := handler.dataClient.GetTransactionDetail(ctx, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Failed to get transaction detail", zap.String("transactionID", id), zap.Error(err))
@@ -637,7 +643,8 @@ func (handler *HttpHandler) GetDataInfo(w http.ResponseWriter, r *http.Request) 
 
 // GetTransactions returns the list of transaction carried out in the server. It is for admins to view all transactions.
 func (handler *HttpHandler) GetDataTransactions(w http.ResponseWriter, r *http.Request) {
-	resp, err := handler.dataClient.GetAllTransactions()
+	ctx := r.Context()
+	resp, err := handler.dataClient.GetAllTransactions(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Failed to get all transactions", zap.Error(err))
@@ -660,6 +667,7 @@ func (handler *HttpHandler) GetDataTransactions(w http.ResponseWriter, r *http.R
 }
 
 func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -689,7 +697,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		_, userBalance, _, err := handler.getBalance(userDetails.ID)
+		_, userBalance, _, err := handler.getBalance(ctx, userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Failed to retrieve user balance", zap.Error(err))
@@ -716,7 +724,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 		}
 
 		data.UserID = id
-		res, err := handler.dataClient.BuySpecData(data)
+		res, err := handler.dataClient.BuySpecData(ctx, data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to purchase Spectranet data", zap.Error(err))
@@ -729,7 +737,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		if err := handler.updateBalance(id, newBal); err != nil {
+		if err := handler.updateBalance(ctx, id, newBal); err != nil {
 			if err == ErrorRedisBalanceUpdate {
 				// Log and continue
 				handler.logger.Warn("Balance update failed in Redis", zap.Error(err))
@@ -747,7 +755,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 
 		pointsEarned := 2
 
-		if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
+		if err := handler.addPoints(ctx, w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
@@ -761,7 +769,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.dataClient.GetSpecUserTransactions(username)
+		res, err := handler.dataClient.GetSpecUserTransactions(ctx, username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to get user's Spectranet transactions", zap.Error(err))
@@ -785,10 +793,11 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 }
 
 func (handler *HttpHandler) GetSpecDataDetails(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	id := chi.URLParam(r, "id")
 
-	res, err := handler.dataClient.GetSpecTransDetails(id)
+	res, err := handler.dataClient.GetSpecTransDetails(ctx, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Failed to get Spectranet transaction details", zap.String("transactionID", id), zap.Error(err))
@@ -811,7 +820,8 @@ func (handler *HttpHandler) GetSpecDataDetails(w http.ResponseWriter, r *http.Re
 
 // To be used by admin
 func (handler *HttpHandler) GetSpectranetTransactions(w http.ResponseWriter, r *http.Request) {
-	resp, err := handler.dataClient.GetAllSpecTransactions()
+	ctx := r.Context()
+	resp, err := handler.dataClient.GetAllSpecTransactions(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Failed to get Spectranet transactions", zap.Error(err))
@@ -833,6 +843,7 @@ func (handler *HttpHandler) GetSpectranetTransactions(w http.ResponseWriter, r *
 }
 
 func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	userDetails, err := handler.GetUserDetails(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -889,7 +900,7 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 		// }
 
 		data.UserID = userDetails.ID
-		res, err := handler.dataClient.BuySmileData(data)
+		res, err := handler.dataClient.BuySmileData(ctx, data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to purchase Smile data", zap.Error(err))
@@ -916,7 +927,7 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 
 		pointsEarned := 2
 
-		if err := handler.addPoints(w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
+		if err := handler.addPoints(ctx, w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
@@ -930,7 +941,7 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		res, err := handler.dataClient.GetSmileUserTransactions(username)
+		res, err := handler.dataClient.GetSmileUserTransactions(ctx, username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to get user's Smile transactions", zap.Error(err))
@@ -954,11 +965,12 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *HttpHandler) GetSmileDataDetails(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	//id := r.URL.Query().Get("id")
 	id := chi.URLParam(r, "id")
 
-	res, err := handler.dataClient.GetSmileTransDetails(id)
+	res, err := handler.dataClient.GetSmileTransDetails(ctx, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Api response error", zap.Error(err))
@@ -971,8 +983,9 @@ func (handler *HttpHandler) GetSmileDataDetails(w http.ResponseWriter, r *http.R
 
 // To be used by admin
 func (handler *HttpHandler) GetSmileTransactions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
-	resp, err := handler.dataClient.GetAllSmileTransactions()
+	resp, err := handler.dataClient.GetAllSmileTransactions(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Error geeting user's transaction", zap.Error(err))
@@ -984,12 +997,13 @@ func (handler *HttpHandler) GetSmileTransactions(w http.ResponseWriter, r *http.
 }
 
 func (handler *HttpHandler) TelcomProducts(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	id := chi.URLParam(r, "networkID")
 
 	networkID, _ := strconv.Atoi(id)
 
-	products, err := handler.productClient.GetProducts(networkID)
+	products, err := handler.productClient.GetProducts(ctx, networkID)
 	if err != nil {
 		handler.logger.Error("Failed to retrieve products", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -1012,6 +1026,7 @@ func (handler *HttpHandler) TelcomProducts(w http.ResponseWriter, r *http.Reques
 }
 
 func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	if r.Method == "POST" {
 
@@ -1029,7 +1044,7 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		createdPlan, err := handler.productClient.CreatePlan(newPlan)
+		createdPlan, err := handler.productClient.CreatePlan(ctx, newPlan)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to create plan", zap.Error(err))
@@ -1058,7 +1073,7 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 
 		productID, _ := strconv.Atoi(id)
 
-		plans, err := handler.productClient.GetPlans(productID)
+		plans, err := handler.productClient.GetPlans(ctx, productID)
 		if err != nil {
 			handler.logger.Error("Failed to retrieve plans", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1099,7 +1114,7 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		if err := handler.productClient.UpdatePlan(planID, updatedPlan); err != nil {
+		if err := handler.productClient.UpdatePlan(ctx, planID, updatedPlan); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to update plan", zap.Error(err))
 			response := responseFormat.CustomResponse{
@@ -1140,7 +1155,7 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		if err := handler.productClient.DeletePlan(planID); err != nil {
+		if err := handler.productClient.DeletePlan(ctx, planID); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to delete plan", zap.Error(err))
 			response := responseFormat.CustomResponse{
@@ -1162,12 +1177,13 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 }
 
 func (handler *HttpHandler) AirtimeDiscount(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
 	network := chi.URLParam(r, "network")
 
 	network = strings.ToUpper(network)
 
-	prod, err := handler.productClient.GetAirtimeProduct(network)
+	prod, err := handler.productClient.GetAirtimeProduct(ctx, network)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Failed to retrieve airtime product", zap.String("network", network), zap.Error(err))
