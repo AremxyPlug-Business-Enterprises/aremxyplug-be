@@ -1,6 +1,7 @@
 package auth_pin
 
 import (
+	"context"
 	"errors"
 
 	"github.com/aremxyplug-be/db"
@@ -21,7 +22,7 @@ func NewPinConfig(logger *zap.Logger, store db.Extras) *PinConfig {
 	}
 }
 
-func (p *PinConfig) SavePin(pin models.UserPin) error {
+func (p *PinConfig) SavePin(ctx context.Context, pin models.UserPin) error {
 
 	hashedPin, err := generatePin(pin.Pin)
 	if err != nil {
@@ -29,7 +30,7 @@ func (p *PinConfig) SavePin(pin models.UserPin) error {
 	}
 
 	pin.Pin = hashedPin
-	if err := p.dbConn.SavePin(pin); err != nil {
+	if err := p.dbConn.SavePin(ctx, pin); err != nil {
 		return err
 	}
 
@@ -38,9 +39,9 @@ func (p *PinConfig) SavePin(pin models.UserPin) error {
 
 var ErrIncorrectPin = errors.New("incorrect pin")
 
-func (p *PinConfig) VerifyPin(userID, pin string) error {
+func (p *PinConfig) VerifyPin(ctx context.Context, userID, pin string) error {
 
-	hashpin, err := p.dbConn.GetPin(userID)
+	hashpin, err := p.dbConn.GetPin(ctx, userID)
 	if err != nil {
 		return err
 	}
@@ -52,7 +53,7 @@ func (p *PinConfig) VerifyPin(userID, pin string) error {
 	return nil
 }
 
-func (p *PinConfig) UpdatePin(userID string, newPin string) error {
+func (p *PinConfig) UpdatePin(ctx context.Context, userID string, newPin string) error {
 
 	hashpin, err := generatePin(newPin)
 	if err != nil {
@@ -64,7 +65,7 @@ func (p *PinConfig) UpdatePin(userID string, newPin string) error {
 		Pin:    hashpin,
 	}
 
-	if err := p.dbConn.UpdatePin(pin); err != nil {
+	if err := p.dbConn.UpdatePin(ctx, pin); err != nil {
 		return err
 	}
 

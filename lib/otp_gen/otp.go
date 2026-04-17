@@ -1,6 +1,7 @@
 package otpgen
 
 import (
+	"context"
 	"math/rand"
 	"time"
 
@@ -22,7 +23,10 @@ func NewOTP(store db.DataStore, logger *zap.Logger) *OTPConn {
 	}
 }
 
-func (o *OTPConn) GenerateOTP(email string) (string, error) {
+func (o *OTPConn) GenerateOTP(ctx context.Context, email string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	o.logger.Info("Generating OTP", zap.String("email", email))
 
 	key, err := totp.Generate(
@@ -45,7 +49,7 @@ func (o *OTPConn) GenerateOTP(email string) (string, error) {
 		Email:  email,
 	}
 
-	if err := o.dbconn.SaveOTP(data); err != nil {
+	if err := o.dbconn.SaveOTP(ctx, data); err != nil {
 		o.logger.Error("Failed to save OTP", zap.Error(err))
 		return "", err
 	}
@@ -63,10 +67,13 @@ func (o *OTPConn) GenerateOTP(email string) (string, error) {
 	return otp, nil
 }
 
-func (o *OTPConn) ValidateOTP(otp, email string) (bool, error) {
+func (o *OTPConn) ValidateOTP(ctx context.Context, otp, email string) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	o.logger.Info("Validating OTP", zap.String("email", email), zap.String("otp", otp))
 
-	data, err := o.dbconn.GetOTP(email)
+	data, err := o.dbconn.GetOTP(ctx, email)
 	if err != nil {
 		o.logger.Error("Failed to get OTP from database", zap.Error(err))
 		return false, err
@@ -92,7 +99,10 @@ func (o *OTPConn) ValidateOTP(otp, email string) (bool, error) {
 }
 
 // GenerateID generates a unique 8-digit ID
-func (o *OTPConn) GenerateID() (int, error) {
+func (o *OTPConn) GenerateID(ctx context.Context) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	o.logger.Info("Generating unique ID")
 
 	var id int
@@ -101,7 +111,7 @@ func (o *OTPConn) GenerateID() (int, error) {
 
 	for {
 		id = rand.Intn(90000000) + 10000000 // Generates a number between 10000000 and 99999999
-		unique, err = o.isIDUnique(id)
+		unique, err = o.isIDUnique(ctx, id)
 		if err != nil {
 			o.logger.Error("Failed to check ID uniqueness", zap.Error(err))
 			return 0, err
@@ -115,10 +125,13 @@ func (o *OTPConn) GenerateID() (int, error) {
 	return id, nil
 }
 
-func (o *OTPConn) isIDUnique(id int) (bool, error) {
+func (o *OTPConn) isIDUnique(ctx context.Context, id int) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	o.logger.Info("Checking ID uniqueness", zap.Int("id", id))
 
-	count, err := o.dbconn.CheckID(id)
+	count, err := o.dbconn.CheckID(ctx, id)
 	if err != nil {
 		o.logger.Error("Failed to check ID in database", zap.Error(err))
 		return false, err

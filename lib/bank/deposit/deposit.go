@@ -47,7 +47,10 @@ func NewDepositConfig(db db.DataStore, sqlStore *sqlstore.SqlStore, logger *zap.
 	}
 }
 
-func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, err error) {
+func (c *Config) Deposit(ctx context.Context, virtualaccountid string, userID string) (updated bool, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	// using the list payment endpoint.
 	url := fmt.Sprintf("%s/%s?%s=%s", api, "payments", "virtualNubanId", virtualaccountid)
 
@@ -56,7 +59,7 @@ func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, 
 		return false, ErrEmptyVirtualNuban
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		c.logger.Error("Deposit failed: unable to create new request", zap.Error(err))
 		return false, ErrNewRequestFailed
@@ -104,7 +107,7 @@ func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, 
 			ID:           data.ID,
 		}
 
-		if err := c.db.SaveDepositID(deposit); err != nil {
+		if err := c.db.SaveDepositID(ctx, deposit); err != nil {
 			if err == mongo.ErrDepositIDExist {
 				c.logger.Info("Deposit ID already exists, skipping", zap.String("depositID", data.ID))
 				continue
@@ -113,14 +116,14 @@ func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, 
 			return updatedAny, DBConnectionError(err)
 		}
 
-		bal, err := c.db.GetBalance(userID)
+		bal, err := c.db.GetBalance(ctx, userID)
 		if err != nil {
 			c.logger.Error("Deposit failed: unable to fetch balance", zap.Error(err))
 			return updatedAny, DBConnectionError(err)
 		}
 		c.logger.Debug("Fetched Balance", zap.Any("balance", bal))
 
-		charges, err := c.sqlStore.GetWalletCharges()
+		charges, err := c.sqlStore.GetWalletCharges(ctx)
 		if err != nil {
 			c.logger.Error("Deposit failed: unable to fetch wallet charges", zap.Error(err))
 			return updatedAny, DBConnectionError(err)
@@ -137,7 +140,7 @@ func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, 
 			UserID:       userID,
 			UpdatedAt:    time.Now().UTC(),
 		}
-		if err := c.db.SaveBalance(userID, userBalance); err != nil {
+		if err := c.db.SaveBalance(ctx, userID, userBalance); err != nil {
 			c.logger.Error("Deposit failed: unable to save user balance", zap.Error(err))
 			return updatedAny, DBConnectionError(err)
 		}
@@ -170,7 +173,7 @@ func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, 
 			ServiceCharge:          ServiceCharge,
 		}
 
-		if err := c.saveTransaction(result); err != nil {
+		if err := c.saveTransaction(ctx, result); err != nil {
 			c.logger.Error("Deposit failed: unable to save transaction", zap.Error(err))
 			return updatedAny, DBConnectionError(err)
 		}
@@ -188,7 +191,7 @@ func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, 
 			if c.processor != nil {
 				go func(uID string, amt string, txID string) {
 
-					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 					defer cancel()
 					ev := &events.Event{
 						Type:      "wallet.funded",
@@ -211,8 +214,11 @@ func (c *Config) Deposit(virtualaccountid string, userID string) (updated bool, 
 }
 
 // write to save transaction to the database
-func (c *Config) saveTransaction(detail models.DepositResponse) error {
-	err := c.db.SaveDeposit(detail)
+func (c *Config) saveTransaction(ctx context.Context, detail models.DepositResponse) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := c.db.SaveDeposit(ctx, detail)
 	if err != nil {
 		return err
 	}

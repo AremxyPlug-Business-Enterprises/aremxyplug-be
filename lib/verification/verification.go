@@ -1,14 +1,16 @@
 package verification
 
 import (
+	"context"
+
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/verification/bvn"
 	"github.com/aremxyplug-be/lib/verification/nin"
 )
 
 type VerificationClient interface {
-	VerifyBVN(bvn string, phone string, user models.User) (*bvn.BVNVerificationResult, error)
-	VerifyNIN(nin string, user models.User) (*nin.NINVerificationResult, error)
+	VerifyBVN(ctx context.Context, bvn string, phone string, user models.User) (*bvn.BVNVerificationResult, error)
+	VerifyNIN(ctx context.Context, nin string, user models.User) (*nin.NINVerificationResult, error)
 }
 
 type verificationClient struct {
@@ -23,10 +25,10 @@ func NewVerificationClient(bvnConfig *bvn.BvnConfig, ninConfig *nin.NINConfig) V
 	}
 }
 
-func (v *verificationClient) VerifyBVN(bvn string, phone string, user models.User) (*bvn.BVNVerificationResult, error) {
-	return v.bvnConfig.VerifyBVN(bvn, phone, user)
+func (v *verificationClient) VerifyBVN(ctx context.Context, bvn string, phone string, user models.User) (*bvn.BVNVerificationResult, error) {
+	return v.bvnConfig.VerifyBVN(ctx, bvn, phone, user)
 }
 
-func (v *verificationClient) VerifyNIN(nin string, user models.User) (*nin.NINVerificationResult, error) {
-	return v.ninConfig.VerifyNIN(nin, user)
+func (v *verificationClient) VerifyNIN(ctx context.Context, nin string, user models.User) (*nin.NINVerificationResult, error) {
+	return v.ninConfig.VerifyNIN(ctx, nin, user)
 }

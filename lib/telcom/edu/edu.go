@@ -2,6 +2,7 @@ package edu
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,12 +39,15 @@ func NewEdu(DbConn db.UtilitiesStore, logger *zap.Logger) *EduConn {
 	}
 }
 
-func (edu *EduConn) BuyEduPin(eduInfo EduInfo) (*models.EduResponse, error) {
+func (edu *EduConn) BuyEduPin(ctx context.Context, eduInfo EduInfo) (*models.EduResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	examType := eduInfo.Exam_Type
 	pinNumber := strconv.Itoa(eduInfo.Quantity)
 
-	resp, err := edu.buyPin(examType, pinNumber)
+	resp, err := edu.buyPin(ctx, examType, pinNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +154,7 @@ func (edu *EduConn) BuyEduPin(eduInfo EduInfo) (*models.EduResponse, error) {
 	log.Printf("%+v", result)
 
 	// write to database
-	if err := edu.saveTransaction(result); err != nil {
+	if err := edu.saveTransaction(ctx, result); err != nil {
 		edu.logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("database insert error")
 	}
@@ -159,9 +163,12 @@ func (edu *EduConn) BuyEduPin(eduInfo EduInfo) (*models.EduResponse, error) {
 
 }
 
-func (edu *EduConn) QueryTransaction(id string) (*models.EduResponse, error) {
+func (edu *EduConn) QueryTransaction(ctx context.Context, id string) (*models.EduResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	resp, err := edu.queryTransaction(id)
+	resp, err := edu.queryTransaction(ctx, id)
 	if err != nil {
 		// return and check error
 		return &models.EduResponse{}, err
@@ -176,10 +183,13 @@ func (edu *EduConn) QueryTransaction(id string) (*models.EduResponse, error) {
 
 }
 
-func (edu *EduConn) GetTransactionDetail(id string) (models.EduResponse, error) {
+func (edu *EduConn) GetTransactionDetail(ctx context.Context, id string) (models.EduResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	resp := models.EduResponse{}
-	result, err := edu.getTransactionDetails(id)
+	result, err := edu.getTransactionDetails(ctx, id)
 	if err != nil {
 		edu.logger.Error("Database error try again...", zap.Error(err))
 		return resp, errors.New("Database request error: " + err.Error())
@@ -188,8 +198,11 @@ func (edu *EduConn) GetTransactionDetail(id string) (models.EduResponse, error) 
 	return result, nil
 }
 
-func (edu *EduConn) GetAllTransaction(user string) ([]models.EduResponse, error) {
-	resp, err := edu.db.GetAllEduTransactions(user)
+func (edu *EduConn) GetAllTransaction(ctx context.Context, user string) ([]models.EduResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	resp, err := edu.db.GetAllEduTransactions(ctx, user)
 	if err != nil {
 		return nil, err
 	}
@@ -198,9 +211,12 @@ func (edu *EduConn) GetAllTransaction(user string) ([]models.EduResponse, error)
 
 }
 
-func (edu *EduConn) Ping() (*http.Response, error) {
+func (edu *EduConn) Ping(ctx context.Context) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	req, err := http.NewRequest("GET", api+"/wallet_balance.php", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", api+"/wallet_balance.php", nil)
 	req.Header.Set("cache-control", "no-cache")
 	req.Header.Set("Access-Control-Allow-Origin", "*")
 	req.Header.Set("AuthorizationToken", token)
@@ -224,7 +240,10 @@ func (edu *EduConn) Ping() (*http.Response, error) {
 	return res, nil
 }
 
-func (edu *EduConn) buyPin(examType string, pinNumber string) (*http.Response, error) {
+func (edu *EduConn) buyPin(ctx context.Context, examType string, pinNumber string) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	formdata := url.Values{
 		"no_of_pins": {pinNumber},
@@ -234,7 +253,7 @@ func (edu *EduConn) buyPin(examType string, pinNumber string) (*http.Response, e
 
 	url := fmt.Sprintf("%s/%s_v2.php", api, examType)
 
-	req, err := http.NewRequest("POST", url, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +270,10 @@ func (edu *EduConn) buyPin(examType string, pinNumber string) (*http.Response, e
 	return resp, nil
 }
 
-func (edu *EduConn) saveTransaction(detail *models.EduResponse) error {
+func (edu *EduConn) saveTransaction(ctx context.Context, detail *models.EduResponse) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	if edu == nil {
 		return errors.New("edu is nil")
@@ -265,7 +287,7 @@ func (edu *EduConn) saveTransaction(detail *models.EduResponse) error {
 
 	log.Println(detail)
 
-	err := edu.db.SaveEduTransaction(detail)
+	err := edu.db.SaveEduTransaction(ctx, detail)
 	if err != nil {
 		return err
 	}
@@ -273,12 +295,15 @@ func (edu *EduConn) saveTransaction(detail *models.EduResponse) error {
 	return nil
 }
 
-func (edu *EduConn) queryTransaction(id string) (*http.Response, error) {
+func (edu *EduConn) queryTransaction(ctx context.Context, id string) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	var buf bytes.Buffer
 	json.NewEncoder(&buf).Encode(&id)
 
-	req, err := http.NewRequest("POST", api+"query_transaction.php", &buf)
+	req, err := http.NewRequestWithContext(ctx, "POST", api+"query_transaction.php", &buf)
 	if err != nil {
 		return nil, err
 	}
@@ -294,9 +319,12 @@ func (edu *EduConn) queryTransaction(id string) (*http.Response, error) {
 	return resp, nil
 }
 
-func (edu *EduConn) getTransactionDetails(id string) (models.EduResponse, error) {
+func (edu *EduConn) getTransactionDetails(ctx context.Context, id string) (models.EduResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	res, err := edu.db.GetEduTransactionDetails(id)
+	res, err := edu.db.GetEduTransactionDetails(ctx, id)
 	if err != nil {
 		edu.logger.Error("Error getting details from database...", zap.Error(err))
 		return models.EduResponse{}, errors.New("database error")

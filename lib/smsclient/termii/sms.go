@@ -2,6 +2,7 @@ package termii
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,7 +34,10 @@ func NewSMSConn(store db.DataStore, logger *zap.Logger) *SMSConn {
 
 var ErrSMSFailed = errors.New("SMS sending failed")
 
-func (s *SMSConn) SendSMS(phoneNo string) error {
+func (s *SMSConn) SendSMS(ctx context.Context, phoneNo string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	s.logger.Info("Sending SMS", zap.String("phoneNo", phoneNo))
 
 	message_text := fmt.Sprintf("Your pin is < 123456 >, it expires in %d minutes", 5)
@@ -60,7 +64,7 @@ func (s *SMSConn) SendSMS(phoneNo string) error {
 
 	url := fmt.Sprintf("%s/send", baseUrl)
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		s.logger.Error("Failed to create new request", zap.Error(err))
 		return err
@@ -116,7 +120,7 @@ func (s *SMSConn) SendSMS(phoneNo string) error {
 		Phone: apiResponse.To,
 	}
 
-	if err := s.dbconn.SaveSMS(otpDetails); err != nil {
+	if err := s.dbconn.SaveSMS(ctx, otpDetails); err != nil {
 		s.logger.Error("Failed to save SMS OTP details", zap.Error(err))
 		return err
 	}
@@ -125,10 +129,13 @@ func (s *SMSConn) SendSMS(phoneNo string) error {
 	return nil
 }
 
-func (s *SMSConn) VerifyToken(otp, phone string) error {
+func (s *SMSConn) VerifyToken(ctx context.Context, otp, phone string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	s.logger.Info("Verifying token", zap.String("phone", phone), zap.String("otp", otp))
 
-	otpDetails, err := s.dbconn.GetSMS(phone)
+	otpDetails, err := s.dbconn.GetSMS(ctx, phone)
 	if err != nil {
 		s.logger.Error("Failed to get SMS OTP details", zap.Error(err))
 		return err
@@ -148,7 +155,7 @@ func (s *SMSConn) VerifyToken(otp, phone string) error {
 
 	url := fmt.Sprintf("%s/verify", baseUrl)
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		s.logger.Error("Failed to create new request", zap.Error(err))
 		return err

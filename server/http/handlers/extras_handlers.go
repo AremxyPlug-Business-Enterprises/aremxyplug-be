@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -52,8 +53,9 @@ func (handler *HttpHandler) Referral(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
-	referrals, err := handler.store.GetReferredUsers(user.ID)
+	referrals, err := handler.store.GetReferredUsers(ctx, user.ID)
 	if err != nil {
 		handler.logger.Error("Failed to get referred users", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -86,10 +88,11 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	if r.Method == "GET" {
 
-		points, err := handler.point.GetPoints(user.ID)
+		points, err := handler.point.GetPoints(ctx, user.ID)
 		if err != nil {
 			handler.logger.Error("Failed to get points", zap.Error(err))
 		}
@@ -114,7 +117,7 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		receipt, err := handler.point.RedeemPoints(user.ID, pointsToRedeem.Point)
+		receipt, err := handler.point.RedeemPoints(ctx, user.ID, pointsToRedeem.Point)
 		if err != nil {
 			handler.logger.Error("Failed to redeem points", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -124,7 +127,7 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 		}
 
 		handler.logger.Info("Processing point redeemed event", zap.String("user_id", user.ID), zap.Int("points_redeemed", pointsToRedeem.Point))
-		handler.addevent(user.ID, receipt.Amount_Redeemed, receipt.TransactionID, "points.redeemed")
+		handler.addevent(ctx, user.ID, receipt.Amount_Redeemed, receipt.TransactionID, "points.redeemed")
 
 		handler.logger.Info("Points redeemed successfully", zap.Any("receipt", receipt))
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": receipt}}
@@ -133,9 +136,9 @@ func (handler *HttpHandler) Points(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (handler *HttpHandler) addPoints(w http.ResponseWriter, userID string, points int, transactiontype string, originalTxnID string, source string) error {
+func (handler *HttpHandler) addPoints(ctx context.Context, w http.ResponseWriter, userID string, points int, transactiontype string, originalTxnID string, source string) error {
 
-	if err := handler.store.UpdatePointAndTransactionTime(userID, points); err != nil {
+	if err := handler.store.UpdatePointAndTransactionTime(ctx, userID, points); err != nil {
 		handler.logger.Error("Failed to update points", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -151,7 +154,7 @@ func (handler *HttpHandler) addPoints(w http.ResponseWriter, userID string, poin
 		Source:              source,
 	}
 
-	if err := handler.point.CreatePointTransaction(transaction); err != nil {
+	if err := handler.point.CreatePointTransaction(ctx, transaction); err != nil {
 		handler.logger.Error("Failed to create point transaction", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -174,6 +177,7 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := user.ID
+	ctx := r.Context()
 
 	if r.Method == "POST" {
 		type newPinInput struct {
@@ -204,7 +208,7 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := handler.pin.SavePin(pin); err != nil {
+		if err := handler.pin.SavePin(ctx, pin); err != nil {
 			handler.logger.Error("Failed to save pin", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -214,12 +218,12 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 
 		pointsEarned := 100
 
-		if err := handler.addPoints(w, id, pointsEarned, "Sign-Up Points", "", "referral"); err != nil {
+		if err := handler.addPoints(ctx, w, id, pointsEarned, "Sign-Up Points", "", "referral"); err != nil {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
 		if handler.processor != nil {
-			handler.addevent(user.ID, "", "", "signup.completed")
+			handler.addevent(ctx, user.ID, "", "", "signup.completed")
 		}
 
 		w.WriteHeader(http.StatusCreated)
@@ -247,7 +251,7 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		err := handler.pin.VerifyPin(user.ID, updatePin.OldPin)
+		err := handler.pin.VerifyPin(ctx, user.ID, updatePin.OldPin)
 		if err != nil {
 			if err == auth_pin.ErrIncorrectPin {
 				handler.logger.Warn("Incorrect pin", zap.String("user_id", user.ID))
@@ -258,7 +262,7 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := handler.pin.UpdatePin(user.ID, updatePin.NewPin); err != nil {
+		if err := handler.pin.UpdatePin(ctx, user.ID, updatePin.NewPin); err != nil {
 			handler.logger.Error("Failed to update pin", zap.Error(err))
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -281,6 +285,7 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	type userPin struct {
 		Pin string `json:"pin"`
@@ -303,17 +308,17 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 	attemptsTTL := 10 * time.Minute
 
 	// Check if blocked - FIXED: Properly check and return
-	if blockedUntil, err := handler.redisClient.Get(blockKey); err == nil && blockedUntil != nil {
+	if blockedUntil, err := handler.redisClient.Get(ctx, blockKey); err == nil && blockedUntil != nil {
 		msg := fmt.Sprintf("PIN blocked until %s", blockedUntil.(string))
 		handler.logger.Warn(msg, zap.String("user_id", user.ID))
 		writeError(w, http.StatusForbidden, msg)
 		return
 	}
 
-	err = handler.pin.VerifyPin(user.ID, pin.Pin)
+	err = handler.pin.VerifyPin(ctx, user.ID, pin.Pin)
 	if err != nil {
 		if err == auth_pin.ErrIncorrectPin {
-			attempts, incrErr := handler.redisClient.IncrWithTTL(attemptsKey, attemptsTTL)
+			attempts, incrErr := handler.redisClient.IncrWithTTL(ctx, attemptsKey, attemptsTTL)
 			if incrErr != nil {
 				handler.logger.Error("Failed to increment attempts", zap.Error(incrErr))
 				writeError(w, http.StatusInternalServerError, "internal server error")
@@ -322,10 +327,10 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 
 			if attempts >= int64(maxAttempts) {
 				unblockTime := time.Now().Add(blockDuration)
-				if err := handler.redisClient.SetWithTTL(blockKey, unblockTime.Format(time.RFC3339), blockDuration); err != nil {
+				if err := handler.redisClient.SetWithTTL(ctx, blockKey, unblockTime.Format(time.RFC3339), blockDuration); err != nil {
 					handler.logger.Error("Failed to set block key", zap.Error(err))
 				}
-				handler.redisClient.Del(attemptsKey)
+				handler.redisClient.Del(ctx, attemptsKey)
 
 				handler.logger.Warn("Too many incorrect PIN attempts - account blocked",
 					zap.String("user_id", user.ID),
@@ -350,7 +355,7 @@ func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	handler.redisClient.Del(attemptsKey)
+	handler.redisClient.Del(ctx, attemptsKey)
 
 	handler.logger.Info("PIN verified successfully", zap.String("user_id", user.ID))
 
@@ -383,6 +388,7 @@ func (handler *HttpHandler) ResetPin(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	type resetPinInput struct {
 		Pin string `json:"pin"`
@@ -398,7 +404,7 @@ func (handler *HttpHandler) ResetPin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := handler.pin.UpdatePin(user.ID, resetPin.Pin); err != nil {
+	if err := handler.pin.UpdatePin(ctx, user.ID, resetPin.Pin); err != nil {
 		handler.logger.Error("Failed to update pin", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "database error"}}
@@ -423,6 +429,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	type identityRequest struct {
 		BVN        string `json:"bvn,omitempty"`
@@ -507,7 +514,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 	}
 
 	if hasBVN {
-		result, err := handler.verifyClient.VerifyBVN(req.BVN, req.Phone, *user)
+		result, err := handler.verifyClient.VerifyBVN(ctx, req.BVN, req.Phone, *user)
 		if err != nil {
 			handler.logger.Error("Failed to verify BVN", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -551,7 +558,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 
 		user.BVN = encBVN
 		user.BVNPhone = req.Phone
-		if err := handler.store.UpdateBVNField(*user); err != nil {
+		if err := handler.store.UpdateBVNField(ctx, *user); err != nil {
 			handler.logger.Error("Failed to update BVN field", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -559,11 +566,11 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		if err := handler.store.UpdatePointAfterVerify(user.ID); err != nil {
+		if err := handler.store.UpdatePointAfterVerify(ctx, user.ID); err != nil {
 			handler.logger.Warn("Failed to update points after BVN verification", zap.Error(err))
 		}
 
-		if err := handler.store.UpdateUserAddress(user.ID, req.Gender, result.DOB, req.Address, req.PostalCode); err != nil {
+		if err := handler.store.UpdateUserAddress(ctx, user.ID, req.Gender, result.DOB, req.Address, req.PostalCode); err != nil {
 			handler.logger.Warn("Failed to update user address", zap.Error(err))
 		}
 
@@ -586,7 +593,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 	}
 
 	if hasNIN {
-		result, err := handler.verifyClient.VerifyNIN(req.NIN, *user)
+		result, err := handler.verifyClient.VerifyNIN(ctx, req.NIN, *user)
 		if err != nil {
 			handler.logger.Error("Failed to verify NIN", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
@@ -621,7 +628,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		}
 
 		user.NIN = encNIN
-		if err := handler.store.UpdateNINField(*user); err != nil {
+		if err := handler.store.UpdateNINField(ctx, *user); err != nil {
 			handler.logger.Error("Failed to update NIN field", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -629,11 +636,11 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		if err := handler.store.UpdatePointAfterVerify(user.ID); err != nil {
+		if err := handler.store.UpdatePointAfterVerify(ctx, user.ID); err != nil {
 			handler.logger.Warn("Failed to update points after NIN verification", zap.Error(err))
 		}
 
-		if err := handler.store.UpdateUserAddress(user.ID, req.Gender, result.Birthdate, req.Address, req.PostalCode); err != nil {
+		if err := handler.store.UpdateUserAddress(ctx, user.ID, req.Gender, result.Birthdate, req.Address, req.PostalCode); err != nil {
 			handler.logger.Warn("Failed to update user address", zap.Error(err))
 		}
 
@@ -669,9 +676,10 @@ func (handler *HttpHandler) GetTaskProgress(w http.ResponseWriter, r *http.Reque
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	// Fetch existing progress from Mongo
-	docs, err := handler.store.ListUserProgress(user.ID)
+	docs, err := handler.store.ListUserProgress(ctx, user.ID)
 	if err != nil {
 		handler.logger.Error("Failed to list user progress", zap.String("user_id", user.ID), zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)

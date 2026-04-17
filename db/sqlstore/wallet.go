@@ -8,8 +8,10 @@ import (
 	"github.com/aremxyplug-be/db/models"
 )
 
-func (s *SqlStore) GetWalletCharges() (models.WalletCharges, error) {
-	ctx := context.Background()
+func (s *SqlStore) GetWalletCharges(ctx context.Context) (models.WalletCharges, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	var charges models.WalletCharges
 	query := "SELECT api_charge, service_charge FROM wallet_charges LIMIT 1"

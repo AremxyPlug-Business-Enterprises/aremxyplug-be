@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -37,7 +38,9 @@ func (handler *HttpHandler) WebhookHandler(w http.ResponseWriter, r *http.Reques
 
 	// Process in background
 	go func(b []byte) {
-		if err := handler.ProcessWebhook(b); err != nil {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 60*time.Second)
+		defer cancel()
+		if err := handler.ProcessWebhook(ctx, b); err != nil {
 			handler.logger.Error("Failed to process webhook", zap.Error(err))
 		}
 	}(body)
@@ -66,7 +69,14 @@ type webhookPayload struct {
 	Relationships map[string]interface{} `json:"relationships"`
 }
 
-func (handler *HttpHandler) ProcessWebhook(body []byte) error {
+func (handler *HttpHandler) ProcessWebhookLegacy(body []byte) error {
+	return handler.ProcessWebhook(context.Background(), body)
+}
+
+func (handler *HttpHandler) ProcessWebhook(ctx context.Context, body []byte) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	// parse payload
 	var p webhookPayload
 	if err := json.Unmarshal(body, &p); err != nil {
@@ -77,11 +87,11 @@ func (handler *HttpHandler) ProcessWebhook(body []byte) error {
 	switch p.Type {
 	case "transfer.initiated", "transfer.success", "transfer.failed":
 		// existing transfer processing
-		return handler.processTransfer(p)
+		return handler.processTransfer(ctx, p)
 
 	case "payment.settled":
 		// new deposit processing
-		return handler.processDeposit(p)
+		return handler.processDeposit(ctx, p)
 
 	default:
 		handler.logger.Warn("unhandled webhook type", zap.String("type", p.Type))
@@ -90,7 +100,10 @@ func (handler *HttpHandler) ProcessWebhook(body []byte) error {
 	return nil
 }
 
-func (handler *HttpHandler) processTransfer(p webhookPayload) error {
+func (handler *HttpHandler) processTransfer(ctx context.Context, p webhookPayload) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	var apiRef string
 	if rel, ok := p.Relationships["transfer"]; ok {
@@ -120,7 +133,7 @@ func (handler *HttpHandler) processTransfer(p webhookPayload) error {
 
 	// Fast Redis lookup: transfer:ext:{apiRef} -> txID
 	var txID string
-	val, err := handler.redisClient.Get(fmt.Sprintf("transfer:ext:%s", apiRef))
+	val, err := handler.redisClient.Get(ctx, fmt.Sprintf("transfer:ext:%s", apiRef))
 	if err != nil {
 		handler.logger.Warn("redis lookup error for ext mapping", zap.Error(err), zap.String("apiRef", apiRef))
 	}
@@ -140,7 +153,7 @@ func (handler *HttpHandler) processTransfer(p webhookPayload) error {
 
 	// fallback DB lookup by external ref
 	if txID == "" {
-		rec, derr := handler.store.GetReceiptByExternalRef(apiRef)
+		rec, derr := handler.store.GetReceiptByExternalRef(ctx, apiRef)
 		if derr != nil {
 			// unknown external ref — already acked upstream; log and stop
 			handler.logger.Warn("unknown externalRef in webhook", zap.String("apiRef", apiRef))
@@ -150,7 +163,7 @@ func (handler *HttpHandler) processTransfer(p webhookPayload) error {
 	}
 
 	// load receipt by txID
-	rec, err := handler.store.GetReceiptByTxID(txID)
+	rec, err := handler.store.GetReceiptByTxID(ctx, txID)
 	if err != nil {
 		handler.logger.Error("store get receipt failed", zap.Error(err), zap.String("txID", txID))
 		return err
@@ -183,7 +196,7 @@ func (handler *HttpHandler) processTransfer(p webhookPayload) error {
 		UserID string `json:"user_id"`
 		Amount int64  `json:"amount"`
 	}
-	found, err := handler.redisClient.GetMeta(txID, &meta) // pass pointer
+	found, err := handler.redisClient.GetMeta(ctx, txID, &meta) // pass pointer
 	if err != nil {
 		// Redis error: log and fall back to receipt values
 		handler.logger.Warn("failed to read transfer meta from redis, falling back to receipt", zap.String("txID", txID), zap.Error(err))
@@ -223,7 +236,7 @@ func (handler *HttpHandler) processTransfer(p webhookPayload) error {
 	// Branch: failure OR reversed -> release hold and mark failed/reversed
 	if failureReason != "" || isReversed {
 		if meta.UserID != "" {
-			if released, err := handler.redisClient.ReleaseHold(meta.UserID, txID); err != nil {
+			if released, err := handler.redisClient.ReleaseHold(ctx, meta.UserID, txID); err != nil {
 				handler.logger.Error("release hold failed", zap.Error(err), zap.String("txID", txID))
 			} else if released {
 				handler.logger.Info("hold released", zap.String("txID", txID))
@@ -237,7 +250,7 @@ func (handler *HttpHandler) processTransfer(p webhookPayload) error {
 			finalStatus = "reversed"
 		}
 
-		if err := handler.store.UpdateReceiptFinal(txID, finalStatus, sessionID); err != nil {
+		if err := handler.store.UpdateReceiptFinal(ctx, txID, finalStatus, sessionID); err != nil {
 			handler.logger.Error("failed update receipt final", zap.Error(err), zap.String("txID", txID))
 			return err
 		}
@@ -253,7 +266,7 @@ func (handler *HttpHandler) processTransfer(p webhookPayload) error {
 
 	// Success path: confirm hold, persist balance snapshot to DB, mark success
 	if meta.UserID != "" {
-		if confirmed, err := handler.redisClient.ConfirmHold(meta.UserID, txID); err != nil {
+		if confirmed, err := handler.redisClient.ConfirmHold(ctx, meta.UserID, txID); err != nil {
 			handler.logger.Error("confirm hold failed", zap.Error(err), zap.String("txID", txID))
 		} else if confirmed {
 			handler.logger.Info("hold confirmed", zap.String("txID", txID))
@@ -261,18 +274,18 @@ func (handler *HttpHandler) processTransfer(p webhookPayload) error {
 			handler.logger.Info("no hold present to confirm", zap.String("txID", txID))
 		}
 
-		currentBal, _, _, err := handler.getBalance(meta.UserID)
+		currentBal, _, _, err := handler.getBalance(ctx, meta.UserID)
 		if err != nil {
 			handler.logger.Error("failed to get current balance for user", zap.Error(err), zap.String("userID", meta.UserID))
 		}
 
-		if err := handler.store.UpdateUserBalanceFromRedis(meta.UserID, currentBal); err != nil {
+		if err := handler.store.UpdateUserBalanceFromRedis(ctx, meta.UserID, currentBal); err != nil {
 			handler.logger.Error("failed to persist user balance to DB", zap.Error(err), zap.String("userID", meta.UserID))
 		}
 	}
 
 	// final update to receipt = success
-	if err := handler.store.UpdateReceiptFinal(txID, "success", sessionID); err != nil {
+	if err := handler.store.UpdateReceiptFinal(ctx, txID, "success", sessionID); err != nil {
 		handler.logger.Error("failed to update receipt final", zap.Error(err), zap.String("txID", txID))
 		return err
 	}
@@ -281,7 +294,10 @@ func (handler *HttpHandler) processTransfer(p webhookPayload) error {
 	return nil
 }
 
-func (handler HttpHandler) processDeposit(p webhookPayload) error {
+func (handler *HttpHandler) processDeposit(ctx context.Context, p webhookPayload) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	var paymentID string
 	var virtualNubanID string
@@ -332,7 +348,7 @@ func (handler HttpHandler) processDeposit(p webhookPayload) error {
 	}
 
 	// get the userID from the virtualNubanID
-	userID, err := handler.store.GetUserFromVirtualNuban(virtualNubanID)
+	userID, err := handler.store.GetUserFromVirtualNuban(ctx, virtualNubanID)
 	if err != nil {
 		handler.logger.Error("Deposit failed: unable to get user ID from virtual Nuban", zap.Error(err))
 		return err
@@ -353,7 +369,7 @@ func (handler HttpHandler) processDeposit(p webhookPayload) error {
 		ID:           paymentID,
 	}
 
-	if err := handler.store.SaveDepositID(deposit); err != nil {
+	if err := handler.store.SaveDepositID(ctx, deposit); err != nil {
 		if err == mongo.ErrDepositIDExist {
 			handler.logger.Info("Deposit ID already exists, skipping", zap.String("depositID", paymentID))
 			return nil
@@ -362,7 +378,7 @@ func (handler HttpHandler) processDeposit(p webhookPayload) error {
 		return err
 	}
 
-	bal, err := handler.store.GetBalance(userID)
+	bal, err := handler.store.GetBalance(ctx, userID)
 	if err != nil {
 		handler.logger.Error("Deposit failed: unable to fetch balance", zap.Error(err))
 		return err
@@ -380,7 +396,7 @@ func (handler HttpHandler) processDeposit(p webhookPayload) error {
 		UserID:       userID,
 		UpdatedAt:    time.Now().UTC(),
 	}
-	if err := handler.store.SaveBalance(userID, userBalance); err != nil {
+	if err := handler.store.SaveBalance(ctx, userID, userBalance); err != nil {
 		handler.logger.Error("Deposit failed: unable to save user balance", zap.Error(err))
 		return err
 	}
@@ -408,7 +424,7 @@ func (handler HttpHandler) processDeposit(p webhookPayload) error {
 		Reference:              paymentID,
 	}
 
-	if err := handler.store.SaveDeposit(result); err != nil {
+	if err := handler.store.SaveDeposit(ctx, result); err != nil {
 		handler.logger.Error("Deposit failed: unable to save transaction", zap.Error(err))
 		return err
 	}

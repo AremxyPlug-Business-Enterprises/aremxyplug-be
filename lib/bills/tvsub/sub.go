@@ -2,6 +2,7 @@ package tvsub
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,7 +47,10 @@ func NewTvConn(db db.UtilitiesStore, Logger *zap.Logger) *TvConn {
 
 // buy tvsubscription
 // first verifiy the smartcard number
-func (t *TvConn) BuySub(data TvInfo) (*models.TV_Result, error) {
+func (t *TvConn) BuySub(ctx context.Context, data TvInfo) (*models.TV_Result, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	data.RequestID = randomgen.GenerateRequestID()
 	data.SubType = "change"
@@ -56,7 +60,7 @@ func (t *TvConn) BuySub(data TvInfo) (*models.TV_Result, error) {
 	}
 	transactionID := randomgen.GenerateTransactionID("tv")
 
-	resp, err := t.buySub(data)
+	resp, err := t.buySub(ctx, data)
 	if err != nil {
 		t.logger.Error("Buying failed", zap.Error(err))
 		return nil, err
@@ -122,7 +126,7 @@ func (t *TvConn) BuySub(data TvInfo) (*models.TV_Result, error) {
 		Profit_Margin:          data.Profit_Margin,
 	}
 
-	if err := t.saveTransaction(result); err != nil {
+	if err := t.saveTransaction(ctx, result); err != nil {
 		return nil, t.logAndReturnError("error saving transaction to database", err)
 	}
 
@@ -130,9 +134,12 @@ func (t *TvConn) BuySub(data TvInfo) (*models.TV_Result, error) {
 }
 
 // query tvsubscription
-func (t *TvConn) QueryTransaction(requestID string) (models.TV_Result, error) {
+func (t *TvConn) QueryTransaction(ctx context.Context, requestID string) (models.TV_Result, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	resp, err := t.queryTransaction(requestID)
+	resp, err := t.queryTransaction(ctx, requestID)
 	if err != nil {
 		return models.TV_Result{}, t.logAndReturnError("error communicating with server", err)
 	}
@@ -147,7 +154,7 @@ func (t *TvConn) QueryTransaction(requestID string) (models.TV_Result, error) {
 		return models.TV_Result{}, nil
 	}
 
-	result, err := t.getTransactionDetails(apiResponse.RequestID)
+	result, err := t.getTransactionDetails(ctx, apiResponse.RequestID)
 	if err != nil {
 		return models.TV_Result{}, t.logAndReturnError("failed to get user's transactions", err)
 	}
@@ -157,9 +164,12 @@ func (t *TvConn) QueryTransaction(requestID string) (models.TV_Result, error) {
 }
 
 // get tvsubscription transaction history
-func (t *TvConn) GetUserTransactions(user string) ([]models.TV_Result, error) {
+func (t *TvConn) GetUserTransactions(ctx context.Context, user string) ([]models.TV_Result, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	result, err := t.getAllTransaction("user")
+	result, err := t.getAllTransaction(ctx, "user")
 	if err != nil {
 		return nil, t.logAndReturnError("failed to get user's transactions", err)
 	}
@@ -168,9 +178,12 @@ func (t *TvConn) GetUserTransactions(user string) ([]models.TV_Result, error) {
 
 }
 
-func (t *TvConn) GetTransactionDetails(id string) (models.TV_Result, error) {
+func (t *TvConn) GetTransactionDetails(ctx context.Context, id string) (models.TV_Result, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	result, err := t.getTransactionDetails(id)
+	result, err := t.getTransactionDetails(ctx, id)
 	if err != nil {
 		return models.TV_Result{}, t.logAndReturnError("failed to get transaction details", err)
 	}
@@ -179,9 +192,12 @@ func (t *TvConn) GetTransactionDetails(id string) (models.TV_Result, error) {
 }
 
 // func to be used by admin to return all transaction in database
-func (t *TvConn) GetAllTransactions() ([]models.TV_Result, error) {
+func (t *TvConn) GetAllTransactions(ctx context.Context) ([]models.TV_Result, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	result, err := t.getAllTransaction("")
+	result, err := t.getAllTransaction(ctx, "")
 	if err != nil {
 
 		return nil, t.logAndReturnError("failed to get transactions from database", err)
@@ -191,7 +207,10 @@ func (t *TvConn) GetAllTransactions() ([]models.TV_Result, error) {
 
 }
 
-func (t *TvConn) VerifyCard(service, iucNumber string) (verifyResponse, error) {
+func (t *TvConn) VerifyCard(ctx context.Context, service, iucNumber string) (verifyResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	formdata := url.Values{
 		"billersCode": {iucNumber},
 		"serviceID":   {service},
@@ -200,7 +219,7 @@ func (t *TvConn) VerifyCard(service, iucNumber string) (verifyResponse, error) {
 	body := bytes.NewBufferString(formdata.Encode())
 	url := fmt.Sprintf("%s/%s", api, "merchant-verify")
 
-	req, err := http.NewRequest("POST", url, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
 		return verifyResponse{}, err
 	}
@@ -253,7 +272,10 @@ func (t *TvConn) VerifyCard(service, iucNumber string) (verifyResponse, error) {
 	return verifyResponse{}, fmt.Errorf("unexpected content format: %s", string(apiResponse.Content))
 }
 
-func (t *TvConn) buySub(data TvInfo) (*http.Response, error) {
+func (t *TvConn) buySub(ctx context.Context, data TvInfo) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	amount := strconv.Itoa(data.Amount)
 
@@ -270,7 +292,7 @@ func (t *TvConn) buySub(data TvInfo) (*http.Response, error) {
 	body := bytes.NewBufferString(formdata.Encode())
 	url := fmt.Sprintf("%s/%s", api, "pay")
 
-	req, err := http.NewRequest("POST", url, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
 		return nil, err
 	}
@@ -287,31 +309,43 @@ func (t *TvConn) buySub(data TvInfo) (*http.Response, error) {
 	return resp, nil
 }
 
-func (t *TvConn) saveTransaction(details *models.TV_Result) error {
-	err := t.db.SaveTVSubcriptionTransaction(details)
+func (t *TvConn) saveTransaction(ctx context.Context, details *models.TV_Result) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := t.db.SaveTVSubcriptionTransaction(ctx, details)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (t *TvConn) getTransactionDetails(id string) (models.TV_Result, error) {
-	result, err := t.db.GetTvSubscriptionDetails(id)
+func (t *TvConn) getTransactionDetails(ctx context.Context, id string) (models.TV_Result, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := t.db.GetTvSubscriptionDetails(ctx, id)
 	if err != nil {
 		return models.TV_Result{}, err
 	}
 	return result, nil
 }
 
-func (t *TvConn) getAllTransaction(user string) ([]models.TV_Result, error) {
-	result, err := t.db.GetAllTvSubTransactions(user)
+func (t *TvConn) getAllTransaction(ctx context.Context, user string) ([]models.TV_Result, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := t.db.GetAllTvSubTransactions(ctx, user)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func (t *TvConn) queryTransaction(requestID string) (*http.Response, error) {
+func (t *TvConn) queryTransaction(ctx context.Context, requestID string) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	formdata := url.Values{
 		"request_id": {requestID},
@@ -320,7 +354,7 @@ func (t *TvConn) queryTransaction(requestID string) (*http.Response, error) {
 	body := bytes.NewBufferString(formdata.Encode())
 	url := fmt.Sprintf("%s/%s", api, "requery")
 
-	req, err := http.NewRequest("POST", url, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
 		return nil, err
 	}

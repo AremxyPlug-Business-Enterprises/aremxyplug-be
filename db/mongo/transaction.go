@@ -22,7 +22,8 @@ var (
 	ErrInvalidSubcat   = errors.New("invalid subcategory filter")
 )
 
-func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSize int) (models.TransactionResponse, error) {
+func (m *mongoStore) GetTransactions(ctx context.Context, filter map[string]interface{}, page, pageSize int) (models.TransactionResponse, error) {
+	ctx = m.ensureCtx(ctx)
 	// Validate pagination
 	if page < 1 {
 		page = 1
@@ -31,7 +32,6 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 		pageSize = 50
 	}
 
-	ctx := context.Background()
 	matchConditions := bson.D{}
 
 	// Filter by user_id
@@ -445,9 +445,8 @@ func (m *mongoStore) GetTransactions(filter map[string]interface{}, page, pageSi
 	return res, nil
 }
 
-func (m *mongoStore) GetSalesSummary(category string, filter map[string]interface{}, page int) (models.SalesSummary, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+func (m *mongoStore) GetSalesSummary(ctx context.Context, category string, filter map[string]interface{}, page int) (models.SalesSummary, error) {
+	ctx = m.ensureCtx(ctx)
 
 	// Build match conditions
 	matchConditions := bson.D{
@@ -757,9 +756,8 @@ func (m *mongoStore) GetSalesSummary(category string, filter map[string]interfac
 }
 
 // ...existing code...
-func (m *mongoStore) GetSalesOverview(filter map[string]interface{}) (models.SalesSummary, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
+func (m *mongoStore) GetSalesOverview(ctx context.Context, filter map[string]interface{}) (models.SalesSummary, error) {
+	ctx = m.ensureCtx(ctx)
 
 	// categories => collection name
 	categories := map[string]string{
@@ -1072,14 +1070,14 @@ func (m *mongoStore) GetSalesOverview(filter map[string]interface{}) (models.Sal
 	}, nil
 }
 
-func (m *mongoStore) GetWalletSummary(filter map[string]interface{}, page int) (models.TransactionResponse, error) {
+func (m *mongoStore) GetWalletSummary(ctx context.Context, filter map[string]interface{}, page int) (models.TransactionResponse, error) {
+	ctx = m.ensureCtx(ctx)
 	// Validate pagination
 	if page < 1 {
 		page = 1
 	}
 	pageSize := 50
 
-	ctx := context.Background()
 	matchConditions := bson.D{}
 
 	// Apply filters

@@ -10,7 +10,14 @@ import (
 )
 
 func (s *SqlStore) GetProducts(id int) ([]models.Product, error) {
-	rows, err := s.db.Query(
+	return s.GetProductsWithContext(context.Background(), id)
+}
+
+func (s *SqlStore) GetProductsWithContext(ctx context.Context, id int) ([]models.Product, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rows, err := s.db.QueryContext(ctx,
 		"SELECT product_id, network_id, plan_type FROM products WHERE network_id = $1 ORDER BY sort ASC",
 		id)
 	if err != nil {
@@ -40,7 +47,13 @@ func (s *SqlStore) GetProducts(id int) ([]models.Product, error) {
 }
 
 func (s *SqlStore) CreatePlan(plan models.Plan) (int, error) {
-	ctx := context.Background()
+	return s.CreatePlanWithContext(context.Background(), plan)
+}
+
+func (s *SqlStore) CreatePlanWithContext(ctx context.Context, plan models.Plan) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	var insertedID int
 	err := s.db.QueryRowContext(ctx,
@@ -62,7 +75,13 @@ func (s *SqlStore) CreatePlan(plan models.Plan) (int, error) {
 }
 
 func (s *SqlStore) UpdatePlan(planID int, updatedPlan models.PlanUpdate) error {
-	ctx := context.Background()
+	return s.UpdatePlanWithContext(context.Background(), planID, updatedPlan)
+}
+
+func (s *SqlStore) UpdatePlanWithContext(ctx context.Context, planID int, updatedPlan models.PlanUpdate) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		s.logger.Error("Failed to begin transaction", zap.Error(err))
@@ -135,7 +154,13 @@ func (s *SqlStore) UpdatePlan(planID int, updatedPlan models.PlanUpdate) error {
 }
 
 func (s *SqlStore) DeletePlan(planID int) error {
-	ctx := context.Background()
+	return s.DeletePlanWithContext(context.Background(), planID)
+}
+
+func (s *SqlStore) DeletePlanWithContext(ctx context.Context, planID int) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		s.logger.Error("Failed to begin transaction", zap.Error(err))
@@ -174,7 +199,14 @@ func (s *SqlStore) DeletePlan(planID int) error {
 }
 
 func (s *SqlStore) GetPlansByProductID(productID int) ([]models.Plan, error) {
-	rows, err := s.db.Query(`
+	return s.GetPlansByProductIDWithContext(context.Background(), productID)
+}
+
+func (s *SqlStore) GetPlansByProductIDWithContext(ctx context.Context, productID int) ([]models.Plan, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rows, err := s.db.QueryContext(ctx, `
 		SELECT 
 			p.id, 
 			p.product_id, 
@@ -246,32 +278,27 @@ func (s *SqlStore) GetPlansByProductID(productID int) ([]models.Plan, error) {
 }
 
 func (s *SqlStore) GetPlanByID(planID int) (*models.Plan, error) {
-	rows, err := s.db.Query(`
-	SELECT 
-		p.plan_id, 
-		p.product_id, 
-		p.amount, 
-		p.validity,
-		p.provider_id, 
-		p.size,
-		p.profit_margin,
-		pr.plan_type
-	FROM plans p
-	INNER JOIN products pr ON p.product_id = pr.product_id
-	WHERE p.id = $1`, planID)
-	if err != nil {
-		s.logger.Error("Failed to retrieve plan", zap.Int("planID", planID), zap.Error(err))
-		return nil, fmt.Errorf("failed to retrieve plan with ID %d: %v", planID, err)
-	}
-	defer rows.Close()
+	return s.GetPlanByIDWithContext(context.Background(), planID)
+}
 
-	if !rows.Next() {
-		s.logger.Warn("No plan found", zap.Int("planID", planID))
-		return nil, fmt.Errorf("no plan found with ID %d", planID)
+func (s *SqlStore) GetPlanByIDWithContext(ctx context.Context, planID int) (*models.Plan, error) {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-
 	var plan models.Plan
-	err = rows.Scan(
+	err := s.db.QueryRowContext(ctx, `
+		SELECT 
+			p.plan_id, 
+			p.product_id, 
+			p.amount, 
+			p.validity,
+			p.provider_id, 
+			p.size,
+			p.profit_margin,
+			pr.plan_type
+		FROM plans p
+		INNER JOIN products pr ON p.product_id = pr.product_id
+		WHERE p.id = $1`, planID).Scan(
 		&plan.PlanID,
 		&plan.ProductID,
 		&plan.Amount,
@@ -282,8 +309,8 @@ func (s *SqlStore) GetPlanByID(planID int) (*models.Plan, error) {
 		&plan.PlanType,
 	)
 	if err != nil {
-		s.logger.Error("Failed to scan plan row", zap.Error(err))
-		return nil, fmt.Errorf("failed to scan plan row: %v", err)
+		s.logger.Error("Failed to retrieve plan", zap.Int("planID", planID), zap.Error(err))
+		return nil, fmt.Errorf("failed to retrieve plan with ID %d: %v", planID, err)
 	}
 
 	s.logger.Info("Plan retrieved successfully", zap.Int("planID", int(plan.PlanID.Int64)), zap.Float64("profitMargin", plan.ProfitMargin))

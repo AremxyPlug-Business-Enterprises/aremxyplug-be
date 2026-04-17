@@ -1,6 +1,8 @@
 package edu
 
 import (
+	"context"
+
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/sqlstore"
 	"go.uber.org/zap"
@@ -8,8 +10,8 @@ import (
 
 type Edurecords interface {
 	// GetRecord(id int) (models.EduRecord, error)
-	UpdateRecord(id int, edu models.EduRecord) error
-	DeleteRecord(id int) error
+	UpdateRecord(ctx context.Context, id int, edu models.EduRecord) error
+	DeleteRecord(ctx context.Context, id int) error
 }
 
 type EduServiceImpl struct {
@@ -24,9 +26,9 @@ func NewEduService(store *sqlstore.SqlStore, logger *zap.Logger) Edurecords {
 	}
 }
 
-func (s *EduServiceImpl) UpdateRecord(id int, edu models.EduRecord) error {
+func (s *EduServiceImpl) UpdateRecord(ctx context.Context, id int, edu models.EduRecord) error {
 	s.logger.Info("Updating record", zap.Int("ID", id))
-	err := s.store.UpdateEduRecord(id, edu)
+	err := s.store.UpdateEduRecord(ctx, id, edu)
 	if err != nil {
 		s.logger.Error("Error updating record", zap.Error(err))
 		return err
@@ -35,9 +37,9 @@ func (s *EduServiceImpl) UpdateRecord(id int, edu models.EduRecord) error {
 	return nil
 }
 
-func (s *EduServiceImpl) DeleteRecord(id int) error {
+func (s *EduServiceImpl) DeleteRecord(ctx context.Context, id int) error {
 	s.logger.Info("Deleting record", zap.Int("ID", id))
-	err := s.store.DeleteEduRecord(id)
+	err := s.store.DeleteEduRecord(ctx, id)
 	if err != nil {
 		s.logger.Error("Error deleting record", zap.Error(err))
 		return err

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,6 +40,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	//ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	var user models.User
 	//defer cancel()
+	ctx := r.Context()
 
 	// validate the request body
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
@@ -63,14 +65,14 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	timestamp := handler.timeHelper.Now().UTC()
-	Id, err := handler.otp.GenerateID()
+	id, err := handler.otp.GenerateID(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	userId := strconv.Itoa(Id)
+	userId := strconv.Itoa(id)
 
 	hashedPassword, err := handler.encrypt.GenerateFromPassword(user.Password)
 	if err != nil {
@@ -84,7 +86,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	email := cases.Lower(language.English).String(user.Email)
 	inviteCode := to.String(user.InvitationCode)
 
-	validUser, field, err := handler.isValidNewUser(user)
+	validUser, field, err := handler.isValidNewUser(ctx, user)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -120,7 +122,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		Beta:            false,
 	}
 
-	err = handler.store.SaveUser(newUser)
+	err = handler.store.SaveUser(ctx, newUser)
 	if err != nil {
 		handler.logger.Error("error saving user", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -131,7 +133,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 
 	if user.InvitationCode != "" {
 		inviteCode := cases.Title(language.English).String(user.InvitationCode)
-		err := handler.store.CreateUserReferral(userId, inviteCode)
+		err := handler.store.CreateUserReferral(ctx, userId, inviteCode)
 		if err != nil {
 			handler.logger.Warn("error updating referral count", zap.Error(err))
 		}
@@ -153,7 +155,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 // Login is the api used to login a single user
 func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var userlogin dto.LoginInput
-
+	ctx := r.Context()
 	// validate the request body
 	if err := json.NewDecoder(r.Body).Decode(&userlogin); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -166,7 +168,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	username := to.String(userlogin.Username)
 	email := cases.Lower(language.English).String(userlogin.Email)
 
-	user, err := handler.store.GetUserByUsernameOrEmail(email, username)
+	user, err := handler.store.GetUserByUsernameOrEmail(ctx, email, username)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		response := responseFormat.CustomResponse{Status: http.StatusNotFound, Message: "user not found", Data: map[string]interface{}{"data": "user not found"}}
@@ -183,7 +185,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	attemptsTTL := 10 * time.Minute
 
 	// Check if user is already blocked
-	if blockedUntil, err := handler.redisClient.Get(blockedKey); err == nil && blockedUntil != nil {
+	if blockedUntil, err := handler.redisClient.Get(ctx, blockedKey); err == nil && blockedUntil != nil {
 		msg := fmt.Sprintf("PIN blocked until %s", blockedUntil.(string))
 		handler.logger.Warn(msg, zap.String("user_id", user.ID))
 		writeError(w, http.StatusForbidden, msg)
@@ -193,7 +195,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	ok := handler.encrypt.ComparePasscode(userlogin.Password, hashedPassword)
 	if !ok {
 		// Increment failed login attempts in Redis with a TTL of 15 minutes
-		attempts, incrErr := handler.redisClient.IncrWithTTL(attemptsKey, attemptsTTL)
+		attempts, incrErr := handler.redisClient.IncrWithTTL(ctx, attemptsKey, attemptsTTL)
 		if incrErr != nil {
 			handler.logger.Error("Failed to increment attempts", zap.Error(incrErr))
 			writeError(w, http.StatusInternalServerError, "internal server error")
@@ -202,10 +204,10 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 		if attempts >= int64(maxAttempts) {
 			unblockTime := time.Now().Add(blockDuration)
-			if err := handler.redisClient.SetWithTTL(blockedKey, unblockTime.Format(time.RFC3339), blockDuration); err != nil {
+			if err := handler.redisClient.SetWithTTL(ctx, blockedKey, unblockTime.Format(time.RFC3339), blockDuration); err != nil {
 				handler.logger.Error("Failed to set block key", zap.Error(err))
 			}
-			handler.redisClient.Del(attemptsKey)
+			handler.redisClient.Del(ctx, attemptsKey)
 
 			handler.logger.Warn("user temporarily blocked due to too many failed login attempts", zap.String("userID", user.ID))
 			handler.logger.Warn("Too many incorrect paswsword attempts - account blocked",
@@ -230,7 +232,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// On successful login, reset the login attempts counter
-	if err := handler.redisClient.Del(attemptsKey); err != nil {
+	if err := handler.redisClient.Del(ctx, attemptsKey); err != nil {
 		handler.logger.Warn("failed to reset login attempts after successful login", zap.Error(err))
 	}
 
@@ -271,7 +273,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Store refresh token session in Redis (session model)
 	sessionKey := fmt.Sprintf("session:%s", user.ID)
-	handler.redisClient.SetWithTTL(sessionKey, refreshToken, handler.refreshTokenDuration)
+	handler.redisClient.SetWithTTL(ctx, sessionKey, refreshToken, handler.refreshTokenDuration)
 
 	accessCookie := &http.Cookie{
 		Name:     "access_token",
@@ -318,6 +320,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 // ForgotPassword
 func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var userlogin dto.LoginInput
+	ctx := r.Context()
 
 	// validate the request body
 	if err := json.NewDecoder(r.Body).Decode(&userlogin); err != nil {
@@ -326,7 +329,7 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Checking if the user exists (replace with your actual user lookup logic)
-	user, err := handler.store.GetUserByEmail(userlogin.Email)
+	user, err := handler.store.GetUserByEmail(ctx, userlogin.Email)
 	if err != nil || user == nil {
 		render.Status(r, http.StatusUnauthorized)
 		render.JSON(w, r, map[string]string{"error": "Sorry, this user does not exist"})
@@ -346,7 +349,7 @@ func (handler *HttpHandler) ForgotPassword(w http.ResponseWriter, r *http.Reques
 
 	storeKey := fmt.Sprintf("pwdreset:%s", token)
 	ttl := 15 * time.Minute
-	if err := handler.redisClient.SetWithTTL(storeKey, "arm", ttl); err != nil {
+	if err := handler.redisClient.SetWithTTL(ctx, storeKey, "arm", ttl); err != nil {
 		handler.logger.Error("failed to persist reset token", zap.Error(err))
 		respondWithError(w, http.StatusInternalServerError, "error", err)
 		return
@@ -395,9 +398,10 @@ func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request
 	token := r.URL.Query().Get("token")
 
 	storeKey := fmt.Sprintf("pwdreset:%s", token)
+	ctx := r.Context()
 
 	// lookup token in redis
-	val, err := handler.redisClient.Get(storeKey)
+	val, err := handler.redisClient.Get(ctx, storeKey)
 	if err != nil || val == nil {
 		respondWithError(w, http.StatusBadRequest, "error", errors.New("link either invalid or expired, request for a new link"))
 		return
@@ -406,13 +410,13 @@ func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request
 	userID, ok := val.(string)
 	if !ok || userID != "arm" {
 		// unexpected value type; delete key and error
-		_ = handler.redisClient.Del(storeKey)
+		_ = handler.redisClient.Del(ctx, storeKey)
 		respondWithError(w, http.StatusBadRequest, "error", errors.New("invalid reset token"))
 		return
 	}
 
 	// delete key to enforce one-time use (best effort)
-	if err := handler.redisClient.Del(storeKey); err != nil {
+	if err := handler.redisClient.Del(ctx, storeKey); err != nil {
 		// log but continue
 		handler.logger.Warn("failed to delete reset token from redis", zap.Error(err), zap.String("key", storeKey))
 	}
@@ -443,7 +447,7 @@ func (handler *HttpHandler) ResetPassword(w http.ResponseWriter, r *http.Request
 	}
 	newPassword.Password = string(hashedPassword)
 
-	err = handler.store.UpdateUserPasswordByID(claims.ID, newPassword.Password)
+	err = handler.store.UpdateUserPasswordByID(ctx, claims.ID, newPassword.Password)
 	if err != nil {
 		handler.logger.Error("failed to update password", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -467,6 +471,7 @@ func (handler *HttpHandler) ChangeEmail(w http.ResponseWriter, r *http.Request) 
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	payload := struct {
 		NewEmail string `json:"new_email"`
@@ -486,7 +491,7 @@ func (handler *HttpHandler) ChangeEmail(w http.ResponseWriter, r *http.Request) 
 	}
 
 	user.Email = payload.NewEmail
-	if err := handler.sendOTP(user, "Email Change", changeEmail); err != nil {
+	if err := handler.sendOTP(ctx, user, "Email Change", changeEmail); err != nil {
 		handler.logger.Error("failed to send OTP", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -517,6 +522,8 @@ func (handler *HttpHandler) UpdateEmail(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	ctx := r.Context()
+
 	payload := struct {
 		New_Email string `json:"new_email"`
 		OTP       string `json:"otp"`
@@ -528,7 +535,7 @@ func (handler *HttpHandler) UpdateEmail(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	valid, err := handler.otp.ValidateOTP(payload.OTP, payload.New_Email)
+	valid, err := handler.otp.ValidateOTP(ctx, payload.OTP, payload.New_Email)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -544,7 +551,7 @@ func (handler *HttpHandler) UpdateEmail(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := handler.store.UpdateEmail(user.ID, payload.New_Email); err != nil {
+	if err := handler.store.UpdateEmail(ctx, user.ID, payload.New_Email); err != nil {
 		handler.logger.Error("failed to update phone number", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -575,6 +582,7 @@ func (handler *HttpHandler) ChangePhoneNumber(w http.ResponseWriter, r *http.Req
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	payload := struct {
 		New_Phone string `json:"new_phone"`
@@ -593,7 +601,7 @@ func (handler *HttpHandler) ChangePhoneNumber(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := handler.smsClient.SendSMS(payload.New_Phone); err != nil {
+	if err := handler.smsClient.SendSMS(ctx, payload.New_Phone); err != nil {
 		if err == termii.ErrSMSFailed {
 			handler.logger.Error("SMS sending failed", zap.String("phone", payload.New_Phone), zap.Error(err))
 			w.WriteHeader(http.StatusBadRequest)
@@ -628,6 +636,7 @@ func (handler *HttpHandler) UpdatePhoneNumber(w http.ResponseWriter, r *http.Req
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	payload := struct {
 		New_Phone string `json:"new_phone"`
@@ -640,13 +649,13 @@ func (handler *HttpHandler) UpdatePhoneNumber(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	err = handler.smsClient.VerifyToken(payload.OTP, payload.New_Phone)
+	err = handler.smsClient.VerifyToken(ctx, payload.OTP, payload.New_Phone)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "error", err)
 		return
 	}
 
-	if err := handler.store.UpdatePhone(user.ID, payload.New_Phone); err != nil {
+	if err := handler.store.UpdatePhone(ctx, user.ID, payload.New_Phone); err != nil {
 		handler.logger.Error("failed to update phone number", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -677,6 +686,7 @@ func (handler *HttpHandler) UpdatePassword(w http.ResponseWriter, r *http.Reques
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	payload := struct {
 		Old_password string `json:"old_password"`
@@ -705,7 +715,7 @@ func (handler *HttpHandler) UpdatePassword(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := handler.store.UpdateUserPassword(user.Email, string(newHashedPassword)); err != nil {
+	if err := handler.store.UpdateUserPassword(ctx, user.Email, string(newHashedPassword)); err != nil {
 		handler.logger.Error("error updating the user's password")
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -727,9 +737,10 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
+	ctx := r.Context()
 
 	// Retrieve user by email
-	user, err := handler.store.GetUserByEmail(userLogin.Email)
+	user, err := handler.store.GetUserByEmail(ctx, userLogin.Email)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, "User not found", nil)
 		return
@@ -739,28 +750,28 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 	action := getLastPathSegment(r.URL.Path)
 	switch action {
 	case "signup":
-		if err := handler.sendOTP(user, "Sign-Up Verification", verifyEmailAlias); err != nil {
+		if err := handler.sendOTP(ctx, user, "Sign-Up Verification", verifyEmailAlias); err != nil {
 			respondWithError(w, http.StatusInternalServerError, "Error sending verification OTP", err)
 			return
 		}
 		respondWithSuccess(w, http.StatusOK, "success", "Verification email sent successfully")
 
 	case "signin":
-		if err := handler.sendOTP(user, "Sign-in Verification", signInVerification); err != nil {
+		if err := handler.sendOTP(ctx, user, "Sign-in Verification", signInVerification); err != nil {
 			respondWithError(w, http.StatusInternalServerError, "Error sending sign-in OTP", err)
 			return
 		}
 		respondWithSuccess(w, http.StatusOK, "success", "Sign-in email sent successfully")
 
 	case "resetpassword":
-		if err := handler.sendOTP(user, "Password OTP", PasswordOTPAlias); err != nil {
+		if err := handler.sendOTP(ctx, user, "Password OTP", PasswordOTPAlias); err != nil {
 			respondWithError(w, http.StatusInternalServerError, "Error sending password reset OTP", err)
 			return
 		}
 		respondWithSuccess(w, http.StatusCreated, "success", "Password reset email sent successfully")
 
 	case "resetpin":
-		if err := handler.sendOTP(user, "PIN Reset", resetPinAlias); err != nil {
+		if err := handler.sendOTP(ctx, user, "PIN Reset", resetPinAlias); err != nil {
 			respondWithError(w, http.StatusInternalServerError, "Error sending PIN reset OTP", err)
 			return
 		}
@@ -783,7 +794,7 @@ func (handler *HttpHandler) SendOTPWIthTermii(w http.ResponseWriter, r *http.Req
 	}
 
 	// Retrieve user by email
-	user, err := handler.store.GetUserByEmail(userLogin.Email)
+	user, err := handler.store.GetUserByEmail(ctx, userLogin.Email)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, "User not found", nil)
 		return
@@ -816,6 +827,7 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		OTP string `json:"otp"`
 	}
 	Otp := otp{}
+	ctx := r.Context()
 
 	// validate the request body
 	if err := json.NewDecoder(r.Body).Decode(&Otp); err != nil {
@@ -826,7 +838,7 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	email := r.URL.Query().Get("email")
-	valid, err := handler.otp.ValidateOTP(Otp.OTP, email)
+	valid, err := handler.otp.ValidateOTP(ctx, Otp.OTP, email)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -848,7 +860,7 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		data := map[string]interface{}{"data": email}
 		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
 	case "signup":
-		user, err := handler.store.VerifyUser(email)
+		user, err := handler.store.VerifyUser(ctx, email)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "error", err)
 			return
@@ -861,11 +873,11 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 			Published: false,
 		}
 
-		if err := handler.processor.ProcessEvent(r.Context(), ev); err != nil {
+		if err := handler.processor.ProcessEvent(ctx, ev); err != nil {
 			handler.logger.Error("error processing signup completed event", zap.String("user_id", user.ID), zap.Error(err))
 		}
 
-		err = handler.sendOTP(user, "verify-email", welcomeMessage)
+		err = handler.sendOTP(ctx, user, "verify-email", welcomeMessage)
 		if err != nil {
 			handler.logger.Error("error sending email verification otp", zap.String("target", user.Email), zap.Error(err))
 			respondWithError(w, http.StatusInternalServerError, "error", err)
@@ -875,7 +887,7 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		data := map[string]interface{}{"email": email}
 		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
 	case "resetpassword":
-		user, err := handler.store.GetUserByEmail(email)
+		user, err := handler.store.GetUserByEmail(ctx, email)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "error", err)
 			return
@@ -910,6 +922,7 @@ func (handler *HttpHandler) SendSMSOTP(w http.ResponseWriter, r *http.Request) {
 	type input struct {
 		Phone string `json:"phone_number"`
 	}
+	ctx := r.Context()
 
 	data := input{}
 
@@ -919,7 +932,7 @@ func (handler *HttpHandler) SendSMSOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := handler.store.GetUserByPhone(data.Phone)
+	_, err := handler.store.GetUserByPhone(ctx, data.Phone)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			handler.logger.Warn("No user found with phone number", zap.String("phone", data.Phone))
@@ -931,7 +944,7 @@ func (handler *HttpHandler) SendSMSOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = handler.smsClient.SendSMS(data.Phone)
+	err = handler.smsClient.SendSMS(ctx, data.Phone)
 	if err != nil {
 		if err == termii.ErrSMSFailed {
 			handler.logger.Error("SMS sending failed", zap.String("phone", data.Phone), zap.Error(err))
@@ -955,6 +968,7 @@ func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request)
 		OTP string `json:"otp"`
 	}
 	data := input{}
+	ctx := r.Context()
 
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
@@ -963,7 +977,7 @@ func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request)
 
 	phone := r.URL.Query().Get("phone")
 
-	err := handler.smsClient.VerifyToken(data.OTP, phone)
+	err := handler.smsClient.VerifyToken(ctx, data.OTP, phone)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "error", err)
 		return
@@ -975,7 +989,7 @@ func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request)
 		data := map[string]interface{}{"phone": phone}
 		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
 	case "signup":
-		_, err := handler.store.VerifyUser(phone)
+		_, err := handler.store.VerifyUser(ctx, phone)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "error", err)
 			return
@@ -984,7 +998,7 @@ func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request)
 		data := map[string]interface{}{"phone": phone}
 		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
 	case "resetpassword":
-		user, err := handler.store.GetUserByPhone(phone)
+		user, err := handler.store.GetUserByPhone(ctx, phone)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "error", err)
 			return
@@ -1024,8 +1038,9 @@ func (handler *HttpHandler) GetUserInfo(w http.ResponseWriter, r *http.Request) 
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
-	user, err := handler.store.GetUserByUsernameOrEmail(email, username)
+	user, err := handler.store.GetUserByUsernameOrEmail(ctx, email, username)
 	if err != nil {
 		handler.logger.Error("error retrieving user info", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -1076,8 +1091,8 @@ func (handler *HttpHandler) validateToken(token string) (isValid bool, response 
 	}
 }
 
-func (handler *HttpHandler) sendOTP(user *models.User, title string, templateID string) error {
-	otp, err := handler.otp.GenerateOTP(user.Email)
+func (handler *HttpHandler) sendOTP(ctx context.Context, user *models.User, title string, templateID string) error {
+	otp, err := handler.otp.GenerateOTP(ctx, user.Email)
 	if err != nil {
 		return err
 	}
@@ -1125,8 +1140,8 @@ func (handler *HttpHandler) Testtoken(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(claims)
 }
 
-func (handler *HttpHandler) isValidNewUser(user models.User) (bool, string, error) {
-	userDetails, err := handler.store.GetUserByUsernameOrEmailOrPhone(user.Username, user.Email, user.PhoneNumber)
+func (handler *HttpHandler) isValidNewUser(ctx context.Context, user models.User) (bool, string, error) {
+	userDetails, err := handler.store.GetUserByUsernameOrEmailOrPhone(ctx, user.Username, user.Email, user.PhoneNumber)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return true, "", nil
@@ -1149,8 +1164,8 @@ func (handler *HttpHandler) isValidNewUser(user models.User) (bool, string, erro
 
 // PingUser pings the api with client credentials. It not used.
 func (handler *HttpHandler) PingUser(w http.ResponseWriter, r *http.Request) {
-
-	res, err := handler.dataClient.PingUser(w)
+	ctx := r.Context()
+	res, err := handler.dataClient.PingUser(ctx, w)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -1207,6 +1222,7 @@ func (handler *HttpHandler) RefreshToken(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "refresh token missing", http.StatusUnauthorized)
 		return
 	}
+	ctx := r.Context()
 
 	refresh := cookie.Value
 	handler.logger.Debug("RefreshToken: cookie value", zap.String("refresh_cookie", refresh))
@@ -1222,7 +1238,7 @@ func (handler *HttpHandler) RefreshToken(w http.ResponseWriter, r *http.Request)
 	userID := claims.ID
 	sessionKey := fmt.Sprintf("session:%s", userID)
 
-	storedRefresh, err := handler.redisClient.Get(sessionKey)
+	storedRefresh, err := handler.redisClient.Get(ctx, sessionKey)
 	if err != nil || storedRefresh == nil {
 		http.Error(w, "session expired", http.StatusUnauthorized)
 		return
@@ -1243,7 +1259,7 @@ func (handler *HttpHandler) RefreshToken(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Update session in Redis
-	handler.redisClient.SetWithTTL(sessionKey, newRefresh, handler.refreshTokenDuration)
+	handler.redisClient.SetWithTTL(ctx, sessionKey, newRefresh, handler.refreshTokenDuration)
 
 	// New access token
 	newAccess, err := handler.jwt.GenerateTokenWithExpiration(newClaims, handler.authTokenDuration)
@@ -1296,6 +1312,7 @@ func (handler *HttpHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	access := &http.Cookie{
 		Name:     "access_token",
@@ -1323,7 +1340,7 @@ func (handler *HttpHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// delete redis session
 	userID := user.ID
 	sessionKey := fmt.Sprintf("session:%s", userID)
-	if err := handler.redisClient.Del(sessionKey); err != nil {
+	if err := handler.redisClient.Del(ctx, sessionKey); err != nil {
 		handler.logger.Error("error deleting user session from redis", zap.String("userID", userID), zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "error logging out, please try again"}}

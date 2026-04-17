@@ -1,6 +1,7 @@
 package sqlstore
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -9,9 +10,12 @@ import (
 )
 
 // GET: Retrieve a record by ID
-func (s *SqlStore) GetEduRecord(id int) (models.EduRecord, error) {
+func (s *SqlStore) GetEduRecord(ctx context.Context, id int) (models.EduRecord, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	query := "SELECT id, amount, name, profit_margin FROM edu_pins WHERE id = $1"
-	row := s.db.QueryRow(query, id)
+	row := s.db.QueryRowContext(ctx, query, id)
 
 	record := models.EduRecord{}
 	err := row.Scan(&record.ID, &record.Amount, &record.Name, &record.Profit_Margin)
@@ -29,9 +33,12 @@ func (s *SqlStore) GetEduRecord(id int) (models.EduRecord, error) {
 }
 
 // UPDATE: Update amount and name by ID
-func (s *SqlStore) UpdateEduRecord(id int, edu models.EduRecord) error {
+func (s *SqlStore) UpdateEduRecord(ctx context.Context, id int, edu models.EduRecord) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	query := "UPDATE edu_pins SET amount = $1, name = $2 WHERE id = $3"
-	result, err := s.db.Exec(query, edu.Amount, edu.Name, id)
+	result, err := s.db.ExecContext(ctx, query, edu.Amount, edu.Name, id)
 	if err != nil {
 		s.logger.Error("Failed to update record", zap.Int("ID", id), zap.Error(err))
 		return fmt.Errorf("update failed for record ID %d: %v", id, err)
@@ -53,9 +60,12 @@ func (s *SqlStore) UpdateEduRecord(id int, edu models.EduRecord) error {
 }
 
 // DELETE: Delete a record by ID
-func (s *SqlStore) DeleteEduRecord(id int) error {
+func (s *SqlStore) DeleteEduRecord(ctx context.Context, id int) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	query := "DELETE FROM edu_pins WHERE id = $1"
-	result, err := s.db.Exec(query, id)
+	result, err := s.db.ExecContext(ctx, query, id)
 	if err != nil {
 		s.logger.Error("Failed to delete record", zap.Int("ID", id), zap.Error(err))
 		return fmt.Errorf("delete failed for record ID %d: %v", id, err)

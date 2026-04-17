@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,6 +28,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	if r.Method == "POST" {
 
@@ -39,7 +41,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, userBalance, _, err := handler.getBalance(userDetails.ID)
+		_, userBalance, _, err := handler.getBalance(ctx, userDetails.ID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance: %s", err.Error())}}
@@ -64,7 +66,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// --- Create a txID (used for Redis hold) ---
-		txID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, info.Amount, userBalance)
+		txID, err := handler.placeRedisHoldAndMeta(ctx, w, userDetails.ID, info.Amount, userBalance)
 		if err != nil {
 			return
 		}
@@ -78,7 +80,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 			"created_at": time.Now().UTC().Format(time.RFC3339),
 		}
 		// non-fatal if this fails; just log
-		if err := handler.redisClient.SetMeta(txID, meta, 7*24*time.Hour); err != nil {
+		if err := handler.redisClient.SetMeta(ctx, txID, meta, 7*24*time.Hour); err != nil {
 			handler.logger.Warn("failed to set transfer meta in redis", zap.Error(err), zap.String("txID", txID))
 		}
 
@@ -88,7 +90,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		info.Source = "direct"
 		info.TXN = txID
 
-		resp, err := handler.bankTrf.TransferToBank(info)
+		resp, err := handler.bankTrf.TransferToBank(ctx, info)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -99,19 +101,19 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		// ✅ map external provider reference to our internal transaction ID
 		apiRef := resp.Reference // provider's unique reference
 		holdTTL := 48 * time.Hour
-		if err := handler.redisClient.SetExternalMapping(apiRef, txID, holdTTL); err != nil {
+		if err := handler.redisClient.SetExternalMapping(ctx, apiRef, txID, holdTTL); err != nil {
 			handler.logger.Error("Failed to set external mapping in Redis", zap.Error(err))
 		}
 
 		switch resp.Status {
 		case "success":
 			// confirm the hold in Redis (finalize funds)
-			if ok, err := handler.redisClient.ConfirmHold(userDetails.ID, txID); err != nil || !ok {
+			if ok, err := handler.redisClient.ConfirmHold(ctx, userDetails.ID, txID); err != nil || !ok {
 				handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
 
 			}
 			// persist DB balance (idempotent) — this preserves your original behaviour
-			if err := handler.updateBalance(userDetails.ID, newBal); err != nil {
+			if err := handler.updateBalance(ctx, userDetails.ID, newBal); err != nil {
 				if err == ErrorRedisBalanceUpdate {
 					// Log and continue
 					handler.logger.Warn("Balance update failed in Redis", zap.Error(err))
@@ -130,7 +132,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 				// Emit utility.payment event for bank transfer
 				if handler.processor != nil {
 					go func(uID string, amt string, txID string) {
-						ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+						ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 						defer cancel()
 						ev := &events.Event{
 							Type:      "utility.payment",
@@ -160,7 +162,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		case "failed":
 
 			// release the hold in Redis
-			if ok, err := handler.redisClient.ReleaseHold(userDetails.ID, txID); err != nil || !ok {
+			if ok, err := handler.redisClient.ReleaseHold(ctx, userDetails.ID, txID); err != nil || !ok {
 				handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
 			}
 			response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
@@ -179,7 +181,7 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		resp, err := handler.bankTranc.GetTransferHistory(userDetails.Username)
+		resp, err := handler.bankTranc.GetTransferHistory(ctx, userDetails.Username)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -201,11 +203,12 @@ func (handler *HttpHandler) TransferRecipient(w http.ResponseWriter, r *http.Req
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	if r.Method == "GET" {
 
 		handler.logger.Info("Fetching user transfer recipient details", zap.String("userID", userDetails.ID))
-		recipients, err := handler.store.GetTransferRecipients(userDetails.ID)
+		recipients, err := handler.store.GetTransferRecipients(ctx, userDetails.ID)
 		if err != nil {
 			if err == mongo.ErrNoRecipientFound {
 				handler.logger.Info("No transfer recipients found for user", zap.String("userID", userDetails.ID))
@@ -241,7 +244,7 @@ func (handler *HttpHandler) TransferRecipient(w http.ResponseWriter, r *http.Req
 			return
 		}
 
-		if err := handler.store.SaveTransferRecipient(userDetails.ID, req.Username, req.Email, req.Phone, req.FullName); err != nil {
+		if err := handler.store.SaveTransferRecipient(ctx, userDetails.ID, req.Username, req.Email, req.Phone, req.FullName); err != nil {
 			handler.logger.Error("Failed to save transfer recipient", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": "failed to save transfer recipient"}}
@@ -267,7 +270,7 @@ func (handler *HttpHandler) TransferRecipient(w http.ResponseWriter, r *http.Req
 			return
 		}
 
-		if err := handler.store.DeleteTransferRecipient(userDetails.ID, req.Email); err != nil {
+		if err := handler.store.DeleteTransferRecipient(ctx, userDetails.ID, req.Email); err != nil {
 			if err == mongo.ErrNoRecipientFound {
 				handler.logger.Info("No transfer recipient found for deletion", zap.String("email", req.Email))
 				w.WriteHeader(http.StatusNotFound)
@@ -297,6 +300,7 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	info := transfer.AremxyPlugTransfer{}
 	if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
@@ -319,7 +323,7 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 		return
 	}
 
-	_, userBalance, _, err := handler.getBalance(userDetails.ID)
+	_, userBalance, _, err := handler.getBalance(ctx, userDetails.ID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": fmt.Sprintf("could not get user balance: %s", err.Error())}}
@@ -351,7 +355,7 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 
 	balanceAfterTransferString := userBalance.Sub(amountDec).StringFixedBank(2)
 
-	txnID, err := handler.placeRedisHoldAndMeta(w, userDetails.ID, info.Amount, userBalance)
+	txnID, err := handler.placeRedisHoldAndMeta(ctx, w, userDetails.ID, info.Amount, userBalance)
 	if err != nil {
 		return
 	}
@@ -362,7 +366,7 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 	info.FullName = userDetails.FullName
 	info.TXN = txnID
 
-	resp, err := handler.bankTrf.TransferToAremxyPlug(info)
+	resp, err := handler.bankTrf.TransferToAremxyPlug(ctx, info)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -372,21 +376,21 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 
 	// ✅ map external provider reference to our internal transaction ID
 	apiRef := resp.Reference // provider's unique reference
-	if err := handler.redisClient.SetExternalMapping(apiRef, txnID, holdTTL); err != nil {
+	if err := handler.redisClient.SetExternalMapping(ctx, apiRef, txnID, holdTTL); err != nil {
 		handler.logger.Error("Failed to set external mapping in Redis", zap.Error(err))
 	}
 
 	switch resp.Status {
 	case "success":
 		// confirm the hold in Redis (finalize funds)
-		if ok, err := handler.redisClient.ConfirmHold(userDetails.ID, txnID); err != nil || !ok {
+		if ok, err := handler.redisClient.ConfirmHold(ctx, userDetails.ID, txnID); err != nil || !ok {
 			handler.logger.Warn("Failed to confirm hold in Redis", zap.Error(err))
 
 		}
 
 		balanceAfter, _ := strconv.ParseFloat(balanceAfterTransferString, 64)
 		// persist DB balance (idempotent) — this preserves your original behaviour
-		if err := handler.updateBalance(userDetails.ID, balanceAfter); err != nil {
+		if err := handler.updateBalance(ctx, userDetails.ID, balanceAfter); err != nil {
 			if err == ErrorRedisBalanceUpdate {
 				// Log and continue
 				handler.logger.Warn("Balance update failed in Redis", zap.Error(err))
@@ -406,7 +410,7 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 			// Emit utility.payment event for aremxyplug transfer
 			if handler.processor != nil {
 				go func(uID string, amt string, txID string) {
-					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 					defer cancel()
 					ev := &events.Event{
 						Type:      "utility.payment",
@@ -436,7 +440,7 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 	case "failed":
 		handler.logger.Info("Transfer to AremxyPlug account failed", zap.String("userID", userDetails.ID), zap.String("response", resp.Status))
 		// release the hold in Redis
-		if ok, err := handler.redisClient.ReleaseHold(userDetails.ID, txnID); err != nil || !ok {
+		if ok, err := handler.redisClient.ReleaseHold(ctx, userDetails.ID, txnID); err != nil || !ok {
 			handler.logger.Warn("Failed to release hold in Redis", zap.Error(err))
 		}
 		response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"data": resp}}
@@ -455,8 +459,9 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 }
 
 func (handler *HttpHandler) GetTransferDetails(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	id := chi.URLParam(r, "id")
-	resp, err := handler.bankTranc.GetTransferDetails(id)
+	resp, err := handler.bankTranc.GetTransferDetails(ctx, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -474,7 +479,8 @@ func (handler *HttpHandler) GetTransferDetails(w http.ResponseWriter, r *http.Re
 
 // Admin handler function
 func (handler *HttpHandler) GetTransferHistory(w http.ResponseWriter, r *http.Request) {
-	trsf, err := handler.bankTranc.GetTransferHistory("")
+	ctx := r.Context()
+	trsf, err := handler.bankTranc.GetTransferHistory(ctx, "")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -489,7 +495,8 @@ func (handler *HttpHandler) GetTransferHistory(w http.ResponseWriter, r *http.Re
 
 func (handler *HttpHandler) GetAllBankTransactions(w http.ResponseWriter, r *http.Request) {
 	// should call the fuction for loading all the  bank transactions
-	transactions, err := handler.bankTranc.GetAllTransactionHistory()
+	ctx := r.Context()
+	transactions, err := handler.bankTranc.GetAllTransactionHistory(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -507,7 +514,8 @@ func (handler *HttpHandler) GetAllBankTransactions(w http.ResponseWriter, r *htt
 func (handler *HttpHandler) GetDepositDetail(w http.ResponseWriter, r *http.Request) {
 
 	id := chi.URLParam(r, "id")
-	resp, err := handler.bankTranc.GetDepositDetails(id)
+	ctx := r.Context()
+	resp, err := handler.bankTranc.GetDepositDetails(ctx, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusCreated, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -531,8 +539,9 @@ func (handler *HttpHandler) GetDepositHistory(w http.ResponseWriter, r *http.Req
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
-	dept, err := handler.bankTranc.GetDepositHistory(userDetails.Username)
+	dept, err := handler.bankTranc.GetDepositHistory(ctx, userDetails.Username)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -547,7 +556,9 @@ func (handler *HttpHandler) GetDepositHistory(w http.ResponseWriter, r *http.Req
 }
 
 func (handler *HttpHandler) GetAllDepositHistory(w http.ResponseWriter, r *http.Request) {
-	dept, err := handler.bankTranc.GetDepositHistory("")
+	ctx := r.Context()
+
+	dept, err := handler.bankTranc.GetDepositHistory(ctx, "")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -561,8 +572,9 @@ func (handler *HttpHandler) GetAllDepositHistory(w http.ResponseWriter, r *http.
 }
 
 func (handler *HttpHandler) GetBanks(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
-	_, err := handler.store.GetAllBanks()
+	_, err := handler.store.GetAllBanks(ctx)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -577,7 +589,8 @@ func (handler *HttpHandler) GetBanks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *HttpHandler) DepositAccount(w http.ResponseWriter, r *http.Request) {
-	err := handler.virtualAcc.CreateDepositAccount()
+	ctx := r.Context()
+	err := handler.virtualAcc.CreateDepositAccount(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -605,11 +618,12 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	ctx := r.Context()
 
 	id := userDetails.ID
 
 	// refresh balance from DB/external
-	_, err = handler.refreshBalance(id)
+	_, err = handler.refreshBalance(ctx, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{
@@ -624,7 +638,7 @@ func (handler *HttpHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get actual balance
-	bal, available, held, err := handler.getBalance(id)
+	bal, available, held, err := handler.getBalance(ctx, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{
@@ -702,9 +716,11 @@ func (handler *HttpHandler) checkTransfer(bal decimal.Decimal, amount float64) (
 
 var ErrorRedisBalanceUpdate = errors.New("could not update redis balance")
 
-func (handler *HttpHandler) updateBalance(userID string, newBalance float64) error {
-
-	if err := handler.bankTranc.UpdateBalance(userID, newBalance); err != nil {
+func (handler *HttpHandler) updateBalance(ctx context.Context, userID string, newBalance float64) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := handler.bankTranc.UpdateBalance(ctx, userID, newBalance); err != nil {
 		return err
 	}
 
@@ -712,8 +728,11 @@ func (handler *HttpHandler) updateBalance(userID string, newBalance float64) err
 
 }
 
-func (handler *HttpHandler) getVirtualNuban(id string) (string, error) {
-	acc_details, err := handler.store.GetVirtualNuban(id)
+func (handler *HttpHandler) getVirtualNuban(ctx context.Context, id string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	acc_details, err := handler.store.GetVirtualNuban(ctx, id)
 	if err != nil {
 		handler.logger.Error(err.Error())
 		return "", err
@@ -722,14 +741,17 @@ func (handler *HttpHandler) getVirtualNuban(id string) (string, error) {
 	return acc_details.VirtualAccountID, nil
 }
 
-func (handler *HttpHandler) refreshBalance(userID string) (bool, error) {
-	virtualNubanID, err := handler.getVirtualNuban(userID)
+func (handler *HttpHandler) refreshBalance(ctx context.Context, userID string) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	virtualNubanID, err := handler.getVirtualNuban(ctx, userID)
 	if err != nil {
 		handler.logger.Error(err.Error())
 		return false, err
 	}
 
-	updatedBalance, err := handler.bankDep.Deposit(virtualNubanID, userID)
+	updatedBalance, err := handler.bankDep.Deposit(ctx, virtualNubanID, userID)
 	if err != nil {
 		handler.logger.Error(err.Error())
 		return false, err
@@ -738,16 +760,19 @@ func (handler *HttpHandler) refreshBalance(userID string) (bool, error) {
 	return updatedBalance, nil
 }
 
-func (handler *HttpHandler) getBalance(userID string) (balance decimal.Decimal, available decimal.Decimal, held decimal.Decimal, err error) {
+func (handler *HttpHandler) getBalance(ctx context.Context, userID string) (balance decimal.Decimal, available decimal.Decimal, held decimal.Decimal, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	// Redis read failed — fallback to MongoDB
-	mongoBal, dbErr := handler.store.GetBalance(userID)
+	mongoBal, dbErr := handler.store.GetBalance(ctx, userID)
 	if dbErr != nil {
 		return decimal.Decimal{}, decimal.Decimal{}, decimal.Decimal{}, dbErr
 	}
 
 	// get held funds as decimal (best-effort)
-	heldFloat, heldErr := handler.redisClient.GetHeldFundsLua(userID)
+	heldFloat, heldErr := handler.redisClient.GetHeldFundsLua(ctx, userID)
 	if heldErr != nil {
 		handler.logger.Warn("failed to get held funds from redis", zap.Error(heldErr), zap.String("userID", userID))
 		held = decimal.Zero
@@ -761,6 +786,7 @@ func (handler *HttpHandler) getBalance(userID string) (balance decimal.Decimal, 
 }
 
 func (handler *HttpHandler) GetUserDetails(r *http.Request) (user *models.User, err error) {
+	ctx := r.Context()
 
 	accessToken, err := r.Cookie("access_token")
 	if err != nil {
@@ -774,7 +800,7 @@ func (handler *HttpHandler) GetUserDetails(r *http.Request) (user *models.User, 
 		return nil, fmt.Errorf("could not get user's details: %v", err)
 	}
 
-	userDetails, err := handler.store.GetUserByID(claim.ID)
+	userDetails, err := handler.store.GetUserByID(ctx, claim.ID)
 	if err != nil {
 		return nil, fmt.Errorf("could not get user's details: %v", err)
 	}

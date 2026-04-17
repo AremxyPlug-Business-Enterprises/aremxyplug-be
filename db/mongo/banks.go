@@ -31,13 +31,14 @@ var (
 	ErrDepositIDExist = errors.New("deposit_id already exists")
 )
 
-func (m *mongoStore) SaveBankList(banklist models.BankDetails) error {
-	err := m.saveToDB(bankColl, banklist)
+func (m *mongoStore) SaveBankList(ctx context.Context, banklist models.BankDetails) error {
+	ctx = m.ensureCtx(ctx)
+	err := m.saveToDB(ctx, bankColl, banklist)
 	return err
 }
 
-func (m *mongoStore) GetAllBanks() ([]models.BankDetails, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetAllBanks(ctx context.Context) ([]models.BankDetails, error) {
+	ctx = m.ensureCtx(ctx)
 	bankColl := m.col(bankColl)
 	cursor, err := bankColl.Find(ctx, bson.D{})
 	if err != nil {
@@ -56,17 +57,18 @@ func (m *mongoStore) GetAllBanks() ([]models.BankDetails, error) {
 	return banks, nil
 }
 
-func (m *mongoStore) UpsertBankByNIPCode(bank models.BankDetails) error {
+func (m *mongoStore) UpsertBankByNIPCode(ctx context.Context, bank models.BankDetails) error {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"nip_code": bank.NIPCode}
 	update := bson.M{"$set": bson.M{"name": bank.Name}}
 	bankColl := m.col(bankColl)
 	opts := options.Update().SetUpsert(true)
-	_, err := bankColl.UpdateOne(context.Background(), filter, update, opts)
+	_, err := bankColl.UpdateOne(ctx, filter, update, opts)
 	return err
 }
 
-func (m *mongoStore) DeleteBankByNIPCode(nipCode string) error {
-	ctx := context.Background()
+func (m *mongoStore) DeleteBankByNIPCode(ctx context.Context, nipCode string) error {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.D{primitive.E{Key: "nip_code", Value: nipCode}}
 	bankColl := m.col(bankColl)
 
@@ -74,8 +76,8 @@ func (m *mongoStore) DeleteBankByNIPCode(nipCode string) error {
 	return err
 }
 
-func (m *mongoStore) GetBankByNIPCode(nipCode string) (*models.BankDetails, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetBankByNIPCode(ctx context.Context, nipCode string) (*models.BankDetails, error) {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.D{primitive.E{Key: "nip_code", Value: nipCode}}
 	var bank models.BankDetails
 	bankColl := m.col(bankColl)
@@ -85,8 +87,8 @@ func (m *mongoStore) GetBankByNIPCode(nipCode string) (*models.BankDetails, erro
 	return &bank, nil
 }
 
-func (m *mongoStore) UpdateBank(bank models.BankDetails) error {
-	ctx := context.Background()
+func (m *mongoStore) UpdateBank(ctx context.Context, bank models.BankDetails) error {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.D{primitive.E{Key: "nip_code", Value: bank.NIPCode}}
 	update := bson.D{primitive.E{Key: "$set", Value: bson.D{primitive.E{Key: "name", Value: bank.Name}}}}
 	bankColl := m.col(bankColl)
@@ -94,8 +96,8 @@ func (m *mongoStore) UpdateBank(bank models.BankDetails) error {
 	return err
 }
 
-func (m *mongoStore) GetBankDetail(name string) (models.BankDetails, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetBankDetail(ctx context.Context, name string) (models.BankDetails, error) {
+	ctx = m.ensureCtx(ctx)
 	bankDetail := models.BankDetails{}
 
 	//bankName := strings.ToUpper(name)
@@ -110,18 +112,19 @@ func (m *mongoStore) GetBankDetail(name string) (models.BankDetails, error) {
 	return bankDetail, nil
 }
 
-func (m *mongoStore) SaveVirtualAccount(account models.AccountDetails) error {
+func (m *mongoStore) SaveVirtualAccount(ctx context.Context, account models.AccountDetails) error {
+	ctx = m.ensureCtx(ctx)
 	// Start session
 	session, err := m.mongoClient.StartSession()
 	if err != nil {
 		return fmt.Errorf("failed to start session: %w", err)
 	}
-	defer session.EndSession(context.Background())
+	defer session.EndSession(ctx)
 
 	// Transaction operation
-	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (interface{}, error) {
+	_, err = session.WithTransaction(ctx, func(ctx mongo.SessionContext) (interface{}, error) {
 
-		if err := m.saveToDB(virtualColl, account); err != nil {
+		if err := m.saveToDB(ctx, virtualColl, account); err != nil {
 			return nil, fmt.Errorf("failed to save account: %w", err)
 		}
 
@@ -148,8 +151,8 @@ func (m *mongoStore) SaveVirtualAccount(account models.AccountDetails) error {
 	return err
 }
 
-func (m *mongoStore) GetVirtualNuban(id string) (models.AccountDetails, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetVirtualNuban(ctx context.Context, id string) (models.AccountDetails, error) {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"user_id": id}
 
 	acc_details := models.AccountDetails{}
@@ -166,18 +169,20 @@ func (m *mongoStore) GetVirtualNuban(id string) (models.AccountDetails, error) {
 	return acc_details, nil
 }
 
-func (m *mongoStore) SaveCounterParty(counterparty interface{}) error {
-	err := m.saveToDB(counterColl, counterparty)
+func (m *mongoStore) SaveCounterParty(ctx context.Context, counterparty interface{}) error {
+	ctx = m.ensureCtx(ctx)
+	err := m.saveToDB(ctx, counterColl, counterparty)
 	return err
 }
 
-func (m *mongoStore) SaveTransfer(transfer models.TransferResponse) error {
-	err := m.saveToDB(transferColl, transfer)
+func (m *mongoStore) SaveTransfer(ctx context.Context, transfer models.TransferResponse) error {
+	ctx = m.ensureCtx(ctx)
+	err := m.saveToDB(ctx, transferColl, transfer)
 	return err
 }
 
-func (m *mongoStore) GetCounterParty(accountNumber, bankname string) (models.CounterParty, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetCounterParty(ctx context.Context, accountNumber, bankname string) (models.CounterParty, error) {
+	ctx = m.ensureCtx(ctx)
 	counterparty := models.CounterParty{}
 	//bankName := strings.ToUpper(bankname)
 
@@ -193,8 +198,9 @@ func (m *mongoStore) GetCounterParty(accountNumber, bankname string) (models.Cou
 	return counterparty, nil
 }
 
-func (m *mongoStore) GetTransferDetails(id string) (models.TransferResponse, error) {
-	resp := m.getRecord(id, transferColl)
+func (m *mongoStore) GetTransferDetails(ctx context.Context, id string) (models.TransferResponse, error) {
+	ctx = m.ensureCtx(ctx)
+	resp := m.getRecord(ctx, id, transferColl)
 	result := models.TransferResponse{}
 	err := resp.Decode(&result)
 	if err != nil {
@@ -204,11 +210,11 @@ func (m *mongoStore) GetTransferDetails(id string) (models.TransferResponse, err
 	return result, nil
 }
 
-func (m *mongoStore) GetAllTransferHistory(userID string) ([]models.TransferResponse, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetAllTransferHistory(ctx context.Context, userID string) ([]models.TransferResponse, error) {
+	ctx = m.ensureCtx(ctx)
 	result := []models.TransferResponse{}
 
-	findResult, err := m.getAllRecords(transferColl, userID)
+	findResult, err := m.getAllRecords(ctx, transferColl, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -227,12 +233,13 @@ func (m *mongoStore) GetAllTransferHistory(userID string) ([]models.TransferResp
 
 }
 
-func (s *mongoStore) GetDepositDetails(id string) (any, error) {
+func (s *mongoStore) GetDepositDetails(ctx context.Context, id string) (any, error) {
+	ctx = s.ensureCtx(ctx)
 	// First decode only transaction_product so we can choose the proper response shape.
 	var probe struct {
 		TransactionProduct string `bson:"transaction_product"`
 	}
-	result := s.getRecord(id, depositColl)
+	result := s.getRecord(ctx, id, depositColl)
 	err := result.Decode(&probe)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -244,7 +251,7 @@ func (s *mongoStore) GetDepositDetails(id string) (any, error) {
 	if strings.EqualFold(probe.TransactionProduct, "Internal Deposit") ||
 		strings.EqualFold(probe.TransactionProduct, "System Top-Up") || strings.EqualFold(probe.TransactionProduct, "System Debit") {
 		var internalRes models.InternalDepositResponse
-		internalResult := s.getRecord(id, depositColl)
+		internalResult := s.getRecord(ctx, id, depositColl)
 		if err := internalResult.Decode(&internalRes); err != nil {
 			if err == mongo.ErrNoDocuments {
 				return models.InternalDepositResponse{}, nil
@@ -255,7 +262,7 @@ func (s *mongoStore) GetDepositDetails(id string) (any, error) {
 	}
 
 	var res models.DepositResponse
-	defaultResult := s.getRecord(id, depositColl)
+	defaultResult := s.getRecord(ctx, id, depositColl)
 	if err := defaultResult.Decode(&res); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return models.DepositResponse{}, nil
@@ -266,11 +273,11 @@ func (s *mongoStore) GetDepositDetails(id string) (any, error) {
 	return res, nil
 }
 
-func (m *mongoStore) GetAllDepositHistory(userID string) ([]models.DepositResponse, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetAllDepositHistory(ctx context.Context, userID string) ([]models.DepositResponse, error) {
+	ctx = m.ensureCtx(ctx)
 	result := []models.DepositResponse{}
 
-	findResult, err := m.getAllRecords(depositColl, userID)
+	findResult, err := m.getAllRecords(ctx, depositColl, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -288,8 +295,8 @@ func (m *mongoStore) GetAllDepositHistory(userID string) ([]models.DepositRespon
 	return result, nil
 }
 
-func (m *mongoStore) GetAllBankTransactions(userID string) ([]interface{}, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetAllBankTransactions(ctx context.Context, userID string) ([]interface{}, error) {
+	ctx = m.ensureCtx(ctx)
 	var transactions []interface{}
 
 	// Fetch deposits
@@ -348,13 +355,14 @@ func getTransactionTime(record interface{}) time.Time {
 		return time.Time{}
 	}
 }
-func (m *mongoStore) SaveDeposit(detail any) error {
-	err := m.saveToDB(depositColl, detail)
+func (m *mongoStore) SaveDeposit(ctx context.Context, detail any) error {
+	ctx = m.ensureCtx(ctx)
+	err := m.saveToDB(ctx, depositColl, detail)
 	return err
 }
 
-func (m *mongoStore) SaveDepositID(detail interface{}) error {
-	ctx := context.Background()
+func (m *mongoStore) SaveDepositID(ctx context.Context, detail interface{}) error {
+	ctx = m.ensureCtx(ctx)
 
 	col := m.col(deptColl)
 
@@ -378,8 +386,9 @@ func (m *mongoStore) SaveDepositID(detail interface{}) error {
 	return nil
 }
 
-func (m *mongoStore) GetDepositID(virtualNuban string) (result interface{}, err error) {
-	id_Result := m.getRecord(deptColl, virtualNuban)
+func (m *mongoStore) GetDepositID(ctx context.Context, virtualNuban string) (result interface{}, err error) {
+	ctx = m.ensureCtx(ctx)
+	id_Result := m.getRecord(ctx, deptColl, virtualNuban)
 
 	// change this result to struct
 	var resp interface{}
@@ -394,7 +403,8 @@ func (m *mongoStore) GetDepositID(virtualNuban string) (result interface{}, err 
 	return resp, nil
 }
 
-func (m *mongoStore) CreateInitialBalance(userID, virtualNuban string) error {
+func (m *mongoStore) CreateInitialBalance(ctx context.Context, userID, virtualNuban string) error {
+	ctx = m.ensureCtx(ctx)
 
 	balance, err := primitive.ParseDecimal128("0.00")
 	if err != nil {
@@ -410,14 +420,12 @@ func (m *mongoStore) CreateInitialBalance(userID, virtualNuban string) error {
 		UpdatedAt:    time.Now().UTC(),
 	}
 
-	_, err = m.col(balColl).InsertOne(context.Background(), initialBalance)
+	_, err = m.col(balColl).InsertOne(ctx, initialBalance)
 	return err
 }
 
-func (m *mongoStore) GetBalance(userID string) (balance decimal.Decimal, err error) {
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func (m *mongoStore) GetBalance(ctx context.Context, userID string) (balance decimal.Decimal, err error) {
+	ctx = m.ensureCtx(ctx)
 
 	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
 
@@ -439,8 +447,8 @@ func (m *mongoStore) GetBalance(userID string) (balance decimal.Decimal, err err
 	return retrievedBalance, nil
 }
 
-func (m *mongoStore) GetBalanceDetails(id string) (models.Balance, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetBalanceDetails(ctx context.Context, id string) (models.Balance, error) {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.D{primitive.E{Key: "user_id", Value: id}}
 
 	result := m.col(balColl).FindOne(ctx, filter)
@@ -456,9 +464,8 @@ func (m *mongoStore) GetBalanceDetails(id string) (models.Balance, error) {
 	return resp, nil
 }
 
-func (m *mongoStore) SaveBalance(userID string, balance models.Balance) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func (m *mongoStore) SaveBalance(ctx context.Context, userID string, balance models.Balance) error {
+	ctx = m.ensureCtx(ctx)
 
 	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
 
@@ -489,9 +496,8 @@ func (m *mongoStore) SaveBalance(userID string, balance models.Balance) error {
 	return nil
 }
 
-func (m *mongoStore) UpdateBalance(userID string, balance decimal.Decimal) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func (m *mongoStore) UpdateBalance(ctx context.Context, userID string, balance decimal.Decimal) error {
+	ctx = m.ensureCtx(ctx)
 
 	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
 
@@ -516,8 +522,8 @@ func (m *mongoStore) UpdateBalance(userID string, balance decimal.Decimal) error
 
 // first create the collection for pin
 // code to save pin to the database
-func (m *mongoStore) SavePin(data models.UserPin) error {
-	ctx := context.Background()
+func (m *mongoStore) SavePin(ctx context.Context, data models.UserPin) error {
+	ctx = m.ensureCtx(ctx)
 	coll := m.col("pin")
 	userColl := m.col("user")
 
@@ -546,8 +552,8 @@ func (m *mongoStore) SavePin(data models.UserPin) error {
 }
 
 // code to get the pin from the database
-func (m *mongoStore) GetPin(userID string) (string, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetPin(ctx context.Context, userID string) (string, error) {
+	ctx = m.ensureCtx(ctx)
 	filter := bson.D{primitive.E{Key: "user_id", Value: userID}}
 
 	result := m.col("pin").FindOne(ctx, filter)
@@ -565,9 +571,8 @@ func (m *mongoStore) GetPin(userID string) (string, error) {
 	return resp.Pin, nil
 }
 
-func (m *mongoStore) UpdatePin(data models.UserPin) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func (m *mongoStore) UpdatePin(ctx context.Context, data models.UserPin) error {
+	ctx = m.ensureCtx(ctx)
 
 	filter := bson.D{primitive.E{Key: "user_id", Value: data.UserID}}
 
@@ -583,8 +588,8 @@ func (m *mongoStore) UpdatePin(data models.UserPin) error {
 	return nil
 }
 
-func (m *mongoStore) SaveTransferRecipient(userID, username, email, phone, fullName string) error {
-	ctx := context.Background()
+func (m *mongoStore) SaveTransferRecipient(ctx context.Context, userID, username, email, phone, fullName string) error {
+	ctx = m.ensureCtx(ctx)
 	col := m.col("transfer_recipients")
 
 	filter := bson.M{"user_id": userID}
@@ -639,8 +644,8 @@ func (m *mongoStore) SaveTransferRecipient(userID, username, email, phone, fullN
 
 var ErrNoRecipientFound = errors.New("no recipient found for user")
 
-func (m *mongoStore) GetTransferRecipients(userID string) ([]models.TransferRecipientDetails, error) {
-	ctx := context.Background()
+func (m *mongoStore) GetTransferRecipients(ctx context.Context, userID string) ([]models.TransferRecipientDetails, error) {
+	ctx = m.ensureCtx(ctx)
 	col := m.col("transfer_recipients")
 
 	var existing models.TransferRecipient
@@ -655,8 +660,8 @@ func (m *mongoStore) GetTransferRecipients(userID string) ([]models.TransferReci
 	return existing.Recipient, nil
 }
 
-func (m *mongoStore) DeleteTransferRecipient(userID, email string) error {
-	ctx := context.Background()
+func (m *mongoStore) DeleteTransferRecipient(ctx context.Context, userID, email string) error {
+	ctx = m.ensureCtx(ctx)
 	col := m.col("transfer_recipients")
 
 	filter := bson.M{"user_id": userID}

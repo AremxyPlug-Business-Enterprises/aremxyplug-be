@@ -1,6 +1,7 @@
 package pointredeem
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
@@ -20,7 +21,7 @@ func NewPointConfig(store db.Extras) *PointConfig {
 	}
 }
 
-func (p *PointConfig) RedeemPoints(userID string, points int) (models.PointRedeem, error) {
+func (p *PointConfig) RedeemPoints(ctx context.Context, userID string, points int) (models.PointRedeem, error) {
 
 	const (
 		MaxRedeemCap = 100
@@ -33,7 +34,7 @@ func (p *PointConfig) RedeemPoints(userID string, points int) (models.PointRedee
 	}
 
 	// Get total points already redeemed by this user
-	totalRedeemed, err := p.db.GetTotalPointsRedeemed(userID)
+	totalRedeemed, err := p.db.GetTotalPointsRedeemed(ctx, userID)
 	if err != nil {
 		return models.PointRedeem{}, err
 	}
@@ -45,12 +46,12 @@ func (p *PointConfig) RedeemPoints(userID string, points int) (models.PointRedee
 	}
 
 	redeemRate := 1
-	redeemRateStr := fmt.Sprintf("%d point(s) ~ ₦1", redeemRate)
+	redeemRateStr := fmt.Sprintf("%d PTS ~ ₦1", redeemRate)
 
 	transactionID := randomgen.GenerateTransactionID("pnt")
 	orderID, _ := randomgen.GenerateOrderID()
 
-	redeemedAmount, err := p.db.RedeemPoints(userID, points, redeemRate)
+	redeemedAmount, err := p.db.RedeemPoints(ctx, userID, points, redeemRate)
 	if err != nil {
 		return models.PointRedeem{}, err
 	}
@@ -71,7 +72,7 @@ func (p *PointConfig) RedeemPoints(userID string, points int) (models.PointRedee
 		Status:                 "success",
 	}
 
-	if err := p.db.CreatePointRedeemDoc(redeemDoc); err != nil {
+	if err := p.db.CreatePointRedeemDoc(ctx, redeemDoc); err != nil {
 		return models.PointRedeem{}, err
 	}
 
@@ -79,9 +80,9 @@ func (p *PointConfig) RedeemPoints(userID string, points int) (models.PointRedee
 
 }
 
-func (p *PointConfig) GetPoints(userID string) (models.PointSummary, error) {
+func (p *PointConfig) GetPoints(ctx context.Context, userID string) (models.PointSummary, error) {
 
-	point, err := p.db.GetPoint(userID)
+	point, err := p.db.GetPoint(ctx, userID)
 	if err != nil {
 		return models.PointSummary{}, err
 	}
@@ -90,8 +91,8 @@ func (p *PointConfig) GetPoints(userID string) (models.PointSummary, error) {
 
 }
 
-func (p *PointConfig) UserPoints(userID string) error {
-	err := p.db.CreatePointDoc(userID)
+func (p *PointConfig) UserPoints(ctx context.Context, userID string) error {
+	err := p.db.CreatePointDoc(ctx, userID)
 	if err != nil {
 		return err
 	}
@@ -99,11 +100,11 @@ func (p *PointConfig) UserPoints(userID string) error {
 	return nil
 }
 
-func (p *PointConfig) CreatePointTransaction(txn models.PointTransaction) error {
+func (p *PointConfig) CreatePointTransaction(ctx context.Context, txn models.PointTransaction) error {
 	txn.CreatedAt = time.Now().UTC()
 	txn.TransactionID = randomgen.GenerateTransactionID("pnt")
 
-	err := p.db.LogPointTransaction(txn)
+	err := p.db.LogPointTransaction(ctx, txn)
 	if err != nil {
 		return fmt.Errorf("failed to create point transaction: %v", err)
 	}

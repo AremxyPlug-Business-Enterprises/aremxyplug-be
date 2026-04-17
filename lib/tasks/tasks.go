@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -23,7 +24,10 @@ func NewService(store db.DataStore) *Service {
 // ApplyEvent processes a normalized TaskEvent.
 // Returns (completed bool, taskCode TaskType, progressDoc *ProgressDoc, err error).
 // IMPORTANT: this function does NOT publish task.completed events; caller should handle publishing.
-func (s *Service) ApplyEvent(userID string, te models.TaskEvent) (bool, models.TaskType, *models.ProgressDoc, error) {
+func (s *Service) ApplyEvent(ctx context.Context, userID string, te models.TaskEvent) (bool, models.TaskType, *models.ProgressDoc, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	def, ok := models.TaskRegistry[te.Task]
 	if !ok {
 		return false, "", nil, fmt.Errorf("task def not found: %s", te.Task)
@@ -32,13 +36,13 @@ func (s *Service) ApplyEvent(userID string, te models.TaskEvent) (bool, models.T
 	// One-time task
 	if def.OneTime {
 		// For one-time we treat Amount as the observed value (e.g. points redeemed or wallet fund).
-		doc, err := s.store.SetProgressForOneTime(userID, def, te.Amount, te.TxID)
+		doc, err := s.store.SetProgressForOneTime(ctx, userID, def, te.Amount, te.TxID)
 		if err != nil {
 			return false, def.Code, nil, err
 		}
 		// if progress >= target and not completed -> try mark completed
 		if doc.Progress >= def.Target && !doc.Completed {
-			ok, err := s.store.TryMarkCompleted(userID, def.Code)
+			ok, err := s.store.TryMarkCompleted(ctx, userID, def.Code)
 			if err != nil {
 				return false, def.Code, doc, err
 			}
@@ -51,12 +55,12 @@ func (s *Service) ApplyEvent(userID string, te models.TaskEvent) (bool, models.T
 
 	// Cumulative task
 	if !def.OneTime {
-		doc, err := s.store.IncrementCumulative(userID, def, te.Amount, te.TxID)
+		doc, err := s.store.IncrementCumulative(ctx, userID, def, te.Amount, te.TxID)
 		if err != nil {
 			return false, def.Code, nil, err
 		}
 		if doc.Progress >= def.Target && !doc.Completed {
-			ok, err := s.store.TryMarkCompleted(userID, def.Code)
+			ok, err := s.store.TryMarkCompleted(ctx, userID, def.Code)
 			if err != nil {
 				return false, def.Code, doc, err
 			}
@@ -71,8 +75,11 @@ func (s *Service) ApplyEvent(userID string, te models.TaskEvent) (bool, models.T
 }
 
 // AllTasksCompleted returns true if every task in the registry is completed for the user.
-func (s *Service) AllTasksCompleted(userID string) (bool, error) {
-	docs, err := s.store.ListUserProgress(userID)
+func (s *Service) AllTasksCompleted(ctx context.Context, userID string) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	docs, err := s.store.ListUserProgress(ctx, userID)
 	if err != nil {
 		return false, err
 	}

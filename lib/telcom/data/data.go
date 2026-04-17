@@ -2,6 +2,7 @@ package data
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -44,22 +45,28 @@ func NewData(dbConn db.TelcomStore, logger *zap.Logger) *DataConn {
 }
 
 // BuyData makes a call to the api to initiate a purchase
-func (d *DataConn) BuyData(data DataInfo) (*telcom.DataResult, error) {
+func (d *DataConn) BuyData(ctx context.Context, data DataInfo) (*telcom.DataResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	switch data.ProviderID {
 	case 1: // Dontech
-		return d.buyDontechData(data)
+		return d.buyDontechData(ctx, data)
 	case 2: // Easyaccessapi
-		return d.buyEasyaccessData(data)
+		return d.buyEasyaccessData(ctx, data)
 	case 3: // 247api
-		return d.buy247Data(data)
+		return d.buy247Data(ctx, data)
 	default:
 		return nil, errors.New("Invalid Provider ID")
 	}
 
 }
 
-func (d *DataConn) buyDontechData(data DataInfo) (*telcom.DataResult, error) {
+func (d *DataConn) buyDontechData(ctx context.Context, data DataInfo) (*telcom.DataResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	reqData := struct {
 		Network      int    `json:"network"`
@@ -91,7 +98,7 @@ func (d *DataConn) buyDontechData(data DataInfo) (*telcom.DataResult, error) {
 		return nil, d.logAndReturnError("unable to encode data", err)
 	}
 
-	req, err := http.NewRequest("POST", dontechapi+"/data/", &buf)
+	req, err := http.NewRequestWithContext(ctx, "POST", dontechapi+"/data/", &buf)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +151,7 @@ func (d *DataConn) buyDontechData(data DataInfo) (*telcom.DataResult, error) {
 			result.Status = "failed"
 			result.RecipientName = apiResponse.Ident
 			result.ApiID = apiResponse.Id
-			if err := d.saveTransaction(result); err != nil {
+			if err := d.saveTransaction(ctx, result); err != nil {
 				d.logger.Error("Database error try again...", zap.Error(err))
 				return nil, errors.New("Database Insert Error...")
 			}
@@ -154,7 +161,7 @@ func (d *DataConn) buyDontechData(data DataInfo) (*telcom.DataResult, error) {
 		result.RecipientName = apiResponse.Ident
 		result.ApiID = apiResponse.Id
 		result.Status = "success"
-		if err := d.saveTransaction(result); err != nil {
+		if err := d.saveTransaction(ctx, result); err != nil {
 			d.logger.Error("Database error try again...", zap.Error(err))
 			return nil, errors.New("Database Insert Error...")
 		}
@@ -172,7 +179,10 @@ func (d *DataConn) buyDontechData(data DataInfo) (*telcom.DataResult, error) {
 
 }
 
-func (d *DataConn) buyEasyaccessData(data DataInfo) (*telcom.DataResult, error) {
+func (d *DataConn) buyEasyaccessData(ctx context.Context, data DataInfo) (*telcom.DataResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	// 	01 for MTN
 	// 02 for GLO
 	// 03 for AIRTEL
@@ -211,7 +221,7 @@ func (d *DataConn) buyEasyaccessData(data DataInfo) (*telcom.DataResult, error) 
 
 	url := fmt.Sprintf("%s/%s.php", easyaccessapi, "data")
 
-	req, err := http.NewRequest("POST", url, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +275,7 @@ func (d *DataConn) buyEasyaccessData(data DataInfo) (*telcom.DataResult, error) 
 	if apiResponse.Status != "Successful" {
 		d.logger.Error("failed to purchase data", zap.Any("apiresponse", apiResponse))
 		result.Status = "failed"
-		if err := d.saveTransaction(result); err != nil {
+		if err := d.saveTransaction(ctx, result); err != nil {
 			d.logger.Error("Database error try again...", zap.Error(err))
 			return nil, errors.New("Database Insert Error...")
 		}
@@ -273,7 +283,7 @@ func (d *DataConn) buyEasyaccessData(data DataInfo) (*telcom.DataResult, error) 
 	}
 
 	result.Status = "success"
-	if err := d.saveTransaction(result); err != nil {
+	if err := d.saveTransaction(ctx, result); err != nil {
 		d.logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("Database Insert Error...")
 	}
@@ -281,7 +291,10 @@ func (d *DataConn) buyEasyaccessData(data DataInfo) (*telcom.DataResult, error) 
 	return result, nil
 }
 
-func (d *DataConn) buy247Data(data DataInfo) (*telcom.DataResult, error) {
+func (d *DataConn) buy247Data(ctx context.Context, data DataInfo) (*telcom.DataResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	// "1": {"id": 1, "network": "MTN"},
 	// "2": {"id": 2, "network": "Airtel"},
 	// "3": {"id": 3, "network": "Glo"},
@@ -319,7 +332,7 @@ func (d *DataConn) buy247Data(data DataInfo) (*telcom.DataResult, error) {
 
 	url := fmt.Sprintf("%s/%s?%s", api247, "data", query.Encode())
 
-	req, err := http.NewRequest("POST", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -375,7 +388,7 @@ func (d *DataConn) buy247Data(data DataInfo) (*telcom.DataResult, error) {
 		d.logger.Error("failed to purchase data", zap.Any("apiresponse", apiResponse))
 		status = "failed"
 		result.Status = status
-		if err := d.saveTransaction(result); err != nil {
+		if err := d.saveTransaction(ctx, result); err != nil {
 			d.logger.Error("Database error try again...", zap.Error(err))
 			return nil, errors.New("Database Insert Error...")
 		}
@@ -385,7 +398,7 @@ func (d *DataConn) buy247Data(data DataInfo) (*telcom.DataResult, error) {
 	status = "success"
 	result.Status = status
 
-	if err := d.saveTransaction(result); err != nil {
+	if err := d.saveTransaction(ctx, result); err != nil {
 		d.logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("Database Insert Error...")
 	}
@@ -394,7 +407,10 @@ func (d *DataConn) buy247Data(data DataInfo) (*telcom.DataResult, error) {
 
 }
 
-func (d *DataConn) BuySpecData(data telcom.SpectranetInfo) (*telcom.SpectranetResult, error) {
+func (d *DataConn) BuySpecData(ctx context.Context, data telcom.SpectranetInfo) (*telcom.SpectranetResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	data.RequestID = randomgen.GenerateRequestID()
 	orderid, err := randomgen.GenerateOrderID()
@@ -402,7 +418,7 @@ func (d *DataConn) BuySpecData(data telcom.SpectranetInfo) (*telcom.SpectranetRe
 		return nil, d.logAndReturnError("unable to generate orderid", err)
 	}
 	transactionID := randomgen.GenerateTransactionID("dat")
-	resp, err := d.buySpecData(data)
+	resp, err := d.buySpecData(ctx, data)
 	if err != nil {
 		d.logger.Error("error returned from server", zap.Any("error:", err))
 		return nil, err
@@ -434,7 +450,7 @@ func (d *DataConn) BuySpecData(data telcom.SpectranetInfo) (*telcom.SpectranetRe
 		RequestID:              apiResponse.RequestID,
 	}
 
-	if err := d.saveTransaction(result); err != nil {
+	if err := d.saveTransaction(ctx, result); err != nil {
 		return nil, d.logAndReturnError("error while saving to database", err)
 	}
 
@@ -444,7 +460,10 @@ func (d *DataConn) BuySpecData(data telcom.SpectranetInfo) (*telcom.SpectranetRe
 
 }
 
-func (d *DataConn) BuySmileData(data telcom.SmileInfo) (*telcom.SmileResult, error) {
+func (d *DataConn) BuySmileData(ctx context.Context, data telcom.SmileInfo) (*telcom.SmileResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	data.RequestID = randomgen.GenerateRequestID()
 	orderid, err := randomgen.GenerateOrderID()
@@ -452,7 +471,7 @@ func (d *DataConn) BuySmileData(data telcom.SmileInfo) (*telcom.SmileResult, err
 		return nil, d.logAndReturnError("unable to generate orderid", err)
 	}
 	transactionID := randomgen.GenerateTransactionID("dat")
-	resp, err := d.buySmileData(data)
+	resp, err := d.buySmileData(ctx, data)
 	if err != nil {
 		return nil, d.logAndReturnError("error returned from server", err)
 	}
@@ -485,7 +504,7 @@ func (d *DataConn) BuySmileData(data telcom.SmileInfo) (*telcom.SmileResult, err
 		RequestID:              apiResponse.RequestID,
 	}
 
-	if err := d.saveTransaction(result); err != nil {
+	if err := d.saveTransaction(ctx, result); err != nil {
 		return nil, d.logAndReturnError("error while saving to database", err)
 	}
 
@@ -493,9 +512,12 @@ func (d *DataConn) BuySmileData(data telcom.SmileInfo) (*telcom.SmileResult, err
 }
 
 // GetTransactionDetail takes a  id and returns the details of the transaction
-func (d *DataConn) GetTransactionDetail(id string) (telcom.DataResult, error) {
+func (d *DataConn) GetTransactionDetail(ctx context.Context, id string) (telcom.DataResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	resp := telcom.DataResult{}
-	res, err := d.getTransactionDetails(id)
+	res, err := d.getTransactionDetails(ctx, id)
 	if err != nil {
 		return resp, d.logAndReturnError("error while communicating with database", err)
 	}
@@ -504,9 +526,12 @@ func (d *DataConn) GetTransactionDetail(id string) (telcom.DataResult, error) {
 }
 
 // GetUserTransactions return all the data transactions associated to a user
-func (d *DataConn) GetUserTransactions(username string) ([]telcom.DataResult, error) {
+func (d *DataConn) GetUserTransactions(ctx context.Context, username string) ([]telcom.DataResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	res, err := d.getAllTransactions(username)
+	res, err := d.getAllTransactions(ctx, username)
 	if err != nil {
 		return res, d.logAndReturnError("error while communicating with database", err)
 	}
@@ -515,9 +540,12 @@ func (d *DataConn) GetUserTransactions(username string) ([]telcom.DataResult, er
 }
 
 // PingUser is a test function to ping the api
-func (d *DataConn) PingUser(w http.ResponseWriter) (*http.Response, error) {
+func (d *DataConn) PingUser(ctx context.Context, w http.ResponseWriter) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	req, err := http.NewRequest("GET", dontechapi+"/user/", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", dontechapi+"/user/", nil)
 	req.Header.Set("Access-Control-Allow-Origin", "*")
 	req.Header.Set("Authorization", dontechToken)
 	if err != nil {
@@ -541,9 +569,12 @@ func (d *DataConn) PingUser(w http.ResponseWriter) (*http.Response, error) {
 }
 
 // GetAllTransactions returns a list of all data transactions.
-func (d *DataConn) GetAllTransactions() ([]telcom.DataResult, error) {
+func (d *DataConn) GetAllTransactions(ctx context.Context) ([]telcom.DataResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var user string
-	result, err := d.getAllTransactions(user)
+	result, err := d.getAllTransactions(ctx, user)
 	if err != nil {
 		d.logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("Database request error: " + err.Error())
@@ -552,9 +583,12 @@ func (d *DataConn) GetAllTransactions() ([]telcom.DataResult, error) {
 	return result, nil
 }
 
-func (d *DataConn) GetSpecTransDetails(requestID string) (telcom.SpectranetResult, error) {
+func (d *DataConn) GetSpecTransDetails(ctx context.Context, requestID string) (telcom.SpectranetResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	resp := telcom.SpectranetResult{}
-	res, err := d.getSpecDataDetails(requestID)
+	res, err := d.getSpecDataDetails(ctx, requestID)
 	if err != nil {
 		return resp, d.logAndReturnError("error while communicating with database", err)
 	}
@@ -562,9 +596,12 @@ func (d *DataConn) GetSpecTransDetails(requestID string) (telcom.SpectranetResul
 	return res, nil
 }
 
-func (d *DataConn) GetSpecUserTransactions(username string) ([]telcom.SpectranetResult, error) {
+func (d *DataConn) GetSpecUserTransactions(ctx context.Context, username string) ([]telcom.SpectranetResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	res, err := d.getAllSpecTransactions(username)
+	res, err := d.getAllSpecTransactions(ctx, username)
 	if err != nil {
 		d.logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("database request error: " + err.Error())
@@ -573,9 +610,12 @@ func (d *DataConn) GetSpecUserTransactions(username string) ([]telcom.Spectranet
 	return res, err
 }
 
-func (d *DataConn) GetAllSpecTransactions() ([]telcom.SpectranetResult, error) {
+func (d *DataConn) GetAllSpecTransactions(ctx context.Context) ([]telcom.SpectranetResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var user string
-	result, err := d.getAllSpecTransactions(user)
+	result, err := d.getAllSpecTransactions(ctx, user)
 	if err != nil {
 		d.logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("Database request error: " + err.Error())
@@ -584,9 +624,12 @@ func (d *DataConn) GetAllSpecTransactions() ([]telcom.SpectranetResult, error) {
 	return result, nil
 }
 
-func (d *DataConn) GetSmileTransDetails(requestID string) (telcom.SmileResult, error) {
+func (d *DataConn) GetSmileTransDetails(ctx context.Context, requestID string) (telcom.SmileResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	resp := telcom.SmileResult{}
-	res, err := d.getSmileDataDetails(requestID)
+	res, err := d.getSmileDataDetails(ctx, requestID)
 	if err != nil {
 		// write error
 		d.logger.Error("Database error try again...", zap.Error(err))
@@ -596,9 +639,12 @@ func (d *DataConn) GetSmileTransDetails(requestID string) (telcom.SmileResult, e
 	return res, nil
 }
 
-func (d *DataConn) GetSmileUserTransactions(username string) ([]telcom.SmileResult, error) {
+func (d *DataConn) GetSmileUserTransactions(ctx context.Context, username string) ([]telcom.SmileResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	res, err := d.getAllSmileTransactions(username)
+	res, err := d.getAllSmileTransactions(ctx, username)
 	if err != nil {
 		// write error
 		d.logger.Error("Database error try again...", zap.Error(err))
@@ -608,9 +654,12 @@ func (d *DataConn) GetSmileUserTransactions(username string) ([]telcom.SmileResu
 	return res, err
 }
 
-func (d *DataConn) GetAllSmileTransactions() ([]telcom.SmileResult, error) {
+func (d *DataConn) GetAllSmileTransactions(ctx context.Context) ([]telcom.SmileResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var user string
-	result, err := d.getAllSmileTransactions(user)
+	result, err := d.getAllSmileTransactions(ctx, user)
 	if err != nil {
 		d.logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("Database request error: " + err.Error())
@@ -619,7 +668,10 @@ func (d *DataConn) GetAllSmileTransactions() ([]telcom.SmileResult, error) {
 	return result, nil
 }
 
-func (d *DataConn) buySmileData(data telcom.SmileInfo) (*http.Response, error) {
+func (d *DataConn) buySmileData(ctx context.Context, data telcom.SmileInfo) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	formdata := url.Values{
 		"request_id":     {data.RequestID},
 		"serviceID":      {data.Product},
@@ -631,7 +683,7 @@ func (d *DataConn) buySmileData(data telcom.SmileInfo) (*http.Response, error) {
 	body := bytes.NewBufferString(formdata.Encode())
 	url := fmt.Sprintf("%s/%s", vtapi, "pay")
 
-	req, err := http.NewRequest("POST", url, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
 		d.logger.Error("Error creating HTTP request for Smile data", zap.Error(err))
 		return nil, err
@@ -650,7 +702,10 @@ func (d *DataConn) buySmileData(data telcom.SmileInfo) (*http.Response, error) {
 	return resp, nil
 }
 
-func (d *DataConn) buySpecData(data telcom.SpectranetInfo) (*http.Response, error) {
+func (d *DataConn) buySpecData(ctx context.Context, data telcom.SpectranetInfo) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	amount := strconv.Itoa(data.Amount)
 
 	formdata := url.Values{
@@ -666,7 +721,7 @@ func (d *DataConn) buySpecData(data telcom.SpectranetInfo) (*http.Response, erro
 	body := bytes.NewBufferString(formdata.Encode())
 	url := fmt.Sprintf("%s/%s", vtapi, "pay")
 
-	req, err := http.NewRequest("POST", url, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
 		d.logger.Error("Error creating HTTP request for Spectranet data", zap.Error(err))
 		return nil, err
@@ -686,8 +741,11 @@ func (d *DataConn) buySpecData(data telcom.SpectranetInfo) (*http.Response, erro
 }
 
 // saveTransaction saves the details of a transaction to the database
-func (d *DataConn) saveTransaction(details interface{}) error {
-	err := d.dbConn.SaveDataTransaction(details)
+func (d *DataConn) saveTransaction(ctx context.Context, details interface{}) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := d.dbConn.SaveDataTransaction(ctx, details)
 	if err != nil {
 		d.logger.Error("Error saving transaction to database", zap.Any("details", details), zap.Error(err))
 	}
@@ -695,8 +753,11 @@ func (d *DataConn) saveTransaction(details interface{}) error {
 }
 
 // getTransactionDetails returns the details of a transaction
-func (d *DataConn) getTransactionDetails(id string) (telcom.DataResult, error) {
-	result, err := d.dbConn.GetDataTransactionDetails(id)
+func (d *DataConn) getTransactionDetails(ctx context.Context, id string) (telcom.DataResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := d.dbConn.GetDataTransactionDetails(ctx, id)
 	if err != nil {
 		d.logger.Error("Error fetching transaction details", zap.String("transactionID", id), zap.Error(err))
 	}
@@ -704,8 +765,11 @@ func (d *DataConn) getTransactionDetails(id string) (telcom.DataResult, error) {
 }
 
 // getAllTransactions returns all transactions. If an empty string is passed, it returns all transactions in the database
-func (d *DataConn) getAllTransactions(username string) ([]telcom.DataResult, error) {
-	results, err := d.dbConn.GetAllDataTransactions(username)
+func (d *DataConn) getAllTransactions(ctx context.Context, username string) ([]telcom.DataResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	results, err := d.dbConn.GetAllDataTransactions(ctx, username)
 	if err != nil {
 		d.logger.Error("Error fetching all transactions", zap.String("username", username), zap.Error(err))
 	}
@@ -713,23 +777,35 @@ func (d *DataConn) getAllTransactions(username string) ([]telcom.DataResult, err
 }
 
 // get transactions history
-func (d *DataConn) getSpecDataDetails(requestID string) (telcom.SpectranetResult, error) {
-	result, err := d.dbConn.GetSpecTransDetails(requestID)
+func (d *DataConn) getSpecDataDetails(ctx context.Context, requestID string) (telcom.SpectranetResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := d.dbConn.GetSpecTransDetails(ctx, requestID)
 	return result, err
 }
 
-func (d *DataConn) getAllSpecTransactions(username string) ([]telcom.SpectranetResult, error) {
-	result, err := d.dbConn.GetAllSpecDataTransactions(username)
+func (d *DataConn) getAllSpecTransactions(ctx context.Context, username string) ([]telcom.SpectranetResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := d.dbConn.GetAllSpecDataTransactions(ctx, username)
 	return result, err
 }
 
-func (d *DataConn) getSmileDataDetails(id string) (telcom.SmileResult, error) {
-	result, err := d.dbConn.GetSmileTransDetails(id)
+func (d *DataConn) getSmileDataDetails(ctx context.Context, id string) (telcom.SmileResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := d.dbConn.GetSmileTransDetails(ctx, id)
 	return result, err
 }
 
-func (d *DataConn) getAllSmileTransactions(username string) ([]telcom.SmileResult, error) {
-	result, err := d.dbConn.GetAllSmileDataTransactions(username)
+func (d *DataConn) getAllSmileTransactions(ctx context.Context, username string) ([]telcom.SmileResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, err := d.dbConn.GetAllSmileDataTransactions(ctx, username)
 	return result, err
 }
 

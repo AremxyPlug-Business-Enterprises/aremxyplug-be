@@ -39,11 +39,16 @@ func NewScheduler(redis *redis.RedisConn, store db.DataStore, logger *zap.Logger
 
 // HarmonizeHoldsWithDB scans Redis hold keys, checks for near-expiry, and updates MongoDB if needed.
 // mongoUpdateFunc should be a function that takes (userID, txID string) and returns (wasHarmonized bool, err error)
-func (s *Scheduler) HarmonizeHoldsWithDB(threshold time.Duration) {
-	ctx := context.Background()
+func (s *Scheduler) HarmonizeHoldsWithDB(ctx context.Context, threshold time.Duration) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	pattern := "hold:*:*"
 	var cursor uint64
 	for {
+		if err := ctx.Err(); err != nil {
+			return
+		}
 		keys, nextCursor, err := s.redis.Client().Scan(ctx, cursor, pattern, 100).Result()
 		if err != nil {
 			s.logger.Error("Failed to scan Redis for hold keys", zap.Error(err))
@@ -60,12 +65,12 @@ func (s *Scheduler) HarmonizeHoldsWithDB(threshold time.Duration) {
 				var userID, txID string
 				n, _ := fmt.Sscanf(key, "hold:%[^:]:%s", &userID, &txID)
 				if n == 2 {
-					err := s.store.UpdateRecieptByTxID(txID)
+					err := s.store.UpdateRecieptByTxID(ctx, txID)
 					if err != nil {
 						s.logger.Error("Failed to harmonize transaction in DB", zap.String("userID", userID), zap.String("txID", txID), zap.Error(err))
 					} else {
 						// Release the hold in Redis after harmonization
-						_, relErr := s.redis.ReleaseHold(userID, txID)
+						_, relErr := s.redis.ReleaseHold(ctx, userID, txID)
 						if relErr != nil {
 							s.logger.Warn("Failed to release hold after harmonization", zap.String("userID", userID), zap.String("txID", txID), zap.Error(relErr))
 						}
@@ -83,23 +88,34 @@ func (s *Scheduler) HarmonizeHoldsWithDB(threshold time.Duration) {
 	}
 }
 
-func (s *Scheduler) StartBankListScheduler(interval time.Duration) {
+func (s *Scheduler) StartBankListScheduler(ctx context.Context, interval time.Duration) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
-		<-ticker.C
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 
 		// Random jitter between 0 and 10 minutes
 		jitter := time.Duration(rand.Intn(10*60)) * time.Second
 		s.logger.Info("Scheduled bank list sync will run after jitter", zap.Duration("delay", jitter))
 
-		time.Sleep(jitter)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(jitter):
+		}
 
 		s.logger.Info("Starting scheduled bank list sync...")
-		if err := s.ListBanks(); err != nil {
+		if err := s.ListBanks(ctx); err != nil {
 			s.logger.Error("Scheduled bank list sync failed", zap.Error(err))
 		} else {
 			s.logger.Info("Scheduled bank list sync completed successfully")
@@ -123,9 +139,12 @@ type bankData struct {
 }
 
 // this endpoint should auto automatically initialize
-func (s *Scheduler) ListBanks() error {
+func (s *Scheduler) ListBanks(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	url := fmt.Sprintf("%s/%s", api, "banks")
-	req, _ := http.NewRequest("GET", url, nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
 	req.Header.Add("accept", "application/json")
 	req.Header.Add("x-anchor-key", apikey)
 
@@ -159,7 +178,7 @@ func (s *Scheduler) ListBanks() error {
 		apiNIPCodes[bankData.NIPCode] = true
 
 		// Use Upsert to prevent duplicate key issues and race conditions
-		if err := s.store.UpsertBankByNIPCode(bankData); err != nil {
+		if err := s.store.UpsertBankByNIPCode(ctx, bankData); err != nil {
 			if mongo.IsDuplicateKeyError(err) {
 				s.logger.Warn("Bank already exists (race condition), skipping insert",
 					zap.String("nip_code", bankData.NIPCode))
@@ -170,14 +189,14 @@ func (s *Scheduler) ListBanks() error {
 	}
 
 	// Remove banks not present in API anymore
-	dbBanks, err := s.store.GetAllBanks()
+	dbBanks, err := s.store.GetAllBanks(ctx)
 	if err != nil {
 		return err
 	}
 
 	for _, bank := range dbBanks {
 		if !apiNIPCodes[bank.NIPCode] {
-			if err := s.store.DeleteBankByNIPCode(bank.NIPCode); err != nil {
+			if err := s.store.DeleteBankByNIPCode(ctx, bank.NIPCode); err != nil {
 				return err
 			}
 			s.logger.Info("Removed outdated bank", zap.String("nip_code", bank.NIPCode))
