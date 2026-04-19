@@ -84,7 +84,13 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	full_name := to.String(user.FullName)
 	username := to.String(user.Username)
 	email := cases.Lower(language.English).String(user.Email)
-	inviteCode := to.String(user.InvitationCode)
+	rawInvitationCode := strings.TrimSpace(user.InvitationCode)
+	normalizedUsername := strings.TrimSpace(username)
+	isSelfReferral := rawInvitationCode != "" && strings.EqualFold(rawInvitationCode, normalizedUsername)
+	inviteCode := ""
+	if rawInvitationCode != "" && !isSelfReferral {
+		inviteCode = to.String(rawInvitationCode)
+	}
 
 	validUser, field, err := handler.isValidNewUser(ctx, user)
 	if err != nil {
@@ -131,8 +137,7 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if user.InvitationCode != "" {
-		inviteCode := cases.Title(language.English).String(user.InvitationCode)
+	if inviteCode != "" {
 		err := handler.store.CreateUserReferral(ctx, userId, inviteCode)
 		if err != nil {
 			handler.logger.Warn("error updating referral count", zap.Error(err))

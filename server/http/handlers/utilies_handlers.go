@@ -877,11 +877,14 @@ func (handler *HttpHandler) TvSubHandler(w http.ResponseWriter, r *http.Request)
 
 func (handler *HttpHandler) addevent(ctx context.Context, usedID string, amt string, txnID string, eventType string) {
 	if handler.processor != nil {
-		if ctx == nil {
-			ctx = context.Background()
-		}
 		go func(uID string, amt string, txID string, eType string) {
-			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			baseCtx := ctx
+			if baseCtx == nil {
+				baseCtx = context.Background()
+			}
+			baseCtx = context.WithoutCancel(baseCtx)
+
+			ctx, cancel := context.WithTimeout(baseCtx, 10*time.Second)
 			defer cancel()
 			ev := &events.Event{
 				Type:      eType,
