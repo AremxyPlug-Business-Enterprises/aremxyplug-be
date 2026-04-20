@@ -63,7 +63,7 @@ func (b *BankConfig) VirtualAccount(ctx context.Context, user models.User) (mode
 	to := cases.Title(language.English)
 	full_name := to.String(user.FullName)
 
-	name := fmt.Sprintf("%s/%s", "AREMXYPLUG", full_name)
+	name := fmt.Sprintf("%s/%s", "AP", full_name)
 
 	payload := virtualNubanPayload{}
 	payload.Data.Type = "VirtualNuban"

@@ -9,9 +9,22 @@ import (
 	"go.uber.org/zap"
 )
 
+var wsAllowedOrigins = map[string]struct{}{
+	"http://localhost:3000":       {},
+	"http://localhost:8080":       {},
+	"https://test.aremxyplug.com": {},
+	"https://aremxyplug.com":      {},
+	"https://www.aremxyplug.com":  {},
+}
+
 var wsUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return r.Header.Get("Origin") != ""
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return false
+		}
+		_, ok := wsAllowedOrigins[origin]
+		return ok
 	},
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
