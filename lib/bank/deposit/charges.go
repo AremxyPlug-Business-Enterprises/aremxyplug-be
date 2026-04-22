@@ -33,7 +33,7 @@ func (c *Config) CalculateDepositBreakdown(ctx context.Context, amountMinor floa
 		return ChargeBreakdown{}, fmt.Errorf("wallet charges configuration is incomplete")
 	}
 
-	grossAmount := decimal.NewFromFloatWithExponent(amountMinor, -2)
+	grossAmount := decimal.NewFromFloat(amountMinor).Div(decimal.NewFromInt(100)).Round(2)
 	serviceChargeRate := decimal.NewFromFloat(*charges.ServiceCharge)
 	serviceChargeCap := decimal.NewFromFloat(*charges.ServiceChargeCap).Round(2)
 	serviceChargeApplied := grossAmount.Mul(serviceChargeRate).Div(decimal.NewFromInt(100)).Round(2)
