@@ -53,6 +53,12 @@ func New(connectURI, databaseName string, logger *zap.Logger) (db.DataStore, *mo
 	if err := store.InitIndexes(); err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize indexes: %w", err)
 	}
+	if err := store.BackfillIdentityHashes(ctx); err != nil {
+		return nil, nil, fmt.Errorf("failed to backfill identity hashes: %w", err)
+	}
+	if err := store.initIdentityIndexes(ctx); err != nil {
+		return nil, nil, fmt.Errorf("failed to initialize identity indexes: %w", err)
+	}
 
 	return store, client, nil
 }
@@ -105,6 +111,17 @@ func (m *mongoStore) InitIndexes() error {
 	}
 	if _, err := db.Collection(userColl).Indexes().CreateOne(ctx, userIndex); err != nil {
 		return fmt.Errorf("failed to create user index: %w", err)
+	}
+
+	identityLookupIndex := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "birth_date", Value: 1},
+			{Key: "has_bvn", Value: 1},
+			{Key: "has_nin", Value: 1},
+		},
+	}
+	if _, err := db.Collection(userColl).Indexes().CreateOne(ctx, identityLookupIndex); err != nil {
+		return fmt.Errorf("failed to create identity lookup index: %w", err)
 	}
 
 	bankIndex := mongo.IndexModel{
@@ -340,7 +357,7 @@ func (m *mongoStore) UpdateUserPasswordByID(ctx context.Context, id string, pass
 func (m *mongoStore) UpdateBVNField(ctx context.Context, user models.User) error {
 	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"id": user.ID}
-	update := bson.M{"$set": bson.M{"bvn": user.BVN, "bvn_phone": user.BVNPhone, "has_bvn": true}}
+	update := bson.M{"$set": bson.M{"bvn": user.BVN, "bvn_hash": user.BVNHash, "bvn_phone": user.BVNPhone, "has_bvn": true}}
 	_, err := m.col(userColl).
 		UpdateOne(ctx, filter, update)
 	if err != nil {
@@ -352,7 +369,7 @@ func (m *mongoStore) UpdateBVNField(ctx context.Context, user models.User) error
 func (m *mongoStore) UpdateNINField(ctx context.Context, user models.User) error {
 	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"id": user.ID}
-	update := bson.M{"$set": bson.M{"nin": user.NIN, "has_nin": true}}
+	update := bson.M{"$set": bson.M{"nin": user.NIN, "nin_hash": user.NINHash, "has_nin": true}}
 	_, err := m.col(userColl).
 		UpdateOne(ctx, filter, update)
 	if err != nil {
@@ -378,7 +395,7 @@ func (m *mongoStore) UpdateEmail(ctx context.Context, id, email string) error {
 func (m *mongoStore) UpdatePhone(ctx context.Context, id, phone string) error {
 	ctx = m.ensureCtx(ctx)
 	filter := bson.M{"id": id}
-	update := bson.M{"$set": bson.M{"phone_number": phone}}
+	update := bson.M{"$set": bson.M{"phonenumber": phone}}
 	coll := m.col(userColl)
 	_, err := coll.UpdateOne(ctx, filter, update)
 	if err != nil {

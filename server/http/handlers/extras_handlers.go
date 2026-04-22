@@ -547,6 +547,33 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
+		bvnHash := encryption.HashIdentityID(req.BVN)
+		existingUser, err := handler.findExactIdentityConflict(ctx, "bvn", bvnHash, user.ID)
+		if err != nil {
+			handler.logger.Error("Failed to check BVN reuse", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		if existingUser != nil {
+			handler.respondDuplicateIdentityConflict(w, user.ID, "bvn", "exact_id_reuse", existingUser)
+			return
+		}
+
+		existingUser, err = handler.findDOBNameConflict(ctx, *user, result.DOB)
+		if err != nil {
+			handler.logger.Error("Failed to check BVN DOB/name overlap", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		if existingUser != nil {
+			handler.respondDuplicateIdentityConflict(w, user.ID, "bvn", "dob_name_overlap", existingUser)
+			return
+		}
+
 		encBVN, err := encryption.EncryptString(req.BVN)
 		if err != nil {
 			handler.logger.Error("Failed to encrypt BVN", zap.Error(err))
@@ -557,6 +584,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		}
 
 		user.BVN = encBVN
+		user.BVNHash = bvnHash
 		user.BVNPhone = req.Phone
 		if err := handler.store.UpdateBVNField(ctx, *user); err != nil {
 			handler.logger.Error("Failed to update BVN field", zap.Error(err))
@@ -618,6 +646,33 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
+		ninHash := encryption.HashIdentityID(req.NIN)
+		existingUser, err := handler.findExactIdentityConflict(ctx, "nin", ninHash, user.ID)
+		if err != nil {
+			handler.logger.Error("Failed to check NIN reuse", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		if existingUser != nil {
+			handler.respondDuplicateIdentityConflict(w, user.ID, "nin", "exact_id_reuse", existingUser)
+			return
+		}
+
+		existingUser, err = handler.findDOBNameConflict(ctx, *user, result.Birthdate)
+		if err != nil {
+			handler.logger.Error("Failed to check NIN DOB/name overlap", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		if existingUser != nil {
+			handler.respondDuplicateIdentityConflict(w, user.ID, "nin", "dob_name_overlap", existingUser)
+			return
+		}
+
 		encNIN, err := encryption.EncryptString(req.NIN)
 		if err != nil {
 			handler.logger.Error("Failed to encrypt NIN", zap.Error(err))
@@ -628,6 +683,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 		}
 
 		user.NIN = encNIN
+		user.NINHash = ninHash
 		if err := handler.store.UpdateNINField(ctx, *user); err != nil {
 			handler.logger.Error("Failed to update NIN field", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)

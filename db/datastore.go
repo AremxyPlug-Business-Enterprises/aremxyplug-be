@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
@@ -85,6 +86,10 @@ type UserStore interface {
 	UpdateUserPasswordByID(ctx context.Context, id string, password string) error
 	UpdateBVNField(ctx context.Context, user models.User) error
 	UpdateNINField(ctx context.Context, user models.User) error
+	GetUserByBVNHash(ctx context.Context, hash string) (*models.User, error)
+	GetUserByNINHash(ctx context.Context, hash string) (*models.User, error)
+	ListOtherVerifiedUsersByDOB(ctx context.Context, excludeUserID string, dob time.Time) ([]models.User, error)
+	BackfillIdentityHashes(ctx context.Context) error
 	VerifyUser(ctx context.Context, identifier string) (*models.User, error)
 	UpdatePhone(ctx context.Context, id, phone string) error
 	UpdateEmail(ctx context.Context, id, email string) error

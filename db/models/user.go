@@ -15,8 +15,10 @@ type User struct {
 	CreatedAt       time.Time `json:"created_at" bson:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at" bson:"updated_at"`
 	BVN             string    `json:"bvn" bson:"bvn"`
+	BVNHash         string    `json:"-" bson:"bvn_hash,omitempty"`
 	BVNPhone        string    `json:"bvn_phone,omitempty" bson:"bvn_phone,omitempty"`
 	NIN             string    `json:"nin" bson:"nin"`
+	NINHash         string    `json:"-" bson:"nin_hash,omitempty"`
 	DOB             time.Time `json:"birth_date" bson:"birth_date"`
 	IsVerified      bool      `json:"is_verified" bson:"is_verified"`
 	HasPin          bool      `json:"has_Pin" bson:"has_Pin"`
