@@ -52,6 +52,11 @@ func (handler *HttpHandler) initSignupAllowlist() {
 	rawFile := strings.TrimSpace(handler.secrets.SignupAllowedFile)
 
 	if rawList == "" && rawFile == "" {
+		rawList = strings.TrimSpace(handler.secrets.LoginAllowedEmails)
+		rawFile = strings.TrimSpace(handler.secrets.LoginAllowedFile)
+	}
+
+	if rawList == "" && rawFile == "" {
 		return
 	}
 
@@ -100,6 +105,62 @@ func (handler *HttpHandler) isSignupEmailAllowed(email string) (bool, error) {
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
 	_, ok := handler.signupAllowlist[email]
+	return ok, nil
+}
+
+func (handler *HttpHandler) initLoginAllowlist() {
+	rawList := strings.TrimSpace(handler.secrets.LoginAllowedEmails)
+	rawFile := strings.TrimSpace(handler.secrets.LoginAllowedFile)
+
+	if rawList == "" && rawFile == "" {
+		return
+	}
+
+	allowlist := map[string]struct{}{}
+
+	if rawList != "" {
+		for _, email := range splitAllowlistEmails(rawList) {
+			email = strings.ToLower(strings.TrimSpace(email))
+			if email == "" {
+				continue
+			}
+			allowlist[email] = struct{}{}
+		}
+	}
+
+	if rawFile != "" {
+		b, err := os.ReadFile(rawFile)
+		if err != nil {
+			handler.loginAllowlistErr = err
+			return
+		}
+		for _, email := range splitAllowlistEmails(string(b)) {
+			email = strings.ToLower(strings.TrimSpace(email))
+			if email == "" {
+				continue
+			}
+			allowlist[email] = struct{}{}
+		}
+	}
+
+	if len(allowlist) == 0 {
+		handler.loginAllowlistErr = errors.New("login allowlist is configured but empty")
+		return
+	}
+
+	handler.loginAllowlist = allowlist
+}
+
+func (handler *HttpHandler) isLoginEmailAllowed(email string) (bool, error) {
+	handler.loginAllowlistOnce.Do(handler.initLoginAllowlist)
+	if handler.loginAllowlistErr != nil {
+		return false, handler.loginAllowlistErr
+	}
+	if handler.loginAllowlist == nil {
+		return true, nil
+	}
+	email = strings.ToLower(strings.TrimSpace(email))
+	_, ok := handler.loginAllowlist[email]
 	return ok, nil
 }
 
@@ -268,6 +329,29 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		response := responseFormat.CustomResponse{Status: http.StatusNotFound, Message: "user not found", Data: map[string]interface{}{"data": "user not found"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	allowed, allowErr := handler.isLoginEmailAllowed(user.Email)
+	if allowErr != nil {
+		handler.logger.Error("login allowlist error", zap.Error(allowErr))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "login temporarily unavailable"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	if !allowed {
+		w.WriteHeader(http.StatusForbidden)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusForbidden,
+			Message: "login failed",
+			Data:    map[string]interface{}{"data": "email not allowed"},
+		}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
