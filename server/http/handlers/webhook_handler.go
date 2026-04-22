@@ -303,6 +303,9 @@ func (handler *HttpHandler) processDeposit(ctx context.Context, p webhookPayload
 	var narration string
 	var amount float64
 	var created_At string
+	accountNumber := ""
+	accountName := ""
+	bankName := ""
 	if rel, ok := p.Attributes["payment"]; ok {
 		if m, ok := rel.(map[string]interface{}); ok {
 			if id, ok := m["paymentId"].(string); ok {
@@ -317,30 +320,24 @@ func (handler *HttpHandler) processDeposit(ctx context.Context, p webhookPayload
 			if crt_at, ok := m["createdAt"].(string); ok {
 				created_At = crt_at
 			}
-		}
-
-	}
-	if rel, ok := p.Attributes["virtualNuban"]; ok {
-		if m, ok := rel.(map[string]interface{}); ok {
-			if id, ok := m["paymentId"].(string); ok {
-				virtualNubanID = id
+			if vn, ok := m["virtualNuban"].(map[string]interface{}); ok {
+				if id, ok := vn["accountId"].(string); ok {
+					virtualNubanID = id
+				} else if acctNo, ok := vn["accountNumber"].(string); ok {
+					virtualNubanID = acctNo
+				}
 			}
-		}
-	}
-	accountNumber := ""
-	accountName := ""
-	bankName := ""
-	if rel, ok := p.Attributes["counterParty"]; ok {
-		if m, ok := rel.(map[string]interface{}); ok {
-			if id, ok := m["accountNumber"].(string); ok {
-				accountNumber = id
-			}
-			if id, ok := m["accountName"].(string); ok {
-				accountName = id
-			}
-			if bank, ok := m["bank"].(map[string]interface{}); ok {
-				if name, ok := bank["name"].(string); ok {
-					bankName = name
+			if cp, ok := m["counterParty"].(map[string]interface{}); ok {
+				if id, ok := cp["accountNumber"].(string); ok {
+					accountNumber = id
+				}
+				if id, ok := cp["accountName"].(string); ok {
+					accountName = id
+				}
+				if bank, ok := cp["bank"].(map[string]interface{}); ok {
+					if name, ok := bank["name"].(string); ok {
+						bankName = name
+					}
 				}
 			}
 		}
