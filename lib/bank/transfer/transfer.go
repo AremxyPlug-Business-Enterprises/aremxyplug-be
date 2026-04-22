@@ -172,7 +172,13 @@ func (c *Config) TransferToAremxyPlug(ctx context.Context, data AremxyPlugTransf
 	if c.processor != nil {
 		// Process deposit event for receiver
 		go func(uID string, amt string, txID string) {
-			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			baseCtx := ctx
+			if baseCtx == nil {
+				baseCtx = context.Background()
+			}
+			baseCtx = context.WithoutCancel(baseCtx)
+
+			taskCtx, cancel := context.WithTimeout(baseCtx, 10*time.Second)
 			defer cancel()
 			ev := &events.Event{
 				Type:      "transaction.completed",
@@ -182,14 +188,20 @@ func (c *Config) TransferToAremxyPlug(ctx context.Context, data AremxyPlugTransf
 				TS:        time.Now().UTC(),
 				Published: false,
 			}
-			if err := c.processor.ProcessEvent(ctx, ev); err != nil {
+			if err := c.processor.ProcessEvent(taskCtx, ev); err != nil {
 				c.logger.Error("failed to process transaction.completed event", zap.Error(err), zap.String("user_id", uID))
 			}
 		}(user.ID, fmt.Sprintf("%v", data.Amount), depTransactionID)
 
 		// Process transfer event for sender
 		go func(uID string, amt string, txID string) {
-			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			baseCtx := ctx
+			if baseCtx == nil {
+				baseCtx = context.Background()
+			}
+			baseCtx = context.WithoutCancel(baseCtx)
+
+			taskCtx, cancel := context.WithTimeout(baseCtx, 10*time.Second)
 			defer cancel()
 			ev := &events.Event{
 				Type:      "transaction.completed",
@@ -199,7 +211,7 @@ func (c *Config) TransferToAremxyPlug(ctx context.Context, data AremxyPlugTransf
 				TS:        time.Now().UTC(),
 				Published: false,
 			}
-			if err := c.processor.ProcessEvent(ctx, ev); err != nil {
+			if err := c.processor.ProcessEvent(taskCtx, ev); err != nil {
 				c.logger.Error("failed to process transaction.completed event", zap.Error(err), zap.String("user_id", uID))
 			}
 		}(data.UserID, fmt.Sprintf("%v", data.Amount), trfTransactionID)
