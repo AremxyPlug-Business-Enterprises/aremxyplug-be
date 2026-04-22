@@ -141,7 +141,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 		verifyOTPRoutes(router, httpHandler)
 
-		authRouter := router.With(config.Auth.Authorize)
+		authRouter := router.With(config.Auth.Authorize, httpHandler.RequireVerifiedUser)
 
 		authRouter.With(middleware.Timeout(10*time.Second)).Post("/logout", httpHandler.Logout)
 
