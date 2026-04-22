@@ -41,7 +41,7 @@ type api247Response struct {
 	Message   string  `json:"message"`
 	Response  string  `json:"response"`
 	RequestID string  `json:"request-id"`
-	Amount    float64 `json:"amount"`
+	Amount    string  `json:"amount"`
 	DataSize  string  `json:"data_size"`
 	Network   string  `json:"network"`
 	DataType  string  `json:"data_type"`

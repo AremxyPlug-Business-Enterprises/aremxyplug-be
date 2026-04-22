@@ -150,7 +150,8 @@ func (d *DataConn) buyDontechData(ctx context.Context, data DataInfo) (*telcom.D
 			d.logger.Error("server response error", zap.Any("apiresponse", apiResponse))
 			result.Status = "failed"
 			result.RecipientName = apiResponse.Ident
-			result.ApiID = apiResponse.Id
+			rID := strconv.Itoa(apiResponse.Id)
+			result.ApiID = rID
 			if err := d.saveTransaction(ctx, result); err != nil {
 				d.logger.Error("Database error try again...", zap.Error(err))
 				return nil, errors.New("Database Insert Error...")
@@ -159,7 +160,8 @@ func (d *DataConn) buyDontechData(ctx context.Context, data DataInfo) (*telcom.D
 		}
 
 		result.RecipientName = apiResponse.Ident
-		result.ApiID = apiResponse.Id
+		rID := strconv.Itoa(apiResponse.Id)
+		result.ApiID = rID
 		result.Status = "success"
 		if err := d.saveTransaction(ctx, result); err != nil {
 			d.logger.Error("Database error try again...", zap.Error(err))
@@ -397,6 +399,7 @@ func (d *DataConn) buy247Data(ctx context.Context, data DataInfo) (*telcom.DataR
 
 	status = "success"
 	result.Status = status
+	result.ApiID = apiResponse.RequestID
 
 	if err := d.saveTransaction(ctx, result); err != nil {
 		d.logger.Error("Database error try again...", zap.Error(err))
