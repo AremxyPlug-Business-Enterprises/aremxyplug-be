@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -33,6 +34,73 @@ func calculateDefaultDuration(defaultDuration, configDuration time.Duration) tim
 		duration = configDuration * time.Minute
 	}
 	return duration
+}
+
+func splitAllowlistEmails(input string) []string {
+	return strings.FieldsFunc(input, func(r rune) bool {
+		switch r {
+		case ',', ';', '\n', '\r', '\t', ' ':
+			return true
+		default:
+			return false
+		}
+	})
+}
+
+func (handler *HttpHandler) initSignupAllowlist() {
+	rawList := strings.TrimSpace(handler.secrets.SignupAllowedEmails)
+	rawFile := strings.TrimSpace(handler.secrets.SignupAllowedFile)
+
+	if rawList == "" && rawFile == "" {
+		return
+	}
+
+	allowlist := map[string]struct{}{}
+
+	if rawList != "" {
+		for _, email := range splitAllowlistEmails(rawList) {
+			email = strings.ToLower(strings.TrimSpace(email))
+			if email == "" {
+				continue
+			}
+			allowlist[email] = struct{}{}
+		}
+	}
+
+	if rawFile != "" {
+		b, err := os.ReadFile(rawFile)
+		if err != nil {
+			handler.signupAllowlistErr = err
+			return
+		}
+		for _, email := range splitAllowlistEmails(string(b)) {
+			email = strings.ToLower(strings.TrimSpace(email))
+			if email == "" {
+				continue
+			}
+			allowlist[email] = struct{}{}
+		}
+	}
+
+	if len(allowlist) == 0 {
+		handler.signupAllowlistErr = errors.New("signup allowlist is configured but empty")
+		return
+	}
+
+	handler.signupAllowlist = allowlist
+}
+
+func (handler *HttpHandler) isSignupEmailAllowed(email string) (bool, error) {
+	handler.signupAllowlistOnce.Do(handler.initSignupAllowlist)
+	if handler.signupAllowlistErr != nil {
+		return false, handler.signupAllowlistErr
+	}
+	if handler.signupAllowlist == nil {
+		return true, nil
+	}
+	email = strings.ToLower(strings.TrimSpace(email))
+	_, ok := handler.signupAllowlist[email]
+	return ok, nil
 }
 
 // SignUp is the api used to create a single user
@@ -83,13 +151,36 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	to := cases.Title(language.English)
 	full_name := to.String(user.FullName)
 	username := to.String(user.Username)
-	email := cases.Lower(language.English).String(user.Email)
+	email := strings.TrimSpace(cases.Lower(language.English).String(user.Email))
 	rawInvitationCode := strings.TrimSpace(user.InvitationCode)
 	normalizedUsername := strings.TrimSpace(username)
 	isSelfReferral := rawInvitationCode != "" && strings.EqualFold(rawInvitationCode, normalizedUsername)
 	inviteCode := ""
 	if rawInvitationCode != "" && !isSelfReferral {
 		inviteCode = to.String(rawInvitationCode)
+	}
+
+	allowed, allowErr := handler.isSignupEmailAllowed(email)
+	if allowErr != nil {
+		handler.logger.Error("signup allowlist error", zap.Error(allowErr))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusInternalServerError,
+			Message: "error",
+			Data:    map[string]interface{}{"data": "signup temporarily unavailable"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	if !allowed {
+		w.WriteHeader(http.StatusForbidden)
+		response := responseFormat.CustomResponse{
+			Status:  http.StatusForbidden,
+			Message: "sign-up failed",
+			Data:    map[string]interface{}{"data": "email not allowed"},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
 	}
 
 	validUser, field, err := handler.isValidNewUser(ctx, user)

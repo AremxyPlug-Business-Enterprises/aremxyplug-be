@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"sync"
 	"time"
 
 	"github.com/aremxyplug-be/db"
@@ -80,6 +81,9 @@ type HttpHandler struct {
 	productClient        services.ProductService
 	redisClient          *redis.RedisConn
 	processor            *events.Processor
+	signupAllowlistOnce  sync.Once
+	signupAllowlist      map[string]struct{}
+	signupAllowlistErr   error
 }
 
 type HandlerOptions struct {
