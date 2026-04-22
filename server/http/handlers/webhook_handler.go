@@ -14,7 +14,6 @@ import (
 	"github.com/aremxyplug-be/db/mongo"
 	"github.com/aremxyplug-be/lib/balance"
 	"github.com/aremxyplug-be/lib/randomgen"
-	"github.com/shopspring/decimal"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.uber.org/zap"
 )
@@ -385,8 +384,16 @@ func (handler *HttpHandler) processDeposit(ctx context.Context, p webhookPayload
 	}
 	handler.logger.Debug("Fetched Balance", zap.Any("balance", bal))
 
-	deposit_amount := amount * 0.01
-	newBalance, depositAmount := balance.NewBalanceDeposit(bal, decimal.NewFromFloatWithExponent(deposit_amount, -2))
+	if handler.bankDep == nil {
+		return fmt.Errorf("deposit configuration is not initialized")
+	}
+	breakdown, err := handler.bankDep.CalculateDepositBreakdown(ctx, amount)
+	if err != nil {
+		handler.logger.Error("Deposit failed: unable to calculate deposit breakdown", zap.Error(err))
+		return err
+	}
+
+	newBalance, depositAmount := balance.NewBalanceDeposit(bal, breakdown.NetAmountCredited)
 	parsedBalance, _ := primitive.ParseDecimal128(newBalance.String())
 	handler.logger.Debug("New Balance Calculated", zap.String("newBalance", newBalance.String()))
 
@@ -410,7 +417,7 @@ func (handler *HttpHandler) processDeposit(ctx context.Context, p webhookPayload
 	result := models.DepositResponse{
 		UserID:                 userID,
 		Status:                 "success",
-		Amount:                 fmt.Sprintf("%v", depositAmount),
+		Amount:                 depositAmount.StringFixed(2),
 		WalletType:             "Nigerian NGN Wallet",
 		Bank_Name:              bankName,
 		Account_Name:           accountName,
@@ -422,6 +429,13 @@ func (handler *HttpHandler) processDeposit(ctx context.Context, p webhookPayload
 		Transaction_ID:         transactionID,
 		CreatedAt:              createdAt,
 		Reference:              paymentID,
+		APICharge:              breakdown.APICharge.StringFixed(2),
+		ServiceCharge:          breakdown.ServiceCharge.StringFixed(2),
+		GrossAmount:            breakdown.GrossAmount.StringFixed(2),
+		ServiceChargeCap:       breakdown.ServiceChargeCap.StringFixed(2),
+		ServiceChargeApplied:   breakdown.ServiceChargeApplied.StringFixed(2),
+		NetAmountCredited:      breakdown.NetAmountCredited.StringFixed(2),
+		ChargeWasCapped:        breakdown.ChargeWasCapped,
 	}
 
 	if err := handler.store.SaveDeposit(ctx, result); err != nil {

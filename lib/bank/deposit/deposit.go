@@ -123,14 +123,13 @@ func (c *Config) Deposit(ctx context.Context, virtualaccountid string, userID st
 		}
 		c.logger.Debug("Fetched Balance", zap.Any("balance", bal))
 
-		charges, err := c.sqlStore.GetWalletCharges(ctx)
+		breakdown, err := c.CalculateDepositBreakdown(ctx, data.Attributes.Amount)
 		if err != nil {
-			c.logger.Error("Deposit failed: unable to fetch wallet charges", zap.Error(err))
-			return updatedAny, DBConnectionError(err)
+			c.logger.Error("Deposit failed: unable to calculate deposit breakdown", zap.Error(err))
+			return updatedAny, err
 		}
 
-		deposit_amount := data.Attributes.Amount * *charges.ServiceCharge / 100
-		newBalance, depositAmount := balance.NewBalanceDeposit(bal, decimal.NewFromFloatWithExponent(deposit_amount, -2))
+		newBalance, depositAmount := balance.NewBalanceDeposit(bal, breakdown.NetAmountCredited)
 		parsedBalance, _ := primitive.ParseDecimal128(newBalance.String())
 		c.logger.Debug("New Balance Calculated", zap.String("newBalance", newBalance.String()))
 
@@ -151,13 +150,10 @@ func (c *Config) Deposit(ctx context.Context, virtualaccountid string, userID st
 			return updatedAny, err
 		}
 
-		APICharge := fmt.Sprintf("%.2f", *charges.APICharge)
-		ServiceCharge := fmt.Sprintf("%.2f", *charges.ServiceCharge)
-
 		result := models.DepositResponse{
 			UserID:                 userID,
 			Status:                 "success",
-			Amount:                 fmt.Sprintf("%v", depositAmount),
+			Amount:                 depositAmount.StringFixed(2),
 			WalletType:             "Nigerian NGN Wallet",
 			Bank_Name:              attributes.CounterParty.Bank.Name,
 			Account_Name:           attributes.CounterParty.AccountName,
@@ -169,8 +165,14 @@ func (c *Config) Deposit(ctx context.Context, virtualaccountid string, userID st
 			Transaction_ID:         transctionID,
 			Reference:              data.Attributes.PaymentReference,
 			CreatedAt:              createdAt,
-			APICharge:              APICharge,
-			ServiceCharge:          ServiceCharge,
+			APICharge:              breakdown.APICharge.StringFixed(2),
+			ServiceCharge:          breakdown.ServiceCharge.StringFixed(2),
+			GrossAmount:            breakdown.GrossAmount.StringFixed(2),
+			ServiceChargeRate:      breakdown.ServiceChargeRate.StringFixed(2),
+			ServiceChargeCap:       breakdown.ServiceChargeCap.StringFixed(2),
+			ServiceChargeApplied:   breakdown.ServiceChargeApplied.StringFixed(2),
+			NetAmountCredited:      breakdown.NetAmountCredited.StringFixed(2),
+			ChargeWasCapped:        breakdown.ChargeWasCapped,
 		}
 
 		if err := c.saveTransaction(ctx, result); err != nil {
@@ -182,10 +184,10 @@ func (c *Config) Deposit(ctx context.Context, virtualaccountid string, userID st
 		updatedAny = true
 
 		amount := ""
-		if deposit_amount < 100 {
+		if breakdown.GrossAmount.LessThan(decimal.NewFromInt(1)) {
 			continue
 		} else {
-			amount = fmt.Sprintf("%.2f", deposit_amount)
+			amount = breakdown.NetAmountCredited.StringFixed(2)
 
 			// Emit wallet.funded event
 			if c.processor != nil {

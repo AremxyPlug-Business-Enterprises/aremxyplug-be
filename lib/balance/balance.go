@@ -11,15 +11,8 @@ func isEnough(balance, paymentValue decimal.Decimal) bool {
 }
 
 func NewBalanceDeposit(bal, deposit decimal.Decimal) (newBalance, depositAmount decimal.Decimal) {
-
-	deduction := deposit.Mul(decimal.NewFromFloat(0.01))
-
-	// Subtract 1% of the deposit from the deposit amount
-	depositAfterDeduction := deposit.Sub(deduction)
-
-	newBalance = bal.Add(depositAfterDeduction)
-
-	return newBalance, depositAfterDeduction
+	newBalance = bal.Add(deposit)
+	return newBalance, deposit
 }
 
 func NewBalanceTransfer(balance, transferAmmount decimal.Decimal) (newBalance decimal.Decimal) {

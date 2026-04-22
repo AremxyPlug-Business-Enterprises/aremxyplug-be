@@ -84,7 +84,11 @@ type DepositResponse struct {
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`                           // ISO datetime string
 	APICharge              string    `json:"api_charge" bson:"api_charge"`                           // optional API charge
 	ServiceCharge          string    `json:"service_charge" bson:"service_charge"`                   // optional service charge
-
+	GrossAmount            string    `json:"-" bson:"gross_amount"`
+	ServiceChargeCap       string    `json:"-" bson:"service_charge_cap"`
+	ServiceChargeApplied   string    `json:"-" bson:"service_charge_applied"`
+	NetAmountCredited      string    `json:"-" bson:"net_amount_credited"`
+	ChargeWasCapped        bool      `json:"-" bson:"charge_was_capped"`
 }
 
 type InternalDepositResponse struct {
@@ -115,6 +119,7 @@ func (b Balance) Decimal() (decimal.Decimal, error) {
 }
 
 type WalletCharges struct {
-	APICharge     *float64 `json:"api_charge,omitempty"`
-	ServiceCharge *float64 `json:"service_charge,omitempty"`
+	APICharge        *float64 `json:"api_charge,omitempty"`
+	ServiceCharge    *float64 `json:"service_charge,omitempty"`
+	ServiceChargeCap *float64 `json:"service_charge_cap,omitempty"`
 }
