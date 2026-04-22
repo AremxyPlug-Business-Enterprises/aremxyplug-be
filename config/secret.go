@@ -24,6 +24,8 @@ type Secrets struct {
 	ServiceID            string `json:"TWILIO_SERVICES_ID"`
 	SignupAllowedEmails  string `json:"SIGNUP_ALLOWED_EMAILS"`
 	SignupAllowedFile    string `json:"SIGNUP_ALLOWED_EMAILS_FILE"`
+	LoginAllowedEmails   string `json:"LOGIN_ALLOWED_EMAILS"`
+	LoginAllowedFile     string `json:"LOGIN_ALLOWED_EMAILS_FILE"`
 }
 
 var ss Secrets
@@ -48,6 +50,8 @@ func init() {
 	ss.AppPort = os.Getenv("PORT")
 	ss.SignupAllowedEmails = os.Getenv("SIGNUP_ALLOWED_EMAILS")
 	ss.SignupAllowedFile = os.Getenv("SIGNUP_ALLOWED_EMAILS_FILE")
+	ss.LoginAllowedEmails = os.Getenv("LOGIN_ALLOWED_EMAILS")
+	ss.LoginAllowedFile = os.Getenv("LOGIN_ALLOWED_EMAILS_FILE")
 
 	if ss.AppPort = os.Getenv("PORT"); ss.AppPort == "" {
 		ss.AppPort = "8080"

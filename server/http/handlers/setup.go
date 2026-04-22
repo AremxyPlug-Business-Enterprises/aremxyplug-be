@@ -84,6 +84,9 @@ type HttpHandler struct {
 	signupAllowlistOnce  sync.Once
 	signupAllowlist      map[string]struct{}
 	signupAllowlistErr   error
+	loginAllowlistOnce   sync.Once
+	loginAllowlist       map[string]struct{}
+	loginAllowlistErr    error
 }
 
 type HandlerOptions struct {
