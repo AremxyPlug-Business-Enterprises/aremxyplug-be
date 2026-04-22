@@ -168,7 +168,6 @@ func (c *Config) Deposit(ctx context.Context, virtualaccountid string, userID st
 			APICharge:              breakdown.APICharge.StringFixed(2),
 			ServiceCharge:          breakdown.ServiceCharge.StringFixed(2),
 			GrossAmount:            breakdown.GrossAmount.StringFixed(2),
-			ServiceChargeRate:      breakdown.ServiceChargeRate.StringFixed(2),
 			ServiceChargeCap:       breakdown.ServiceChargeCap.StringFixed(2),
 			ServiceChargeApplied:   breakdown.ServiceChargeApplied.StringFixed(2),
 			NetAmountCredited:      breakdown.NetAmountCredited.StringFixed(2),
