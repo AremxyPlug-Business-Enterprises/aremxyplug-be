@@ -19,6 +19,6 @@ type DataResult struct {
 	TransactionID          string    `json:"transaction_id" bson:"transaction_id"`
 	ReferenceNumber        string    `json:"reference_number" bson:"reference_number"`
 	CreatedAt              time.Time `json:"created_at" bson:"created_at"`
-	ApiID                  int       `bson:"apiID"`
+	ApiID                  string    `bson:"apiID"`
 	Profit_Margin          string    `json:"-" bson:"profit_margin"`
 }
