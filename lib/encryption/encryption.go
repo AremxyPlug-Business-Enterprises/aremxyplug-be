@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/base64"
 	"errors"
 	"io"
@@ -85,4 +86,15 @@ func MaskID(id string) string {
 		return strings.Repeat("*", n)
 	}
 	return strings.Repeat("*", n-4) + id[n-4:]
+}
+
+// NormalizeIdentityID trims outer whitespace before hashing or encryption.
+func NormalizeIdentityID(id string) string {
+	return strings.TrimSpace(id)
+}
+
+// HashIdentityID returns a deterministic SHA-256 hex digest for exact-match checks.
+func HashIdentityID(id string) string {
+	sum := sha256.Sum256([]byte(NormalizeIdentityID(id)))
+	return hex.EncodeToString(sum[:])
 }
