@@ -416,6 +416,11 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		handler.logger.Warn("failed to reset login attempts after successful login", zap.Error(err))
 	}
 
+	if !ensureSignupVerified(w, user) {
+		handler.logger.Warn("blocked login for unverified user", zap.String("user_id", user.ID))
+		return
+	}
+
 	refreshTokenClaims := dto.Claims{
 		PersonId: user.ID,
 	}

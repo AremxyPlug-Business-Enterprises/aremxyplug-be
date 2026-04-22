@@ -176,6 +176,11 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+
+	if !ensureSignupVerified(w, user) {
+		handler.logger.Warn("blocked pin creation for unverified user", zap.String("user_id", user.ID))
+		return
+	}
 	id := user.ID
 	ctx := r.Context()
 
