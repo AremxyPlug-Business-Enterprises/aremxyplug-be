@@ -219,8 +219,9 @@ func (s *SqlStore) GetPlansByProductIDWithContext(ctx context.Context, productID
 		INNER JOIN api_providers ap ON p.provider_id = ap.id
 		WHERE 
 			p.product_id = $1 AND 
-			p.status = 'active' AND 
-			ap.status = 'active' AND 
+			p.available = TRUE AND 
+			LOWER(p.status) = 'active' AND 
+			LOWER(ap.status) = 'active' AND 
 			ap.available = TRUE
 		ORDER BY
 			CASE
