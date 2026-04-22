@@ -14,10 +14,10 @@ func (s *SqlStore) GetWalletCharges(ctx context.Context) (models.WalletCharges, 
 	}
 
 	var charges models.WalletCharges
-	query := "SELECT api_charge, service_charge FROM wallet_charges LIMIT 1"
+	query := "SELECT api_charge, service_charge, service_charge_cap FROM wallet_charges LIMIT 1"
 
 	row := s.db.QueryRowContext(ctx, query)
-	err := row.Scan(&charges.APICharge, &charges.ServiceCharge)
+	err := row.Scan(&charges.APICharge, &charges.ServiceCharge, &charges.ServiceChargeCap)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return models.WalletCharges{}, fmt.Errorf("wallet charges record not found")
