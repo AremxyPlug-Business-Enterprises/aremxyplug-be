@@ -191,8 +191,13 @@ func (c *Config) Deposit(ctx context.Context, virtualaccountid string, userID st
 			// Emit wallet.funded event
 			if c.processor != nil {
 				go func(uID string, amt string, txID string) {
+					baseCtx := ctx
+					if baseCtx == nil {
+						baseCtx = context.Background()
+					}
+					baseCtx = context.WithoutCancel(baseCtx)
 
-					ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					taskCtx, cancel := context.WithTimeout(baseCtx, 10*time.Second)
 					defer cancel()
 					ev := &events.Event{
 						Type:      "wallet.funded",
@@ -202,7 +207,7 @@ func (c *Config) Deposit(ctx context.Context, virtualaccountid string, userID st
 						TS:        time.Now().UTC(),
 						Published: false,
 					}
-					if err := c.processor.ProcessEvent(ctx, ev); err != nil {
+					if err := c.processor.ProcessEvent(taskCtx, ev); err != nil {
 						c.logger.Error("failed to process wallet.funded event", zap.Error(err), zap.String("user_id", uID))
 					}
 
