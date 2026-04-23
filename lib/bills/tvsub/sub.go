@@ -112,6 +112,7 @@ func (t *TvConn) BuySub(ctx context.Context, data TvInfo) (*models.TV_Result, er
 		IucNumber:              data.SmartCard_Number,
 		Phone:                  data.Phone,
 		Email:                  data.Email,
+		CardName:               data.CardName,
 		FullName:               data.Name,
 		TransactionProduct:     transacProd,
 		TransactionDescription: transDesc,

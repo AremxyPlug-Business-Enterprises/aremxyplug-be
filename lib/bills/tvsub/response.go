@@ -39,6 +39,7 @@ type TvInfo struct {
 	Phone            string `json:"phone"`
 	SubType          string `json:"sub_type"`
 	RequestID        string `json:"request_id"`
+	CardName         string `json:"card_name,omitempty"`
 	Name             string
 	TXN              string
 	Profit_Margin    string

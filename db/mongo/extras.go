@@ -86,6 +86,77 @@ func (m *mongoStore) CreateUserReferral(ctx context.Context, newUserID, referral
 	return nil
 }
 
+func (m *mongoStore) FinalizeSignupReferral(ctx context.Context, newUserID, referralCode string, points int) error {
+	ctx = m.ensureCtx(ctx)
+	if referralCode == "" {
+		return nil
+	}
+
+	session, err := m.mongoClient.StartSession()
+	if err != nil {
+		return fmt.Errorf("failed to start session: %v", err)
+	}
+	defer session.EndSession(ctx)
+
+	_, err = session.WithTransaction(ctx, func(sc mongo.SessionContext) (interface{}, error) {
+		var referrer models.User
+		err := m.col("user").FindOne(sc, bson.M{"username": referralCode}).Decode(&referrer)
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				m.logger.Warn("referral code not found or invalid", zap.String("code", referralCode))
+				return nil, nil
+			}
+			return nil, fmt.Errorf("failed to resolve referrer: %w", err)
+		}
+
+		referral := models.Referral{
+			UserID:     newUserID,
+			ReferrerID: referrer.ID,
+			ReferredAt: time.Now().UTC(),
+			IsActive:   true,
+		}
+		if _, err := m.col(referralColl).InsertOne(sc, referral); err != nil {
+			return nil, fmt.Errorf("failed to create referral record: %w", err)
+		}
+
+		referrerUpdate := bson.D{
+			{Key: "$inc", Value: bson.D{{Key: "referral_count", Value: 1}}},
+			{Key: "$set", Value: bson.D{{Key: "last_transaction", Value: time.Now().UTC()}}},
+		}
+		updateResult, err := m.col("user").UpdateOne(sc, bson.M{"id": referrer.ID}, referrerUpdate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update referrer count: %w", err)
+		}
+		if updateResult.MatchedCount == 0 {
+			return nil, ErrMatchedCount
+		}
+
+		pointUpdate := bson.D{
+			{Key: "$inc", Value: bson.D{{Key: "balance", Value: points}}},
+			{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: time.Now().UTC()}}},
+		}
+		opts := options.Update().SetUpsert(true)
+		if _, err := m.col(pointColl).UpdateOne(sc, bson.M{"user_id": referrer.ID}, pointUpdate, opts); err != nil {
+			return nil, fmt.Errorf("failed to update referrer points: %w", err)
+		}
+
+		transaction := models.PointTransaction{
+			UserID:          referrer.ID,
+			TransactionType: "Referral Points",
+			PointEarned:     points,
+			Source:          "referral",
+			CreatedAt:       time.Now().UTC(),
+		}
+		if _, err := m.col(pointTransactionColl).InsertOne(sc, transaction); err != nil {
+			return nil, fmt.Errorf("failed to create referrer point transaction: %w", err)
+		}
+
+		return nil, nil
+	})
+
+	return err
+}
+
 func (m *mongoStore) GetReferredUsers(ctx context.Context, referrerID string) ([]models.ReferredUserInfo, error) {
 	ctx = m.ensureCtx(ctx)
 
