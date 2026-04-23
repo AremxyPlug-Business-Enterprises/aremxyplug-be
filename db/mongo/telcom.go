@@ -22,6 +22,11 @@ func (m *mongoStore) SaveDataTransaction(ctx context.Context, details interface{
 	return nil
 }
 
+func (m *mongoStore) SaveDataFailureAudit(ctx context.Context, details *telcom.DataFailureAudit) error {
+	ctx = m.ensureCtx(ctx)
+	return m.saveToDB(ctx, dataFailureAuditColl, details)
+}
+
 // getRecordDetails returns a data transaction detail.
 func (m *mongoStore) GetDataTransactionDetails(ctx context.Context, id string) (telcom.DataResult, error) {
 	ctx = m.ensureCtx(ctx)
