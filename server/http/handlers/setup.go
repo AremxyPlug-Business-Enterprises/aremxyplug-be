@@ -15,7 +15,6 @@ import (
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
-	emailtermii "github.com/aremxyplug-be/lib/emailclient/termii"
 	"github.com/aremxyplug-be/lib/events"
 	"github.com/aremxyplug-be/lib/key_generator"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
@@ -24,7 +23,7 @@ import (
 	eduservice "github.com/aremxyplug-be/lib/services/edu"
 	telecomservice "github.com/aremxyplug-be/lib/services/telcom"
 	tvservice "github.com/aremxyplug-be/lib/services/tvsub"
-	smstermii "github.com/aremxyplug-be/lib/smsclient/termii"
+	"github.com/aremxyplug-be/lib/smsclient/termii"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
@@ -79,8 +78,8 @@ type HttpHandler struct {
 	bankDep              *deposit.Config
 	point                *pointredeem.PointConfig
 	pin                  *auth_pin.PinConfig
-	smsClient            *smstermii.SMSConn
-	whatsAppClient       *emailtermii.WhatsAppClient
+	smsClient            *termii.SMSConn
+	whatsAppClient       *termii.WhatsAppClient
 	verifyClient         verification.VerificationClient
 	productClient        services.ProductService
 	redisClient          *redis.RedisConn
@@ -108,8 +107,8 @@ type HandlerOptions struct {
 	BankDep        *deposit.Config
 	Point          *pointredeem.PointConfig
 	Pin            *auth_pin.PinConfig
-	SMSClient      *smstermii.SMSConn
-	WhatsAppClient *emailtermii.WhatsAppClient
+	SMSClient      *termii.SMSConn
+	WhatsAppClient *termii.WhatsAppClient
 	VerifyClient   verification.VerificationClient
 	RedisClient    *redis.RedisConn
 	Processor      *events.Processor

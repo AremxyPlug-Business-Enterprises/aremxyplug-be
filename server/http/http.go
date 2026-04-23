@@ -15,11 +15,10 @@ import (
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
-	emailtermii "github.com/aremxyplug-be/lib/emailclient/termii"
 	"github.com/aremxyplug-be/lib/events"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
-	smstermii "github.com/aremxyplug-be/lib/smsclient/termii"
+	"github.com/aremxyplug-be/lib/smsclient/termii"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
@@ -54,8 +53,8 @@ type ServerConfig struct {
 	BankDep        *deposit.Config
 	Point          *pointredeem.PointConfig
 	Pin            *auth_pin.PinConfig
-	SmsClient      *smstermii.SMSConn
-	WhatsAppClient *emailtermii.WhatsAppClient
+	SmsClient      *termii.SMSConn
+	WhatsAppClient *termii.WhatsAppClient
 	VerifyClient   verification.VerificationClient
 	RedisClient    *redis.RedisConn
 	Processor      *events.Processor
