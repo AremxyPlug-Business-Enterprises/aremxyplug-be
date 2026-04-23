@@ -539,10 +539,13 @@ func (m *mongoStore) SaveOTP(ctx context.Context, data models.OTP) error {
 	return nil
 }
 
-func (m *mongoStore) GetOTP(ctx context.Context, email string) (models.OTP, error) {
+func (m *mongoStore) GetOTP(ctx context.Context, channel, target string) (models.OTP, error) {
 	ctx = m.ensureCtx(ctx)
 	data := models.OTP{}
-	filter := bson.D{primitive.E{Key: "email", Value: email}}
+	filter := bson.D{
+		{Key: "channel", Value: channel},
+		{Key: "target", Value: target},
+	}
 	opts := options.FindOne().SetSort(bson.D{{Key: "expireAt", Value: -1}})
 
 	result := m.col("OTP").FindOne(ctx, filter, opts)

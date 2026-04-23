@@ -4,7 +4,8 @@ import "time"
 
 type OTP struct {
 	Secret   string    `bson:"secret"`
-	Email    string    `bson:"email"`
+	Channel  string    `bson:"channel"`
+	Target   string    `bson:"target"`
 	ExpireAt time.Time `bson:"expireAt"`
 }
 

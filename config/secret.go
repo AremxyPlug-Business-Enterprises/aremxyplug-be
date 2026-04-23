@@ -22,8 +22,6 @@ type Secrets struct {
 	accountsid           string `json:"TWILIO_ACCOUNT_SID"`
 	authtoken            string `json:"TWILIO_AUTH_TOKEN"`
 	ServiceID            string `json:"TWILIO_SERVICES_ID"`
-	SignupAllowedEmails  string `json:"SIGNUP_ALLOWED_EMAILS"`
-	SignupAllowedFile    string `json:"SIGNUP_ALLOWED_EMAILS_FILE"`
 	LoginAllowedEmails   string `json:"LOGIN_ALLOWED_EMAILS"`
 	LoginAllowedFile     string `json:"LOGIN_ALLOWED_EMAILS_FILE"`
 }
@@ -48,8 +46,6 @@ func init() {
 	ss.PlatformEmail = os.Getenv("PLATFORM_EMAIL")
 	ss.PostmarkKey = os.Getenv("POSTMARK_KEY")
 	ss.AppPort = os.Getenv("PORT")
-	ss.SignupAllowedEmails = os.Getenv("SIGNUP_ALLOWED_EMAILS")
-	ss.SignupAllowedFile = os.Getenv("SIGNUP_ALLOWED_EMAILS_FILE")
 	ss.LoginAllowedEmails = os.Getenv("LOGIN_ALLOWED_EMAILS")
 	ss.LoginAllowedFile = os.Getenv("LOGIN_ALLOWED_EMAILS_FILE")
 

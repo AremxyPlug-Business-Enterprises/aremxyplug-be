@@ -23,16 +23,16 @@ func NewOTP(store db.DataStore, logger *zap.Logger) *OTPConn {
 	}
 }
 
-func (o *OTPConn) GenerateOTP(ctx context.Context, email string) (string, error) {
+func (o *OTPConn) GenerateOTP(ctx context.Context, channel, target string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	o.logger.Info("Generating OTP", zap.String("email", email))
+	o.logger.Info("Generating OTP", zap.String("channel", channel), zap.String("target", target))
 
 	key, err := totp.Generate(
 		totp.GenerateOpts{
 			Issuer:      "AremxyPlug",
-			AccountName: email,
+			AccountName: target,
 			Period:      300,
 			Digits:      6,
 		},
@@ -45,8 +45,9 @@ func (o *OTPConn) GenerateOTP(ctx context.Context, email string) (string, error)
 	now := time.Now()
 
 	data := models.OTP{
-		Secret: key.Secret(),
-		Email:  email,
+		Secret:  key.Secret(),
+		Channel: channel,
+		Target:  target,
 	}
 
 	if err := o.dbconn.SaveOTP(ctx, data); err != nil {
@@ -67,13 +68,13 @@ func (o *OTPConn) GenerateOTP(ctx context.Context, email string) (string, error)
 	return otp, nil
 }
 
-func (o *OTPConn) ValidateOTP(ctx context.Context, otp, email string) (bool, error) {
+func (o *OTPConn) ValidateOTP(ctx context.Context, otp, channel, target string) (bool, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	o.logger.Info("Validating OTP", zap.String("email", email), zap.String("otp", otp))
+	o.logger.Info("Validating OTP", zap.String("channel", channel), zap.String("target", target), zap.String("otp", otp))
 
-	data, err := o.dbconn.GetOTP(ctx, email)
+	data, err := o.dbconn.GetOTP(ctx, channel, target)
 	if err != nil {
 		o.logger.Error("Failed to get OTP from database", zap.Error(err))
 		return false, err

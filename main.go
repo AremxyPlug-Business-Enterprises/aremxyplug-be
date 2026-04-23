@@ -21,12 +21,13 @@ import (
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient/postmark"
+	emailtermii "github.com/aremxyplug-be/lib/emailclient/termii"
 	"github.com/aremxyplug-be/lib/events"
 	zapLogger "github.com/aremxyplug-be/lib/logger"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
 	"github.com/aremxyplug-be/lib/scheduler"
-	"github.com/aremxyplug-be/lib/smsclient/termii"
+	smstermii "github.com/aremxyplug-be/lib/smsclient/termii"
 	"github.com/aremxyplug-be/lib/tasks"
 	vtu "github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
@@ -76,7 +77,8 @@ func main() {
 	bankTransc := transactions.NewTransaction(store)
 	point := pointredeem.NewPointConfig(store)
 	pin := auth_pin.NewPinConfig(logger, store)
-	sms := termii.NewSMSConn(store, logger)
+	sms := smstermii.NewSMSConn(store, logger)
+	whatsApp := emailtermii.NewWhatsAppClient(logger)
 	auth := auth.NewAuthConn(secrets, redisClient)
 	scheduler := scheduler.NewScheduler(redisClient, store, logger)
 	taskService := tasks.NewService(store)
@@ -85,28 +87,29 @@ func main() {
 	bankTrf := transfer.NewConfig(store, logger, redisClient, processor)
 
 	config := httpSrv.ServerConfig{
-		Store:        store,
-		SqlStore:     sqlStore,
-		EmailClient:  emailClient,
-		Logger:       logger,
-		Secrets:      secrets,
-		DataClient:   data,
-		EduClient:    edu,
-		Vtu:          vtu,
-		TvSub:        tvSub,
-		ElectSub:     electSub,
-		Otp:          otp,
-		Auth:         auth,
-		VirtualAcc:   virtualAcc,
-		BankTranc:    bankTransc,
-		BankTrf:      bankTrf,
-		BankDep:      bankDep,
-		Point:        point,
-		Pin:          pin,
-		SmsClient:    sms,
-		VerifyClient: verifyClient,
-		RedisClient:  redisClient,
-		Processor:    processor,
+		Store:          store,
+		SqlStore:       sqlStore,
+		EmailClient:    emailClient,
+		Logger:         logger,
+		Secrets:        secrets,
+		DataClient:     data,
+		EduClient:      edu,
+		Vtu:            vtu,
+		TvSub:          tvSub,
+		ElectSub:       electSub,
+		Otp:            otp,
+		Auth:           auth,
+		VirtualAcc:     virtualAcc,
+		BankTranc:      bankTransc,
+		BankTrf:        bankTrf,
+		BankDep:        bankDep,
+		Point:          point,
+		Pin:            pin,
+		SmsClient:      sms,
+		WhatsAppClient: whatsApp,
+		VerifyClient:   verifyClient,
+		RedisClient:    redisClient,
+		Processor:      processor,
 	}
 
 	// Initialize bank list if needed
