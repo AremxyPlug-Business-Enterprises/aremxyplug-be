@@ -21,13 +21,12 @@ import (
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient/postmark"
-	emailtermii "github.com/aremxyplug-be/lib/emailclient/termii"
 	"github.com/aremxyplug-be/lib/events"
 	zapLogger "github.com/aremxyplug-be/lib/logger"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
 	"github.com/aremxyplug-be/lib/scheduler"
-	smstermii "github.com/aremxyplug-be/lib/smsclient/termii"
+	"github.com/aremxyplug-be/lib/smsclient/termii"
 	"github.com/aremxyplug-be/lib/tasks"
 	vtu "github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
@@ -77,8 +76,8 @@ func main() {
 	bankTransc := transactions.NewTransaction(store)
 	point := pointredeem.NewPointConfig(store)
 	pin := auth_pin.NewPinConfig(logger, store)
-	sms := smstermii.NewSMSConn(store, logger)
-	whatsApp := emailtermii.NewWhatsAppClient(logger)
+	sms := termii.NewSMSConn(store, logger)
+	whatsApp := termii.NewWhatsAppClient(logger)
 	auth := auth.NewAuthConn(secrets, redisClient)
 	scheduler := scheduler.NewScheduler(redisClient, store, logger)
 	taskService := tasks.NewService(store)
