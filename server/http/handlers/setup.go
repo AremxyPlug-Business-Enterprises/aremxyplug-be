@@ -15,6 +15,7 @@ import (
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
+	emailtermii "github.com/aremxyplug-be/lib/emailclient/termii"
 	"github.com/aremxyplug-be/lib/events"
 	"github.com/aremxyplug-be/lib/key_generator"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
@@ -23,7 +24,7 @@ import (
 	eduservice "github.com/aremxyplug-be/lib/services/edu"
 	telecomservice "github.com/aremxyplug-be/lib/services/telcom"
 	tvservice "github.com/aremxyplug-be/lib/services/tvsub"
-	"github.com/aremxyplug-be/lib/smsclient/termii"
+	smstermii "github.com/aremxyplug-be/lib/smsclient/termii"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
@@ -48,6 +49,8 @@ const (
 	signInVerification = "signin-verification"
 	welcomeMessage     = "verify-email"
 	changeEmail        = "email-change"
+	otpChannelEmail    = "email"
+	otpChannelWhatsApp = "whatsapp"
 )
 
 var validate = validator.New()
@@ -76,41 +79,40 @@ type HttpHandler struct {
 	bankDep              *deposit.Config
 	point                *pointredeem.PointConfig
 	pin                  *auth_pin.PinConfig
-	smsClient            *termii.SMSConn
+	smsClient            *smstermii.SMSConn
+	whatsAppClient       *emailtermii.WhatsAppClient
 	verifyClient         verification.VerificationClient
 	productClient        services.ProductService
 	redisClient          *redis.RedisConn
 	processor            *events.Processor
-	signupAllowlistOnce  sync.Once
-	signupAllowlist      map[string]struct{}
-	signupAllowlistErr   error
 	loginAllowlistOnce   sync.Once
 	loginAllowlist       map[string]struct{}
 	loginAllowlistErr    error
 }
 
 type HandlerOptions struct {
-	Logger       *zap.Logger
-	Store        db.DataStore
-	SqlStore     *sqlstore.SqlStore
-	Data         *data.DataConn
-	Edu          *edu.EduConn
-	VTU          *airtime.AirtimeConn
-	TvSub        *tvsub.TvConn
-	ElectSub     *elect.ElectricConn
-	Secrets      *config.Secrets
-	EmailClient  emailclient.EmailClient
-	Otp          *otpgen.OTPConn
-	VirtualAcc   *bankacc.BankConfig
-	BankTranc    *transactions.Transaction
-	BankTrf      *transfer.Config
-	BankDep      *deposit.Config
-	Point        *pointredeem.PointConfig
-	Pin          *auth_pin.PinConfig
-	SMSClient    *termii.SMSConn
-	VerifyClient verification.VerificationClient
-	RedisClient  *redis.RedisConn
-	Processor    *events.Processor
+	Logger         *zap.Logger
+	Store          db.DataStore
+	SqlStore       *sqlstore.SqlStore
+	Data           *data.DataConn
+	Edu            *edu.EduConn
+	VTU            *airtime.AirtimeConn
+	TvSub          *tvsub.TvConn
+	ElectSub       *elect.ElectricConn
+	Secrets        *config.Secrets
+	EmailClient    emailclient.EmailClient
+	Otp            *otpgen.OTPConn
+	VirtualAcc     *bankacc.BankConfig
+	BankTranc      *transactions.Transaction
+	BankTrf        *transfer.Config
+	BankDep        *deposit.Config
+	Point          *pointredeem.PointConfig
+	Pin            *auth_pin.PinConfig
+	SMSClient      *smstermii.SMSConn
+	WhatsAppClient *emailtermii.WhatsAppClient
+	VerifyClient   verification.VerificationClient
+	RedisClient    *redis.RedisConn
+	Processor      *events.Processor
 }
 
 func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
@@ -177,6 +179,7 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 		pin:                  opt.Pin,
 		point:                opt.Point,
 		smsClient:            opt.SMSClient,
+		whatsAppClient:       opt.WhatsAppClient,
 		verifyClient:         opt.VerifyClient,
 		productClient:        productService,
 		redisClient:          opt.RedisClient,

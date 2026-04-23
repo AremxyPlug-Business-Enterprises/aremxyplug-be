@@ -15,10 +15,11 @@ import (
 	elect "github.com/aremxyplug-be/lib/bills/electricity"
 	"github.com/aremxyplug-be/lib/bills/tvsub"
 	"github.com/aremxyplug-be/lib/emailclient"
+	emailtermii "github.com/aremxyplug-be/lib/emailclient/termii"
 	"github.com/aremxyplug-be/lib/events"
 	otpgen "github.com/aremxyplug-be/lib/otp_gen"
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
-	"github.com/aremxyplug-be/lib/smsclient/termii"
+	smstermii "github.com/aremxyplug-be/lib/smsclient/termii"
 	"github.com/aremxyplug-be/lib/telcom/airtime"
 	"github.com/aremxyplug-be/lib/telcom/data"
 	"github.com/aremxyplug-be/lib/telcom/edu"
@@ -35,28 +36,29 @@ import (
 )
 
 type ServerConfig struct {
-	Logger       *zap.Logger
-	Store        db.DataStore
-	SqlStore     *sqlstore.SqlStore
-	Secrets      *config.Secrets
-	EmailClient  emailclient.EmailClient
-	DataClient   *data.DataConn
-	EduClient    *edu.EduConn
-	Vtu          *airtime.AirtimeConn
-	TvSub        *tvsub.TvConn
-	ElectSub     *elect.ElectricConn
-	Otp          *otpgen.OTPConn
-	Auth         *auth.AuthConn
-	VirtualAcc   *bankacc.BankConfig
-	BankTranc    *transactions.Transaction
-	BankTrf      *transfer.Config
-	BankDep      *deposit.Config
-	Point        *pointredeem.PointConfig
-	Pin          *auth_pin.PinConfig
-	SmsClient    *termii.SMSConn
-	VerifyClient verification.VerificationClient
-	RedisClient  *redis.RedisConn
-	Processor    *events.Processor
+	Logger         *zap.Logger
+	Store          db.DataStore
+	SqlStore       *sqlstore.SqlStore
+	Secrets        *config.Secrets
+	EmailClient    emailclient.EmailClient
+	DataClient     *data.DataConn
+	EduClient      *edu.EduConn
+	Vtu            *airtime.AirtimeConn
+	TvSub          *tvsub.TvConn
+	ElectSub       *elect.ElectricConn
+	Otp            *otpgen.OTPConn
+	Auth           *auth.AuthConn
+	VirtualAcc     *bankacc.BankConfig
+	BankTranc      *transactions.Transaction
+	BankTrf        *transfer.Config
+	BankDep        *deposit.Config
+	Point          *pointredeem.PointConfig
+	Pin            *auth_pin.PinConfig
+	SmsClient      *smstermii.SMSConn
+	WhatsAppClient *emailtermii.WhatsAppClient
+	VerifyClient   verification.VerificationClient
+	RedisClient    *redis.RedisConn
+	Processor      *events.Processor
 }
 
 func MountServer(config ServerConfig) *chi.Mux {
@@ -80,27 +82,28 @@ func MountServer(config ServerConfig) *chi.Mux {
 
 	// Get handlers
 	httpHandler := handlers.NewHttpHandler(&handlers.HandlerOptions{
-		Logger:       config.Logger,
-		Store:        config.Store,
-		SqlStore:     config.SqlStore,
-		Secrets:      config.Secrets,
-		EmailClient:  config.EmailClient,
-		Data:         config.DataClient,
-		Edu:          config.EduClient,
-		VTU:          config.Vtu,
-		TvSub:        config.TvSub,
-		ElectSub:     config.ElectSub,
-		Otp:          config.Otp,
-		VirtualAcc:   config.VirtualAcc,
-		BankTranc:    config.BankTranc,
-		BankTrf:      config.BankTrf,
-		BankDep:      config.BankDep,
-		Point:        config.Point,
-		Pin:          config.Pin,
-		SMSClient:    config.SmsClient,
-		VerifyClient: config.VerifyClient,
-		RedisClient:  config.RedisClient,
-		Processor:    config.Processor,
+		Logger:         config.Logger,
+		Store:          config.Store,
+		SqlStore:       config.SqlStore,
+		Secrets:        config.Secrets,
+		EmailClient:    config.EmailClient,
+		Data:           config.DataClient,
+		Edu:            config.EduClient,
+		VTU:            config.Vtu,
+		TvSub:          config.TvSub,
+		ElectSub:       config.ElectSub,
+		Otp:            config.Otp,
+		VirtualAcc:     config.VirtualAcc,
+		BankTranc:      config.BankTranc,
+		BankTrf:        config.BankTrf,
+		BankDep:        config.BankDep,
+		Point:          config.Point,
+		Pin:            config.Pin,
+		SMSClient:      config.SmsClient,
+		WhatsAppClient: config.WhatsAppClient,
+		VerifyClient:   config.VerifyClient,
+		RedisClient:    config.RedisClient,
+		Processor:      config.Processor,
 	})
 
 	RateLimitMiddleware(RateLimitConfig{
@@ -138,6 +141,7 @@ func MountServer(config ServerConfig) *chi.Mux {
 		sendOTPRoutes(router, httpHandler)
 
 		smsRoutes(router, httpHandler)
+		whatsAppRoutes(router, httpHandler)
 
 		verifyOTPRoutes(router, httpHandler)
 
@@ -218,6 +222,8 @@ func updateRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 	r.Route("/change-phone", func(router chi.Router) {
 		router.Post("/", httpHandler.ChangePhoneNumber)
 		router.Post("/update", httpHandler.UpdatePhoneNumber)
+		router.Post("/whatsapp", httpHandler.ChangePhoneNumberWhatsApp)
+		router.Post("/whatsapp/update", httpHandler.UpdatePhoneNumberWhatsApp)
 	})
 
 }
@@ -378,6 +384,19 @@ func smsRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
 			router.With(middleware.Timeout(20*time.Second)).Post("/signup", httpHandler.VerifySMSOTP)
 			router.With(middleware.Timeout(20*time.Second)).Post("/signin", httpHandler.VerifySMSOTP)
 			router.With(middleware.Timeout(20*time.Second)).Post("/resetpassword", httpHandler.VerifySMSOTP)
+		})
+	})
+}
+
+func whatsAppRoutes(r chi.Router, httpHandler *handlers.HttpHandler) {
+	r.Route("/whatsapp", func(router chi.Router) {
+		router.Route("/send", func(router chi.Router) {
+			router.With(middleware.Timeout(20*time.Second)).Post("/", httpHandler.SendWhatsAppOTP)
+		})
+		router.Route("/verify", func(router chi.Router) {
+			router.With(middleware.Timeout(20*time.Second)).Post("/signup", httpHandler.VerifyWhatsAppOTP)
+			router.With(middleware.Timeout(20*time.Second)).Post("/signin", httpHandler.VerifyWhatsAppOTP)
+			router.With(middleware.Timeout(20*time.Second)).Post("/resetpassword", httpHandler.VerifyWhatsAppOTP)
 		})
 	})
 }

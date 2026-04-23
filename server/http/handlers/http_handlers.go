@@ -47,67 +47,6 @@ func splitAllowlistEmails(input string) []string {
 	})
 }
 
-func (handler *HttpHandler) initSignupAllowlist() {
-	rawList := strings.TrimSpace(handler.secrets.SignupAllowedEmails)
-	rawFile := strings.TrimSpace(handler.secrets.SignupAllowedFile)
-
-	if rawList == "" && rawFile == "" {
-		rawList = strings.TrimSpace(handler.secrets.LoginAllowedEmails)
-		rawFile = strings.TrimSpace(handler.secrets.LoginAllowedFile)
-	}
-
-	if rawList == "" && rawFile == "" {
-		return
-	}
-
-	allowlist := map[string]struct{}{}
-
-	if rawList != "" {
-		for _, email := range splitAllowlistEmails(rawList) {
-			email = strings.ToLower(strings.TrimSpace(email))
-			if email == "" {
-				continue
-			}
-			allowlist[email] = struct{}{}
-		}
-	}
-
-	if rawFile != "" {
-		b, err := os.ReadFile(rawFile)
-		if err != nil {
-			handler.signupAllowlistErr = err
-			return
-		}
-		for _, email := range splitAllowlistEmails(string(b)) {
-			email = strings.ToLower(strings.TrimSpace(email))
-			if email == "" {
-				continue
-			}
-			allowlist[email] = struct{}{}
-		}
-	}
-
-	if len(allowlist) == 0 {
-		handler.signupAllowlistErr = errors.New("signup allowlist is configured but empty")
-		return
-	}
-
-	handler.signupAllowlist = allowlist
-}
-
-func (handler *HttpHandler) isSignupEmailAllowed(email string) (bool, error) {
-	handler.signupAllowlistOnce.Do(handler.initSignupAllowlist)
-	if handler.signupAllowlistErr != nil {
-		return false, handler.signupAllowlistErr
-	}
-	if handler.signupAllowlist == nil {
-		return true, nil
-	}
-	email = strings.ToLower(strings.TrimSpace(email))
-	_, ok := handler.signupAllowlist[email]
-	return ok, nil
-}
-
 func (handler *HttpHandler) initLoginAllowlist() {
 	rawList := strings.TrimSpace(handler.secrets.LoginAllowedEmails)
 	rawFile := strings.TrimSpace(handler.secrets.LoginAllowedFile)
@@ -219,29 +158,6 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 	inviteCode := ""
 	if rawInvitationCode != "" && !isSelfReferral {
 		inviteCode = to.String(rawInvitationCode)
-	}
-
-	allowed, allowErr := handler.isSignupEmailAllowed(email)
-	if allowErr != nil {
-		handler.logger.Error("signup allowlist error", zap.Error(allowErr))
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{
-			Status:  http.StatusInternalServerError,
-			Message: "error",
-			Data:    map[string]interface{}{"data": "signup temporarily unavailable"},
-		}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-	if !allowed {
-		w.WriteHeader(http.StatusForbidden)
-		response := responseFormat.CustomResponse{
-			Status:  http.StatusForbidden,
-			Message: "sign-up failed",
-			Data:    map[string]interface{}{"data": "email not allowed"},
-		}
-		json.NewEncoder(w).Encode(response)
-		return
 	}
 
 	validUser, field, err := handler.isValidNewUser(ctx, user)
@@ -418,6 +334,7 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	if !ensureSignupVerified(w, user) {
 		handler.logger.Warn("blocked login for unverified user", zap.String("user_id", user.ID))
+
 		return
 	}
 
@@ -720,7 +637,7 @@ func (handler *HttpHandler) UpdateEmail(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	valid, err := handler.otp.ValidateOTP(ctx, payload.OTP, payload.New_Email)
+	valid, err := handler.otp.ValidateOTP(ctx, payload.OTP, otpChannelEmail, payload.New_Email)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -859,6 +776,98 @@ func (handler *HttpHandler) UpdatePhoneNumber(w http.ResponseWriter, r *http.Req
 	}
 	json.NewEncoder(w).Encode(response)
 
+}
+
+func (handler *HttpHandler) ChangePhoneNumberWhatsApp(w http.ResponseWriter, r *http.Request) {
+	user, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	ctx := r.Context()
+
+	payload := struct {
+		NewPhone string `json:"new_phone"`
+	}{}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		handler.logger.Error("error decoding request body", zap.Error(err))
+		respondWithError(w, http.StatusBadRequest, "error", errors.New("error decoding request payload"))
+		return
+	}
+
+	if payload.NewPhone == user.PhoneNumber {
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "new phone number cannot be the same as the current phone number"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if err := handler.sendWhatsAppOTP(ctx, payload.NewPhone); err != nil {
+		handler.logger.Error("Failed to send WhatsApp OTP", zap.String("phone", payload.NewPhone), zap.Error(err))
+		respondWithError(w, http.StatusInternalServerError, "failed to send whatsapp otp", err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data: map[string]interface{}{
+			"message": "phone change whatsapp otp sent",
+		},
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (handler *HttpHandler) UpdatePhoneNumberWhatsApp(w http.ResponseWriter, r *http.Request) {
+	user, err := handler.GetUserDetails(r)
+	if err != nil {
+		handler.logger.Error("Failed to get user details", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	ctx := r.Context()
+
+	payload := struct {
+		NewPhone string `json:"new_phone"`
+		OTP      string `json:"otp"`
+	}{}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		handler.logger.Error("error decoding request body", zap.Error(err))
+		respondWithError(w, http.StatusBadRequest, "error", errors.New("error decoding request payload"))
+		return
+	}
+
+	if err := handler.validateWhatsAppOTP(ctx, payload.OTP, payload.NewPhone); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error", err)
+		return
+	}
+
+	if err := handler.store.UpdatePhone(ctx, user.ID, payload.NewPhone); err != nil {
+		handler.logger.Error("failed to update phone number", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	response := responseFormat.CustomResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data: map[string]interface{}{
+			"message": "phone number successfully updated",
+			"phone":   payload.NewPhone,
+		},
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func (handler *HttpHandler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
@@ -1023,7 +1032,7 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	email := r.URL.Query().Get("email")
-	valid, err := handler.otp.ValidateOTP(ctx, Otp.OTP, email)
+	valid, err := handler.otp.ValidateOTP(ctx, Otp.OTP, otpChannelEmail, email)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -1209,6 +1218,101 @@ func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request)
 
 }
 
+func (handler *HttpHandler) SendWhatsAppOTP(w http.ResponseWriter, r *http.Request) {
+	type input struct {
+		Phone string `json:"phone_number"`
+	}
+	ctx := r.Context()
+
+	data := input{}
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		handler.logger.Error("Invalid request body", zap.Error(err))
+		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	_, err := handler.store.GetUserByPhone(ctx, data.Phone)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			handler.logger.Warn("No user found with phone number", zap.String("phone", data.Phone))
+			respondWithError(w, http.StatusNotFound, "no user found with phone number", err)
+			return
+		}
+		handler.logger.Error("Database error", zap.Error(err))
+		respondWithError(w, http.StatusInternalServerError, "database error", err)
+		return
+	}
+
+	if err := handler.sendWhatsAppOTP(ctx, data.Phone); err != nil {
+		handler.logger.Error("Failed to send WhatsApp OTP", zap.String("phone", data.Phone), zap.Error(err))
+		respondWithError(w, http.StatusInternalServerError, "failed to send whatsapp otp", err)
+		return
+	}
+
+	handler.logger.Info("WhatsApp OTP sent successfully", zap.String("phone", data.Phone))
+	respondWithSuccess(w, http.StatusOK, "success", "WhatsApp OTP sent successfully")
+}
+
+func (handler *HttpHandler) VerifyWhatsAppOTP(w http.ResponseWriter, r *http.Request) {
+	type input struct {
+		OTP string `json:"otp"`
+	}
+	data := input{}
+	ctx := r.Context()
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	phone := r.URL.Query().Get("phone")
+
+	if err := handler.validateWhatsAppOTP(ctx, data.OTP, phone); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error", err)
+		return
+	}
+
+	action := getLastPathSegment(r.URL.Path)
+	switch action {
+	case "signin":
+		data := map[string]interface{}{"phone": phone}
+		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
+	case "signup":
+		_, err := handler.store.VerifyUser(ctx, phone)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+
+		data := map[string]interface{}{"phone": phone}
+		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
+	case "resetpassword":
+		user, err := handler.store.GetUserByPhone(ctx, phone)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+
+		claims := dto.Claims{
+			PersonId: user.ID,
+		}
+
+		jwtToken, err := handler.jwt.GenerateTokenWithExpiration(claims, handler.authTokenDuration)
+		if err != nil {
+			handler.logger.Error("fail to generate token", zap.Error(err))
+			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+
+		w.Header().Set("Authorization", jwtToken)
+		data := map[string]interface{}{"message": "otp verification successful"}
+		respondWithSuccess(w, http.StatusOK, "success", data)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
 func (handler *HttpHandler) GetUserInfo(w http.ResponseWriter, r *http.Request) {
 
 	handler.logger.Info("getting user info")
@@ -1277,7 +1381,7 @@ func (handler *HttpHandler) validateToken(token string) (isValid bool, response 
 }
 
 func (handler *HttpHandler) sendOTP(ctx context.Context, user *models.User, title string, templateID string) error {
-	otp, err := handler.otp.GenerateOTP(ctx, user.Email)
+	otp, err := handler.otp.GenerateOTP(ctx, otpChannelEmail, user.Email)
 	if err != nil {
 		return err
 	}
@@ -1305,6 +1409,27 @@ func (handler *HttpHandler) sendOTP(ctx context.Context, user *models.User, titl
 		return err
 	}
 	fmt.Println("email sent")
+	return nil
+}
+
+func (handler *HttpHandler) sendWhatsAppOTP(ctx context.Context, phone string) error {
+	otp, err := handler.otp.GenerateOTP(ctx, otpChannelWhatsApp, phone)
+	if err != nil {
+		return err
+	}
+
+	return handler.whatsAppClient.SendWhatsAppToken(ctx, otp, phone)
+}
+
+func (handler *HttpHandler) validateWhatsAppOTP(ctx context.Context, otp, phone string) error {
+	valid, err := handler.otp.ValidateOTP(ctx, otp, otpChannelWhatsApp, phone)
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return errors.New("otp verification failed")
+	}
+
 	return nil
 }
 

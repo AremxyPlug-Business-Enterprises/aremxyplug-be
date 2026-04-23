@@ -23,7 +23,7 @@ type DataStore interface {
 type Extras interface {
 	CheckID(ctx context.Context, id int) (int64, error)
 	SaveOTP(ctx context.Context, data models.OTP) error
-	GetOTP(ctx context.Context, email string) (models.OTP, error)
+	GetOTP(ctx context.Context, channel, target string) (models.OTP, error)
 	SaveSMS(ctx context.Context, data models.SMSOTP) error
 	GetSMS(ctx context.Context, phone string) (models.SMSOTP, error)
 	GetPin(ctx context.Context, userID string) (string, error)
