@@ -205,13 +205,6 @@ func (handler *HttpHandler) SignUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if inviteCode != "" {
-		err := handler.store.CreateUserReferral(ctx, userId, inviteCode)
-		if err != nil {
-			handler.logger.Warn("error updating referral count", zap.Error(err))
-		}
-	}
-
 	userResponse := dto.UserResponse{
 		ID:       newUser.ID,
 		FullName: newUser.FullName,

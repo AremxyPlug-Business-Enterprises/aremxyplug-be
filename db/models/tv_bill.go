@@ -10,6 +10,7 @@ type TV_Result struct {
 	IucNumber              string    `json:"iuc_number" bson:"iuc_number"`
 	Phone                  string    `json:"phone_number" bson:"phone_number"`
 	Email                  string    `json:"email" bson:"email"`
+	CardName               string    `json:"card_name,omitempty" bson:"card_name,omitempty"`
 	FullName               string    `json:"full_name" bson:"full_name"`
 	Amount                 int       `json:"amount" bson:"amount"`
 	TransactionProduct     string    `json:"transaction_product" bson:"transaction_product"`

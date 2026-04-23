@@ -227,6 +227,12 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 		}
 
+		if user.InvitationCode != "" {
+			if err := handler.store.FinalizeSignupReferral(ctx, user.ID, user.InvitationCode, pointsEarned); err != nil {
+				handler.logger.Warn("failed to finalize deferred signup referral", zap.String("user_id", user.ID), zap.Error(err))
+			}
+		}
+
 		if handler.processor != nil {
 			handler.addevent(ctx, user.ID, "", "", "signup.completed")
 		}
