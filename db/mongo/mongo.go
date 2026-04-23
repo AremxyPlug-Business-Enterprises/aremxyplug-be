@@ -19,13 +19,14 @@ import (
 )
 
 var (
-	dataColl     = "data"
-	eduColl      = "edu"
-	airColl      = "airtime"
-	tvColl       = "tv-sub"
-	electricColl = "elect-sub"
-	userColl     = "user"
-	messagesColl = "messages"
+	dataColl              = "data"
+	dataFailureAuditColl  = "data-failure-audit"
+	eduColl               = "edu"
+	airColl               = "airtime"
+	tvColl                = "tv-sub"
+	electricColl          = "elect-sub"
+	userColl              = "user"
+	messagesColl          = "messages"
 	// verificationsColl = "verifications"
 )
 
@@ -171,6 +172,28 @@ func (m *mongoStore) InitIndexes() error {
 
 	if _, err := db.Collection("tasks").Indexes().CreateMany(ctx, tasksIndex); err != nil {
 		return fmt.Errorf("failed to create tasks index: %w", err)
+	}
+
+	dataFailureAuditIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{{Key: "created_at", Value: -1}},
+		},
+		{
+			Keys: bson.D{{Key: "provider_name", Value: 1}, {Key: "created_at", Value: -1}},
+		},
+		{
+			Keys: bson.D{{Key: "failure_type", Value: 1}, {Key: "created_at", Value: -1}},
+		},
+		{
+			Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "created_at", Value: -1}},
+		},
+		{
+			Keys: bson.D{{Key: "transaction_id", Value: 1}},
+		},
+	}
+
+	if _, err := db.Collection(dataFailureAuditColl).Indexes().CreateMany(ctx, dataFailureAuditIndexes); err != nil {
+		return fmt.Errorf("failed to create data failure audit index: %w", err)
 	}
 
 	return nil
