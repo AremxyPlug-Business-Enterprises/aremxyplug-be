@@ -325,90 +325,28 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		handler.logger.Warn("failed to reset login attempts after successful login", zap.Error(err))
 	}
 
-	if !ensureSignupVerified(w, user) {
-		handler.logger.Warn("blocked login for unverified user", zap.String("user_id", user.ID))
-
-		return
-	}
-
-	refreshTokenClaims := dto.Claims{
-		PersonId: user.ID,
-	}
-
-	claims := dto.Claims{
-		PersonId: user.ID,
-	}
-
-	jwtToken, err := handler.jwt.GenerateTokenWithExpiration(claims, handler.authTokenDuration)
+	pendingLogin, err := handler.createPendingLogin(ctx, user)
 	if err != nil {
-		handler.logger.Error("fail to generate token", zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-	userResponse := dto.UserResponse{
-		ID:       user.ID,
-		FullName: user.FullName,
-		Email:    user.Email,
-		Username: user.Username,
-		Phone:    user.PhoneNumber,
-	}
-
-	refreshToken, err := handler.jwt.GenerateTokenWithExpiration(refreshTokenClaims, handler.refreshTokenDuration)
-	if err != nil {
-		handler.logger.Error("fail to generate refresh token", zap.Error(err))
+		handler.logger.Error("failed to create pending login", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	hasPin := user.HasPin
-
-	// Store refresh token session in Redis (session model)
-	sessionKey := fmt.Sprintf("session:%s", user.ID)
-	handler.redisClient.SetWithTTL(ctx, sessionKey, refreshToken, handler.refreshTokenDuration)
-
-	accessCookie := &http.Cookie{
-		Name:     "access_token",
-		Value:    jwtToken,
-		MaxAge:   900,
-		HttpOnly: true,
-		Secure:   true,
-		Path:     "/",
-		SameSite: http.SameSiteNoneMode,
-		Domain:   "aremxyplug.com",
-	}
-
-	refreshCookie := &http.Cookie{
-		Name:     "refresh_token",
-		Value:    refreshToken,
-		MaxAge:   1800,
-		HttpOnly: true,
-		Secure:   true,
-		Path:     "/api/v1/refresh-token",
-		SameSite: http.SameSiteNoneMode,
-		Domain:   "aremxyplug.com",
-	}
-
-	http.SetCookie(w, accessCookie)
-	http.SetCookie(w, refreshCookie)
-
-	if !hasPin {
-		handler.logger.Warn("pin not yet set", zap.Any("userID", user.ID))
-		w.WriteHeader(http.StatusAccepted)
-		response := responseFormat.CustomResponse{Status: http.StatusAccepted, Message: "success", Data: map[string]interface{}{
-			"msg":      "user's pin not set",
-			"customer": userResponse,
-		}}
-		json.NewEncoder(w).Encode(response)
+	if !user.IsVerified {
+		handler.logger.Info("login requires signup verification", zap.String("user_id", user.ID))
+		handler.writeLoginFlowResponse(w, http.StatusAccepted, user, pendingLogin.Token, "verify_signup_otp", "verification required")
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	response := responseFormat.CustomResponse{Status: http.StatusOK, Message: "success", Data: map[string]interface{}{"customer": userResponse}}
-	json.NewEncoder(w).Encode(response)
+	if !user.HasPin {
+		handler.logger.Info("login requires first pin setup", zap.String("user_id", user.ID))
+		handler.writeLoginFlowResponse(w, http.StatusAccepted, user, pendingLogin.Token, "create_pin", "pin setup required")
+		return
+	}
+
+	handler.writeLoginFlowResponse(w, http.StatusAccepted, user, pendingLogin.Token, "verify_signin_otp", "otp required")
 
 }
 
@@ -917,26 +855,34 @@ func (handler *HttpHandler) UpdatePassword(w http.ResponseWriter, r *http.Reques
 }
 
 func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
-	var userLogin dto.LoginInput
+	type input struct {
+		Email             string `json:"email"`
+		PendingLoginToken string `json:"pending_login_token"`
+	}
+	var payload input
 
 	// Decode and validate the request body
-	if err := json.NewDecoder(r.Body).Decode(&userLogin); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 	ctx := r.Context()
 
-	// Retrieve user by email
-	user, err := handler.store.GetUserByEmail(ctx, userLogin.Email)
-	if err != nil {
-		respondWithError(w, http.StatusNotFound, "User not found", nil)
-		return
-	}
-
 	// Determine the action based on the URL path
 	action := getLastPathSegment(r.URL.Path)
 	switch action {
 	case "signup":
+		user := (*models.User)(nil)
+		var err error
+		if strings.TrimSpace(payload.PendingLoginToken) != "" {
+			user, _, err = handler.getPendingLoginUser(ctx, payload.PendingLoginToken)
+		} else {
+			user, err = handler.store.GetUserByEmail(ctx, payload.Email)
+		}
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "User not found", nil)
+			return
+		}
 		if err := handler.sendOTP(ctx, user, "Sign-Up Verification", verifyEmailAlias); err != nil {
 			respondWithError(w, http.StatusInternalServerError, "Error sending verification OTP", err)
 			return
@@ -944,6 +890,19 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 		respondWithSuccess(w, http.StatusOK, "success", "Verification email sent successfully")
 
 	case "signin":
+		user, _, err := handler.getPendingLoginUser(ctx, payload.PendingLoginToken)
+		if err != nil {
+			respondWithError(w, http.StatusUnauthorized, "login expired", err)
+			return
+		}
+		if !user.IsVerified || !user.HasPin {
+			respondWithError(w, http.StatusForbidden, "signin otp is not available for this user state", errors.New("complete verification and pin setup first"))
+			return
+		}
+		if payload.Email != "" && !strings.EqualFold(strings.TrimSpace(payload.Email), user.Email) {
+			respondWithError(w, http.StatusBadRequest, "invalid email", errors.New("email does not match the pending login"))
+			return
+		}
 		if err := handler.sendOTP(ctx, user, "Sign-in Verification", signInVerification); err != nil {
 			respondWithError(w, http.StatusInternalServerError, "Error sending sign-in OTP", err)
 			return
@@ -951,6 +910,11 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 		respondWithSuccess(w, http.StatusOK, "success", "Sign-in email sent successfully")
 
 	case "resetpassword":
+		user, err := handler.store.GetUserByEmail(ctx, payload.Email)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "User not found", nil)
+			return
+		}
 		if err := handler.sendOTP(ctx, user, "Password OTP", PasswordOTPAlias); err != nil {
 			respondWithError(w, http.StatusInternalServerError, "Error sending password reset OTP", err)
 			return
@@ -958,6 +922,11 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 		respondWithSuccess(w, http.StatusCreated, "success", "Password reset email sent successfully")
 
 	case "resetpin":
+		user, err := handler.store.GetUserByEmail(ctx, payload.Email)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "User not found", nil)
+			return
+		}
 		if err := handler.sendOTP(ctx, user, "PIN Reset", resetPinAlias); err != nil {
 			respondWithError(w, http.StatusInternalServerError, "Error sending PIN reset OTP", err)
 			return
@@ -1010,14 +979,15 @@ func (handler *HttpHandler) SendOTPWIthTermii(w http.ResponseWriter, r *http.Req
 */
 
 func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
-	type otp struct {
-		OTP string `json:"otp"`
+	type otpInput struct {
+		OTP               string `json:"otp"`
+		PendingLoginToken string `json:"pending_login_token"`
 	}
-	Otp := otp{}
+	payload := otpInput{}
 	ctx := r.Context()
 
 	// validate the request body
-	if err := json.NewDecoder(r.Body).Decode(&Otp); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)
@@ -1025,7 +995,7 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	email := r.URL.Query().Get("email")
-	valid, err := handler.otp.ValidateOTP(ctx, Otp.OTP, otpChannelEmail, email)
+	valid, err := handler.otp.ValidateOTP(ctx, payload.OTP, otpChannelEmail, email)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -1044,8 +1014,28 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	action := getLastPathSegment(r.URL.Path)
 	switch action {
 	case "signin":
-		data := map[string]interface{}{"data": email}
-		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
+		user, _, err := handler.getPendingLoginUser(ctx, payload.PendingLoginToken)
+		if err != nil {
+			respondWithError(w, http.StatusUnauthorized, "login expired", err)
+			return
+		}
+		if !strings.EqualFold(user.Email, email) {
+			respondWithError(w, http.StatusBadRequest, "invalid email", errors.New("email does not match the pending login"))
+			return
+		}
+		if !user.IsVerified || !user.HasPin {
+			respondWithError(w, http.StatusForbidden, "signin otp is not available for this user state", errors.New("complete verification and pin setup first"))
+			return
+		}
+		if err := handler.issueLoginSession(w, ctx, user); err != nil {
+			handler.logger.Error("failed to issue login session after email otp verification", zap.Error(err))
+			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+		if err := handler.deletePendingLogin(ctx, payload.PendingLoginToken); err != nil {
+			handler.logger.Warn("failed to delete pending login after email otp verification", zap.Error(err))
+		}
+		handler.writeAuthSuccessResponse(w, http.StatusOK, user, "success")
 	case "signup":
 		user, err := handler.store.VerifyUser(ctx, email)
 		if err != nil {
@@ -1060,14 +1050,42 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 			Published: false,
 		}
 
-		if err := handler.processor.ProcessEvent(ctx, ev); err != nil {
-			handler.logger.Error("error processing signup completed event", zap.String("user_id", user.ID), zap.Error(err))
+		if handler.processor != nil {
+			if err := handler.processor.ProcessEvent(ctx, ev); err != nil {
+				handler.logger.Error("error processing signup completed event", zap.String("user_id", user.ID), zap.Error(err))
+			}
 		}
 
 		err = handler.sendOTP(ctx, user, "verify-email", welcomeMessage)
 		if err != nil {
 			handler.logger.Error("error sending email verification otp", zap.String("target", user.Email), zap.Error(err))
 			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+
+		if strings.TrimSpace(payload.PendingLoginToken) != "" {
+			pendingUser, state, err := handler.getPendingLoginUser(ctx, payload.PendingLoginToken)
+			if err != nil {
+				respondWithError(w, http.StatusUnauthorized, "login expired", err)
+				return
+			}
+			if pendingUser.ID != user.ID {
+				respondWithError(w, http.StatusBadRequest, "invalid verification request", errors.New("verification does not match the pending login"))
+				return
+			}
+			if user.HasPin {
+				if err := handler.issueLoginSession(w, ctx, user); err != nil {
+					handler.logger.Error("failed to issue login session after signup verification", zap.Error(err))
+					respondWithError(w, http.StatusInternalServerError, "error", err)
+					return
+				}
+				if err := handler.deletePendingLogin(ctx, payload.PendingLoginToken); err != nil {
+					handler.logger.Warn("failed to delete pending login after signup verification", zap.Error(err))
+				}
+				handler.writeAuthSuccessResponse(w, http.StatusOK, user, "success")
+				return
+			}
+			handler.writeLoginFlowResponse(w, http.StatusAccepted, user, state.Token, "create_pin", "pin setup required")
 			return
 		}
 
@@ -1107,7 +1125,8 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 func (handler *HttpHandler) SendSMSOTP(w http.ResponseWriter, r *http.Request) {
 
 	type input struct {
-		Phone string `json:"phone_number"`
+		Phone             string `json:"phone_number"`
+		PendingLoginToken string `json:"pending_login_token"`
 	}
 	ctx := r.Context()
 
@@ -1119,10 +1138,24 @@ func (handler *HttpHandler) SendSMSOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := handler.store.GetUserByPhone(ctx, data.Phone)
+	phone := strings.TrimSpace(data.Phone)
+	if strings.TrimSpace(data.PendingLoginToken) != "" {
+		user, _, err := handler.getPendingLoginUser(ctx, data.PendingLoginToken)
+		if err != nil {
+			respondWithError(w, http.StatusUnauthorized, "login expired", err)
+			return
+		}
+		if phone != "" && phone != strings.TrimSpace(user.PhoneNumber) {
+			respondWithError(w, http.StatusBadRequest, "invalid phone number", errors.New("phone number does not match the pending login"))
+			return
+		}
+		phone = strings.TrimSpace(user.PhoneNumber)
+	}
+
+	_, err := handler.store.GetUserByPhone(ctx, phone)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			handler.logger.Warn("No user found with phone number", zap.String("phone", data.Phone))
+			handler.logger.Warn("No user found with phone number", zap.String("phone", phone))
 			respondWithError(w, http.StatusNotFound, "no user found with phone number", err)
 			return
 		}
@@ -1131,28 +1164,29 @@ func (handler *HttpHandler) SendSMSOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = handler.smsClient.SendSMS(ctx, data.Phone)
+	err = handler.smsClient.SendSMS(ctx, phone)
 	if err != nil {
 		if err == termii.ErrSMSFailed {
-			handler.logger.Error("SMS sending failed", zap.String("phone", data.Phone), zap.Error(err))
+			handler.logger.Error("SMS sending failed", zap.String("phone", phone), zap.Error(err))
 			w.WriteHeader(http.StatusBadRequest)
 			response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "failed to send OTP, please try again"}}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
-		handler.logger.Error("Failed to send OTP", zap.String("phone", data.Phone), zap.Error(err))
+		handler.logger.Error("Failed to send OTP", zap.String("phone", phone), zap.Error(err))
 		respondWithError(w, http.StatusInternalServerError, "failed to send otp", err)
 		return
 	}
 
-	handler.logger.Info("OTP sent successfully", zap.String("phone", data.Phone))
+	handler.logger.Info("OTP sent successfully", zap.String("phone", phone))
 	respondWithSuccess(w, http.StatusOK, "success", "OTP sent successfully")
 }
 
 func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request) {
 
 	type input struct {
-		OTP string `json:"otp"`
+		OTP               string `json:"otp"`
+		PendingLoginToken string `json:"pending_login_token"`
 	}
 	data := input{}
 	ctx := r.Context()
@@ -1173,12 +1207,58 @@ func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request)
 	action := getLastPathSegment(r.URL.Path)
 	switch action {
 	case "signin":
-		data := map[string]interface{}{"phone": phone}
-		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
+		user, _, err := handler.getPendingLoginUser(ctx, data.PendingLoginToken)
+		if err != nil {
+			respondWithError(w, http.StatusUnauthorized, "login expired", err)
+			return
+		}
+		if strings.TrimSpace(user.PhoneNumber) != strings.TrimSpace(phone) {
+			respondWithError(w, http.StatusBadRequest, "invalid phone number", errors.New("phone number does not match the pending login"))
+			return
+		}
+		if !user.IsVerified || !user.HasPin {
+			respondWithError(w, http.StatusForbidden, "signin otp is not available for this user state", errors.New("complete verification and pin setup first"))
+			return
+		}
+		if err := handler.issueLoginSession(w, ctx, user); err != nil {
+			handler.logger.Error("failed to issue login session after sms otp verification", zap.Error(err))
+			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+		if err := handler.deletePendingLogin(ctx, data.PendingLoginToken); err != nil {
+			handler.logger.Warn("failed to delete pending login after sms otp verification", zap.Error(err))
+		}
+		handler.writeAuthSuccessResponse(w, http.StatusOK, user, "success")
 	case "signup":
-		_, err := handler.store.VerifyUser(ctx, phone)
+		user, err := handler.store.VerifyUser(ctx, phone)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+
+		if strings.TrimSpace(data.PendingLoginToken) != "" {
+			pendingUser, state, err := handler.getPendingLoginUser(ctx, data.PendingLoginToken)
+			if err != nil {
+				respondWithError(w, http.StatusUnauthorized, "login expired", err)
+				return
+			}
+			if pendingUser.ID != user.ID {
+				respondWithError(w, http.StatusBadRequest, "invalid verification request", errors.New("verification does not match the pending login"))
+				return
+			}
+			if user.HasPin {
+				if err := handler.issueLoginSession(w, ctx, user); err != nil {
+					handler.logger.Error("failed to issue login session after sms signup verification", zap.Error(err))
+					respondWithError(w, http.StatusInternalServerError, "error", err)
+					return
+				}
+				if err := handler.deletePendingLogin(ctx, data.PendingLoginToken); err != nil {
+					handler.logger.Warn("failed to delete pending login after sms signup verification", zap.Error(err))
+				}
+				handler.writeAuthSuccessResponse(w, http.StatusOK, user, "success")
+				return
+			}
+			handler.writeLoginFlowResponse(w, http.StatusAccepted, user, state.Token, "create_pin", "pin setup required")
 			return
 		}
 
@@ -1213,7 +1293,8 @@ func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request)
 
 func (handler *HttpHandler) SendWhatsAppOTP(w http.ResponseWriter, r *http.Request) {
 	type input struct {
-		Phone string `json:"phone_number"`
+		Phone             string `json:"phone_number"`
+		PendingLoginToken string `json:"pending_login_token"`
 	}
 	ctx := r.Context()
 
@@ -1225,10 +1306,24 @@ func (handler *HttpHandler) SendWhatsAppOTP(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	_, err := handler.store.GetUserByPhone(ctx, data.Phone)
+	phone := strings.TrimSpace(data.Phone)
+	if strings.TrimSpace(data.PendingLoginToken) != "" {
+		user, _, err := handler.getPendingLoginUser(ctx, data.PendingLoginToken)
+		if err != nil {
+			respondWithError(w, http.StatusUnauthorized, "login expired", err)
+			return
+		}
+		if phone != "" && phone != strings.TrimSpace(user.PhoneNumber) {
+			respondWithError(w, http.StatusBadRequest, "invalid phone number", errors.New("phone number does not match the pending login"))
+			return
+		}
+		phone = strings.TrimSpace(user.PhoneNumber)
+	}
+
+	_, err := handler.store.GetUserByPhone(ctx, phone)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			handler.logger.Warn("No user found with phone number", zap.String("phone", data.Phone))
+			handler.logger.Warn("No user found with phone number", zap.String("phone", phone))
 			respondWithError(w, http.StatusNotFound, "no user found with phone number", err)
 			return
 		}
@@ -1237,19 +1332,20 @@ func (handler *HttpHandler) SendWhatsAppOTP(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := handler.sendWhatsAppOTP(ctx, data.Phone); err != nil {
-		handler.logger.Error("Failed to send WhatsApp OTP", zap.String("phone", data.Phone), zap.Error(err))
+	if err := handler.sendWhatsAppOTP(ctx, phone); err != nil {
+		handler.logger.Error("Failed to send WhatsApp OTP", zap.String("phone", phone), zap.Error(err))
 		respondWithError(w, http.StatusInternalServerError, "failed to send whatsapp otp", err)
 		return
 	}
 
-	handler.logger.Info("WhatsApp OTP sent successfully", zap.String("phone", data.Phone))
+	handler.logger.Info("WhatsApp OTP sent successfully", zap.String("phone", phone))
 	respondWithSuccess(w, http.StatusOK, "success", "WhatsApp OTP sent successfully")
 }
 
 func (handler *HttpHandler) VerifyWhatsAppOTP(w http.ResponseWriter, r *http.Request) {
 	type input struct {
-		OTP string `json:"otp"`
+		OTP               string `json:"otp"`
+		PendingLoginToken string `json:"pending_login_token"`
 	}
 	data := input{}
 	ctx := r.Context()
@@ -1269,12 +1365,58 @@ func (handler *HttpHandler) VerifyWhatsAppOTP(w http.ResponseWriter, r *http.Req
 	action := getLastPathSegment(r.URL.Path)
 	switch action {
 	case "signin":
-		data := map[string]interface{}{"phone": phone}
-		respondWithSuccess(w, http.StatusOK, "otp verification successful", data)
+		user, _, err := handler.getPendingLoginUser(ctx, data.PendingLoginToken)
+		if err != nil {
+			respondWithError(w, http.StatusUnauthorized, "login expired", err)
+			return
+		}
+		if strings.TrimSpace(user.PhoneNumber) != strings.TrimSpace(phone) {
+			respondWithError(w, http.StatusBadRequest, "invalid phone number", errors.New("phone number does not match the pending login"))
+			return
+		}
+		if !user.IsVerified || !user.HasPin {
+			respondWithError(w, http.StatusForbidden, "signin otp is not available for this user state", errors.New("complete verification and pin setup first"))
+			return
+		}
+		if err := handler.issueLoginSession(w, ctx, user); err != nil {
+			handler.logger.Error("failed to issue login session after whatsapp otp verification", zap.Error(err))
+			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+		if err := handler.deletePendingLogin(ctx, data.PendingLoginToken); err != nil {
+			handler.logger.Warn("failed to delete pending login after whatsapp otp verification", zap.Error(err))
+		}
+		handler.writeAuthSuccessResponse(w, http.StatusOK, user, "success")
 	case "signup":
-		_, err := handler.store.VerifyUser(ctx, phone)
+		user, err := handler.store.VerifyUser(ctx, phone)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, "error", err)
+			return
+		}
+
+		if strings.TrimSpace(data.PendingLoginToken) != "" {
+			pendingUser, state, err := handler.getPendingLoginUser(ctx, data.PendingLoginToken)
+			if err != nil {
+				respondWithError(w, http.StatusUnauthorized, "login expired", err)
+				return
+			}
+			if pendingUser.ID != user.ID {
+				respondWithError(w, http.StatusBadRequest, "invalid verification request", errors.New("verification does not match the pending login"))
+				return
+			}
+			if user.HasPin {
+				if err := handler.issueLoginSession(w, ctx, user); err != nil {
+					handler.logger.Error("failed to issue login session after whatsapp signup verification", zap.Error(err))
+					respondWithError(w, http.StatusInternalServerError, "error", err)
+					return
+				}
+				if err := handler.deletePendingLogin(ctx, data.PendingLoginToken); err != nil {
+					handler.logger.Warn("failed to delete pending login after whatsapp signup verification", zap.Error(err))
+				}
+				handler.writeAuthSuccessResponse(w, http.StatusOK, user, "success")
+				return
+			}
+			handler.writeLoginFlowResponse(w, http.StatusAccepted, user, state.Token, "create_pin", "pin setup required")
 			return
 		}
 
