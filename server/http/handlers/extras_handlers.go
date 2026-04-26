@@ -181,7 +181,6 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 		handler.logger.Warn("blocked pin creation for unverified user", zap.String("user_id", user.ID))
 		return
 	}
-	id := user.ID
 	ctx := r.Context()
 
 	if r.Method == "POST" {
@@ -213,28 +212,12 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := handler.pin.SavePin(ctx, pin); err != nil {
+		if err := handler.finalizePinCreation(ctx, w, user, pin); err != nil {
 			handler.logger.Error("Failed to save pin", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
 			return
-		}
-
-		pointsEarned := 100
-
-		if err := handler.addPoints(ctx, w, id, pointsEarned, "Sign-Up Points", "", "referral"); err != nil {
-			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
-		}
-
-		if user.InvitationCode != "" {
-			if err := handler.store.FinalizeSignupReferral(ctx, user.ID, user.InvitationCode, pointsEarned); err != nil {
-				handler.logger.Warn("failed to finalize deferred signup referral", zap.String("user_id", user.ID), zap.Error(err))
-			}
-		}
-
-		if handler.processor != nil {
-			handler.addevent(ctx, user.ID, "", "", "signup.completed")
 		}
 
 		w.WriteHeader(http.StatusCreated)
@@ -284,6 +267,94 @@ func (handler *HttpHandler) Pin(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		handler.logger.Info("User pin updated successfully", zap.String("user_id", user.ID))
 	}
+}
+
+func (handler *HttpHandler) CreateFirstLoginPIN(w http.ResponseWriter, r *http.Request) {
+	type firstLoginPinInput struct {
+		Pin               string `json:"pin"`
+		PendingLoginToken string `json:"pending_login_token"`
+	}
+
+	payload := firstLoginPinInput{}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		handler.logger.Error("Failed to decode first-login pin payload", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	ctx := r.Context()
+	user, _, err := handler.getPendingLoginUser(ctx, payload.PendingLoginToken)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "login expired", err)
+		return
+	}
+
+	if !ensureSignupVerified(w, user) {
+		handler.logger.Warn("blocked first-login pin creation for unverified user", zap.String("user_id", user.ID))
+		return
+	}
+
+	if user.HasPin {
+		w.WriteHeader(http.StatusBadRequest)
+		response := responseFormat.CustomResponse{Status: http.StatusBadRequest, Message: "error", Data: map[string]interface{}{"data": "user already has a pin"}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	pin := models.UserPin{
+		UserID:    user.ID,
+		Pin:       payload.Pin,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	if err := handler.finalizePinCreation(ctx, w, user, pin); err != nil {
+		handler.logger.Error("Failed to save first-login pin", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	user.HasPin = true
+	if err := handler.issueLoginSession(w, ctx, user); err != nil {
+		handler.logger.Error("Failed to issue login session after first-login pin creation", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	if err := handler.deletePendingLogin(ctx, payload.PendingLoginToken); err != nil {
+		handler.logger.Warn("failed to delete pending login after first-login pin creation", zap.Error(err))
+	}
+
+	handler.writeAuthSuccessResponse(w, http.StatusCreated, user, "success")
+}
+
+func (handler *HttpHandler) finalizePinCreation(ctx context.Context, w http.ResponseWriter, user *models.User, pin models.UserPin) error {
+	if err := handler.pin.SavePin(ctx, pin); err != nil {
+		return err
+	}
+
+	pointsEarned := 100
+	if err := handler.addPoints(ctx, w, user.ID, pointsEarned, "Sign-Up Points", "", "referral"); err != nil {
+		handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
+	}
+
+	if user.InvitationCode != "" {
+		if err := handler.store.FinalizeSignupReferral(ctx, user.ID, user.InvitationCode, pointsEarned); err != nil {
+			handler.logger.Warn("failed to finalize deferred signup referral", zap.String("user_id", user.ID), zap.Error(err))
+		}
+	}
+
+	if handler.processor != nil {
+		handler.addevent(ctx, user.ID, "", "", "signup.completed")
+	}
+
+	user.HasPin = true
+	return nil
 }
 
 func (handler *HttpHandler) VerifyPIN(w http.ResponseWriter, r *http.Request) {
