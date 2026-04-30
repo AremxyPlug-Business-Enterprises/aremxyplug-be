@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -22,9 +23,9 @@ func (m *mongoStore) SaveDataTransaction(ctx context.Context, details interface{
 	return nil
 }
 
-func (m *mongoStore) SaveDataFailureAudit(ctx context.Context, details *telcom.DataFailureAudit) error {
+func (m *mongoStore) SaveProviderRequestAudit(ctx context.Context, details *models.ProviderRequestAudit) error {
 	ctx = m.ensureCtx(ctx)
-	return m.saveToDB(ctx, dataFailureAuditColl, details)
+	return m.saveToDB(ctx, providerRequestAuditColl, details)
 }
 
 // getRecordDetails returns a data transaction detail.

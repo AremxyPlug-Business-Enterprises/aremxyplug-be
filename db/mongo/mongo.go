@@ -19,14 +19,14 @@ import (
 )
 
 var (
-	dataColl              = "data"
-	dataFailureAuditColl  = "data-failure-audit"
-	eduColl               = "edu"
-	airColl               = "airtime"
-	tvColl                = "tv-sub"
-	electricColl          = "elect-sub"
-	userColl              = "user"
-	messagesColl          = "messages"
+	dataColl                 = "data"
+	providerRequestAuditColl = "provider-request-audit"
+	eduColl                  = "edu"
+	airColl                  = "airtime"
+	tvColl                   = "tv-sub"
+	electricColl             = "elect-sub"
+	userColl                 = "user"
+	messagesColl             = "messages"
 	// verificationsColl = "verifications"
 )
 
@@ -174,15 +174,18 @@ func (m *mongoStore) InitIndexes() error {
 		return fmt.Errorf("failed to create tasks index: %w", err)
 	}
 
-	dataFailureAuditIndexes := []mongo.IndexModel{
+	providerRequestAuditIndexes := []mongo.IndexModel{
 		{
 			Keys: bson.D{{Key: "created_at", Value: -1}},
+		},
+		{
+			Keys: bson.D{{Key: "product", Value: 1}, {Key: "created_at", Value: -1}},
 		},
 		{
 			Keys: bson.D{{Key: "provider_name", Value: 1}, {Key: "created_at", Value: -1}},
 		},
 		{
-			Keys: bson.D{{Key: "failure_type", Value: 1}, {Key: "created_at", Value: -1}},
+			Keys: bson.D{{Key: "status", Value: 1}, {Key: "created_at", Value: -1}},
 		},
 		{
 			Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "created_at", Value: -1}},
@@ -190,10 +193,19 @@ func (m *mongoStore) InitIndexes() error {
 		{
 			Keys: bson.D{{Key: "transaction_id", Value: 1}},
 		},
+		{
+			Keys: bson.D{{Key: "order_id", Value: 1}},
+		},
+		{
+			Keys: bson.D{{Key: "reference_number", Value: 1}},
+		},
+		{
+			Keys: bson.D{{Key: "request_id", Value: 1}},
+		},
 	}
 
-	if _, err := db.Collection(dataFailureAuditColl).Indexes().CreateMany(ctx, dataFailureAuditIndexes); err != nil {
-		return fmt.Errorf("failed to create data failure audit index: %w", err)
+	if _, err := db.Collection(providerRequestAuditColl).Indexes().CreateMany(ctx, providerRequestAuditIndexes); err != nil {
+		return fmt.Errorf("failed to create provider request audit index: %w", err)
 	}
 
 	return nil

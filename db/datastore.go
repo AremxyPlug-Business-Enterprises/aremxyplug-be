@@ -101,7 +101,7 @@ type UserStore interface {
 
 type TelcomStore interface {
 	SaveDataTransaction(ctx context.Context, details interface{}) error
-	SaveDataFailureAudit(ctx context.Context, details *telcom.DataFailureAudit) error
+	SaveProviderRequestAudit(ctx context.Context, details *models.ProviderRequestAudit) error
 	GetDataTransactionDetails(ctx context.Context, id string) (telcom.DataResult, error)
 	GetAllDataTransactions(ctx context.Context, username string) ([]telcom.DataResult, error)
 	GetSpecTransDetails(ctx context.Context, id string) (telcom.SpectranetResult, error)
@@ -118,6 +118,7 @@ type TelcomStore interface {
 }
 
 type UtilitiesStore interface {
+	SaveProviderRequestAudit(ctx context.Context, details *models.ProviderRequestAudit) error
 	SaveEduTransaction(ctx context.Context, details *models.EduResponse) error
 	GetEduTransactionDetails(ctx context.Context, id string) (models.EduResponse, error)
 	GetAllEduTransactions(ctx context.Context, user string) ([]models.EduResponse, error)
