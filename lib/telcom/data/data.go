@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/aremxyplug-be/db"
+	dbmodels "github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/db/models/telcom"
 	"github.com/aremxyplug-be/lib/randomgen"
 	"github.com/pkg/errors"
@@ -119,8 +120,8 @@ func (d *DataConn) newDataResult(data DataInfo, networkStr, referenceNumber stri
 	}, nil
 }
 
-func (d *DataConn) newAuditRequestSnapshot(method, endpoint string, headers map[string]string, body string, query, form map[string]string) telcom.AuditRequestSnapshot {
-	return telcom.AuditRequestSnapshot{
+func (d *DataConn) newAuditRequestSnapshot(method, endpoint string, headers map[string]string, body string, query, form map[string]string) dbmodels.ProviderAuditRequestSnapshot {
+	return dbmodels.ProviderAuditRequestSnapshot{
 		Method:  method,
 		URL:     endpoint,
 		Headers: d.sanitizeAuditHeaders(headers),
@@ -207,19 +208,22 @@ func (d *DataConn) decodeRawResponse(raw []byte, target interface{}) (map[string
 	return decoded, nil
 }
 
-func (d *DataConn) saveFailureAudit(ctx context.Context, data DataInfo, result *telcom.DataResult, request telcom.AuditRequestSnapshot, response telcom.AuditResponseSnapshot, failureType, errorMessage, providerStatus, providerMessage string, metadata map[string]interface{}) {
-	audit := &telcom.DataFailureAudit{
+func (d *DataConn) saveProviderAudit(ctx context.Context, data DataInfo, result *telcom.DataResult, request dbmodels.ProviderAuditRequestSnapshot, response dbmodels.ProviderAuditResponseSnapshot, status, failureType, errorMessage, providerStatus, providerMessage string, metadata map[string]interface{}) {
+	audit := &dbmodels.ProviderRequestAudit{
 		UserID:          data.UserID,
-		ProviderID:      data.ProviderID,
+		Product:         "data",
 		ProviderName:    d.providerName(data.ProviderID),
+		Operation:       "buy",
+		Status:          status,
 		FailureType:     failureType,
-		Network:         result.Network,
-		PlanID:          data.PlanID,
-		PlanName:        data.Plan_Name,
-		PhoneNumber:     data.Mobile_Num,
 		TransactionID:   result.TransactionID,
 		OrderID:         result.OrderID,
 		ReferenceNumber: result.ReferenceNumber,
+		RequestID:       result.ReferenceNumber,
+		PhoneNumber:     data.Mobile_Num,
+		Network:         result.Network,
+		PlanID:          data.PlanID,
+		PlanName:        data.Plan_Name,
 		Request:         request,
 		Response:        response,
 		ErrorMessage:    errorMessage,
@@ -229,8 +233,8 @@ func (d *DataConn) saveFailureAudit(ctx context.Context, data DataInfo, result *
 		CreatedAt:       time.Now().UTC(),
 	}
 
-	if err := d.dbConn.SaveDataFailureAudit(ctx, audit); err != nil {
-		d.logger.Warn("failed to save data provider failure audit", zap.Error(err), zap.String("provider", audit.ProviderName), zap.String("failure_type", failureType))
+	if err := d.dbConn.SaveProviderRequestAudit(ctx, audit); err != nil {
+		d.logger.Warn("failed to save data provider audit", zap.Error(err), zap.String("provider", audit.ProviderName), zap.String("status", status), zap.String("failure_type", failureType))
 	}
 }
 
@@ -280,7 +284,7 @@ func (d *DataConn) buyDontechData(ctx context.Context, data DataInfo) (*telcom.D
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewBuffer(buf.Bytes()))
 	if err != nil {
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, telcom.AuditResponseSnapshot{}, "request_build_error", err.Error(), "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, dbmodels.ProviderAuditResponseSnapshot{}, "failed", "request_build_error", err.Error(), "", "", nil)
 		return nil, err
 	}
 	req.Header.Add("Authorization", dontechToken)
@@ -289,25 +293,25 @@ func (d *DataConn) buyDontechData(ctx context.Context, data DataInfo) (*telcom.D
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, telcom.AuditResponseSnapshot{}, "transport_error", err.Error(), "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, dbmodels.ProviderAuditResponseSnapshot{}, "failed", "transport_error", err.Error(), "", "", nil)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	rawBody, responseHeaders, err := d.readResponse(resp)
-	responseSnapshot := telcom.AuditResponseSnapshot{
+	responseSnapshot := dbmodels.ProviderAuditResponseSnapshot{
 		StatusCode: resp.StatusCode,
 		Headers:    responseHeaders,
 		Body:       string(rawBody),
 	}
 	if err != nil {
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "decode_error", err.Error(), "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "decode_error", err.Error(), "", "", nil)
 		return nil, d.logAndReturnError("error while reading response body", err)
 	}
 
 	if resp.StatusCode != http.StatusCreated {
 		d.logger.Error("Api Call Error", zap.String("status", fmt.Sprint(resp.Status)))
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "http_error", resp.Status, "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "http_error", resp.Status, "", "", nil)
 		return nil, fmt.Errorf("%v", resp.Status)
 	}
 
@@ -316,10 +320,10 @@ func (d *DataConn) buyDontechData(ctx context.Context, data DataInfo) (*telcom.D
 	if err != nil {
 		responseSnapshot.Decoded = decoded
 		if err == io.EOF {
-			d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "decode_error", "Empty response body retured from server", "", "", nil)
+			d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "decode_error", "Empty response body retured from server", "", "", nil)
 			return nil, d.logAndReturnError("Empty response body retured from server", err)
 		}
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "decode_error", err.Error(), "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "decode_error", err.Error(), "", "", nil)
 		return nil, d.logAndReturnError("error while decoding json", err)
 	}
 	responseSnapshot.Decoded = decoded
@@ -329,7 +333,7 @@ func (d *DataConn) buyDontechData(ctx context.Context, data DataInfo) (*telcom.D
 		result.Status = "failed"
 		result.RecipientName = apiResponse.Ident
 		result.ApiID = strconv.Itoa(apiResponse.Id)
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "provider_error", "provider returned unsuccessful status", apiResponse.Status, "", map[string]interface{}{"api_id": apiResponse.Id})
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "provider_error", "provider returned unsuccessful status", apiResponse.Status, "", map[string]interface{}{"api_id": apiResponse.Id})
 		if err := d.saveTransaction(ctx, result); err != nil {
 			d.logger.Error("Database error try again...", zap.Error(err))
 			return nil, errors.New("Database Insert Error...")
@@ -340,6 +344,7 @@ func (d *DataConn) buyDontechData(ctx context.Context, data DataInfo) (*telcom.D
 	result.RecipientName = apiResponse.Ident
 	result.ApiID = strconv.Itoa(apiResponse.Id)
 	result.Status = "success"
+	d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "success", "", "", apiResponse.Status, "", map[string]interface{}{"api_id": apiResponse.Id})
 	if err := d.saveTransaction(ctx, result); err != nil {
 		d.logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("Database Insert Error...")
@@ -409,7 +414,7 @@ func (d *DataConn) buyEasyaccessData(ctx context.Context, data DataInfo) (*telco
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, body)
 	if err != nil {
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, telcom.AuditResponseSnapshot{}, "request_build_error", err.Error(), "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, dbmodels.ProviderAuditResponseSnapshot{}, "failed", "request_build_error", err.Error(), "", "", nil)
 		return nil, err
 	}
 	req.Header.Set("AuthorizationToken", easyaccessToken)
@@ -419,24 +424,24 @@ func (d *DataConn) buyEasyaccessData(ctx context.Context, data DataInfo) (*telco
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, telcom.AuditResponseSnapshot{}, "transport_error", err.Error(), "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, dbmodels.ProviderAuditResponseSnapshot{}, "failed", "transport_error", err.Error(), "", "", nil)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	rawBody, responseHeaders, err := d.readResponse(resp)
-	responseSnapshot := telcom.AuditResponseSnapshot{
+	responseSnapshot := dbmodels.ProviderAuditResponseSnapshot{
 		StatusCode: resp.StatusCode,
 		Headers:    responseHeaders,
 		Body:       string(rawBody),
 	}
 	if err != nil {
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "decode_error", err.Error(), "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "decode_error", err.Error(), "", "", nil)
 		return nil, d.logAndReturnError("error while reading response body", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "http_error", resp.Status, "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "http_error", resp.Status, "", "", nil)
 		return nil, fmt.Errorf("%v", resp.Status)
 	}
 
@@ -445,10 +450,10 @@ func (d *DataConn) buyEasyaccessData(ctx context.Context, data DataInfo) (*telco
 	if err != nil {
 		responseSnapshot.Decoded = decoded
 		if err == io.EOF {
-			d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "decode_error", "Empty response body retured from server", "", "", nil)
+			d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "decode_error", "Empty response body retured from server", "", "", nil)
 			return nil, d.logAndReturnError("Empty response body retured from server", err)
 		}
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "decode_error", err.Error(), "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "decode_error", err.Error(), "", "", nil)
 		return nil, d.logAndReturnError("error while decoding json", err)
 	}
 	responseSnapshot.Decoded = decoded
@@ -456,7 +461,7 @@ func (d *DataConn) buyEasyaccessData(ctx context.Context, data DataInfo) (*telco
 	if apiResponse.Status != "Successful" {
 		d.logger.Error("failed to purchase data", zap.Any("apiresponse", apiResponse))
 		result.Status = "failed"
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "provider_error", "provider returned unsuccessful status", apiResponse.Status, apiResponse.Message, map[string]interface{}{
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "provider_error", "provider returned unsuccessful status", apiResponse.Status, apiResponse.Message, map[string]interface{}{
 			"reference":        apiResponse.Reference,
 			"client_reference": apiResponse.Client_reference,
 			"transaction_date": apiResponse.Transaction_date,
@@ -469,6 +474,11 @@ func (d *DataConn) buyEasyaccessData(ctx context.Context, data DataInfo) (*telco
 	}
 
 	result.Status = "success"
+	d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "success", "", "", apiResponse.Status, apiResponse.Message, map[string]interface{}{
+		"reference":        apiResponse.Reference,
+		"client_reference": apiResponse.Client_reference,
+		"transaction_date": apiResponse.Transaction_date,
+	})
 	if err := d.saveTransaction(ctx, result); err != nil {
 		d.logger.Error("Database error try again...", zap.Error(err))
 		return nil, errors.New("Database Insert Error...")
@@ -535,7 +545,7 @@ func (d *DataConn) buy247Data(ctx context.Context, data DataInfo) (*telcom.DataR
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
 	if err != nil {
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, telcom.AuditResponseSnapshot{}, "request_build_error", err.Error(), "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, dbmodels.ProviderAuditResponseSnapshot{}, "failed", "request_build_error", err.Error(), "", "", nil)
 		return nil, err
 	}
 
@@ -544,24 +554,24 @@ func (d *DataConn) buy247Data(ctx context.Context, data DataInfo) (*telcom.DataR
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, telcom.AuditResponseSnapshot{}, "transport_error", err.Error(), "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, dbmodels.ProviderAuditResponseSnapshot{}, "failed", "transport_error", err.Error(), "", "", nil)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	rawBody, responseHeaders, err := d.readResponse(resp)
-	responseSnapshot := telcom.AuditResponseSnapshot{
+	responseSnapshot := dbmodels.ProviderAuditResponseSnapshot{
 		StatusCode: resp.StatusCode,
 		Headers:    responseHeaders,
 		Body:       string(rawBody),
 	}
 	if err != nil {
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "decode_error", err.Error(), "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "decode_error", err.Error(), "", "", nil)
 		return nil, d.logAndReturnError("error while reading response body", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "http_error", resp.Status, "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "http_error", resp.Status, "", "", nil)
 		return nil, fmt.Errorf("%v", resp.Status)
 	}
 
@@ -570,10 +580,10 @@ func (d *DataConn) buy247Data(ctx context.Context, data DataInfo) (*telcom.DataR
 	if err != nil {
 		responseSnapshot.Decoded = decoded
 		if err == io.EOF {
-			d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "decode_error", "Empty response body retured from server", "", "", nil)
+			d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "decode_error", "Empty response body retured from server", "", "", nil)
 			return nil, d.logAndReturnError("Empty response body retured from server", err)
 		}
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "decode_error", err.Error(), "", "", nil)
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "decode_error", err.Error(), "", "", nil)
 		return nil, d.logAndReturnError("error while decoding json", err)
 	}
 	responseSnapshot.Decoded = decoded
@@ -581,7 +591,7 @@ func (d *DataConn) buy247Data(ctx context.Context, data DataInfo) (*telcom.DataR
 	if apiResponse.Status != "successful" {
 		d.logger.Error("failed to purchase data", zap.Any("apiresponse", apiResponse))
 		result.Status = "failed"
-		d.saveFailureAudit(ctx, data, result, requestSnapshot, responseSnapshot, "provider_error", "provider returned unsuccessful status", apiResponse.Status, apiResponse.Message, map[string]interface{}{
+		d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "failed", "provider_error", "provider returned unsuccessful status", apiResponse.Status, apiResponse.Message, map[string]interface{}{
 			"response":   apiResponse.Response,
 			"data_size":  apiResponse.DataSize,
 			"data_type":  apiResponse.DataType,
@@ -596,6 +606,12 @@ func (d *DataConn) buy247Data(ctx context.Context, data DataInfo) (*telcom.DataR
 
 	result.Status = "success"
 	result.ApiID = apiResponse.RequestID
+	d.saveProviderAudit(ctx, data, result, requestSnapshot, responseSnapshot, "success", "", "", apiResponse.Status, apiResponse.Message, map[string]interface{}{
+		"response":   apiResponse.Response,
+		"data_size":  apiResponse.DataSize,
+		"data_type":  apiResponse.DataType,
+		"request_id": apiResponse.RequestID,
+	})
 
 	if err := d.saveTransaction(ctx, result); err != nil {
 		d.logger.Error("Database error try again...", zap.Error(err))
