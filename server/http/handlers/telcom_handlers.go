@@ -127,6 +127,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		data.Discount_amount = discounted_amount.StringFixed(2)
 
 		data.Provider_Discount = fmt.Sprintf("%.2f%%", provider_discount)
+		data.ProviderName = airtimeProduct.ProviderName
 
 		// Calculate profit margin: difference between what provider gives us and what we give customer
 		// Example: Airtime 100, provider offers at 97 (3% discount), we offer customer 2%, profit = 1%
