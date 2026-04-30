@@ -27,7 +27,9 @@ type PlanUpdate struct {
 }
 
 type AirtimeProduct struct {
+	ID                int
 	Network           string
+	ProviderID        int
 	Provider_Discount float64
 	Customer_Discount float64
 	Profit_Margin     float64

@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -90,6 +92,17 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		// Get product details from database
 		airtimeProduct, err := handler.productClient.GetAirtimeProduct(ctx, network)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				handler.logger.Warn("No active airtime product available", zap.String("network", network))
+				w.WriteHeader(http.StatusNotFound)
+				response := responseFormat.CustomResponse{
+					Status:  http.StatusNotFound,
+					Message: "error",
+					Data:    map[string]interface{}{"data": "No active airtime product available for this network"},
+				}
+				json.NewEncoder(w).Encode(response)
+				return
+			}
 			handler.logger.Error("Failed to get airtime product details", zap.String("network", network), zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{
@@ -98,6 +111,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 				Data:    map[string]interface{}{"data": "Failed to retrieve airtime product details"},
 			}
 			json.NewEncoder(w).Encode(response)
+			return
 		}
 
 		// Get discount percentages from product
@@ -1185,6 +1199,17 @@ func (handler *HttpHandler) AirtimeDiscount(w http.ResponseWriter, r *http.Reque
 
 	prod, err := handler.productClient.GetAirtimeProduct(ctx, network)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			w.WriteHeader(http.StatusNotFound)
+			handler.logger.Warn("No active airtime product available", zap.String("network", network))
+			response := responseFormat.CustomResponse{
+				Status:  http.StatusNotFound,
+				Message: "error",
+				Data:    map[string]interface{}{"data": "No active airtime product available for this network"},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
 		w.WriteHeader(http.StatusInternalServerError)
 		handler.logger.Error("Failed to retrieve airtime product", zap.String("network", network), zap.Error(err))
 		response := responseFormat.CustomResponse{
@@ -1199,7 +1224,11 @@ func (handler *HttpHandler) AirtimeDiscount(w http.ResponseWriter, r *http.Reque
 	response := responseFormat.CustomResponse{
 		Status:  http.StatusOK,
 		Message: "success",
-		Data:    map[string]interface{}{"discount_percent": prod.Customer_Discount},
+		Data: map[string]interface{}{
+			"discount_percent": prod.Customer_Discount,
+			"id":               prod.ID,
+			"provider_id":      prod.ProviderID,
+		},
 	}
 	json.NewEncoder(w).Encode(response)
 }
