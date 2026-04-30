@@ -16,6 +16,7 @@ import (
 
 	"github.com/aremxyplug-be/db"
 	"github.com/aremxyplug-be/db/models"
+	dbmodels "github.com/aremxyplug-be/db/models"
 	"github.com/aremxyplug-be/lib/randomgen"
 	"go.uber.org/zap"
 	"golang.org/x/text/cases"
@@ -47,8 +48,9 @@ func (edu *EduConn) BuyEduPin(ctx context.Context, eduInfo EduInfo) (*models.Edu
 	examType := eduInfo.Exam_Type
 	pinNumber := strconv.Itoa(eduInfo.Quantity)
 
-	resp, err := edu.buyPin(ctx, examType, pinNumber)
+	resp, requestSnapshot, failureType, err := edu.buyPin(ctx, examType, pinNumber)
 	if err != nil {
+		edu.saveProviderAudit(ctx, eduInfo, &models.EduResponse{}, requestSnapshot, dbmodels.ProviderAuditResponseSnapshot{}, "failed", failureType, err.Error(), "", "", nil)
 		return nil, err
 	}
 
@@ -60,29 +62,44 @@ func (edu *EduConn) BuyEduPin(ctx context.Context, eduInfo EduInfo) (*models.Edu
 	}
 
 	if resp.Body == nil {
+		edu.saveProviderAudit(ctx, eduInfo, &models.EduResponse{}, requestSnapshot, dbmodels.ProviderAuditResponseSnapshot{
+			StatusCode: resp.StatusCode,
+			Headers:    edu.headerSnapshot(resp.Header),
+		}, "failed", "decode_error", "response body is nil", "", "", nil)
 		return nil, errors.New("response body is nil")
 	}
 	defer resp.Body.Close()
 	apiResponse := EduApiResponse{}
-	body, err := io.ReadAll(resp.Body)
+	body, responseHeaders, err := edu.readResponse(resp)
+	responseSnapshot := dbmodels.ProviderAuditResponseSnapshot{
+		StatusCode: resp.StatusCode,
+		Headers:    responseHeaders,
+		Body:       string(body),
+	}
 	if err != nil {
 		log.Println(err)
+		edu.saveProviderAudit(ctx, eduInfo, &models.EduResponse{}, requestSnapshot, responseSnapshot, "failed", "decode_error", err.Error(), "", "", nil)
 		return nil, errors.New("could not unmarshal response body")
 	}
 	log.Println(string(body))
 	log.Println("Status: ", resp.Status)
-	if err := json.Unmarshal(body, &apiResponse); err != nil {
+	decoded, err := edu.decodeRawResponse(body, &apiResponse)
+	if err != nil {
+		responseSnapshot.Decoded = decoded
 		if err == io.EOF {
 			log.Println("No response from body")
 			// edu.logger.Error("Empty response body", zap.Error(err))
+			edu.saveProviderAudit(ctx, eduInfo, &models.EduResponse{}, requestSnapshot, responseSnapshot, "failed", "decode_error", "empty response from server", "", "", nil)
 			return nil, errors.New("empty response from server")
 		} else {
 			log.Println("other error:", err)
 			// edu.logger.Error("error returned from server: ", zap.Error(err))
+			edu.saveProviderAudit(ctx, eduInfo, &models.EduResponse{}, requestSnapshot, responseSnapshot, "failed", "decode_error", err.Error(), "", "", nil)
 			return nil, errors.New("could not unmarshal response body")
 		}
 
 	}
+	responseSnapshot.Decoded = decoded
 	log.Printf("%+v", apiResponse)
 
 	/*
@@ -101,6 +118,7 @@ func (edu *EduConn) BuyEduPin(ctx context.Context, eduInfo EduInfo) (*models.Edu
 
 	if apiResponse.Success_Response == "false" {
 		log.Println(apiResponse.Message)
+		edu.saveProviderAudit(ctx, eduInfo, &models.EduResponse{}, requestSnapshot, responseSnapshot, "failed", "provider_error", "provider returned unsuccessful status", apiResponse.Status, apiResponse.Message, nil)
 		return nil, errors.New("failed while purchasing edu pin")
 	}
 
@@ -152,6 +170,10 @@ func (edu *EduConn) BuyEduPin(ctx context.Context, eduInfo EduInfo) (*models.Edu
 	}
 
 	log.Printf("%+v", result)
+
+	edu.saveProviderAudit(ctx, eduInfo, result, requestSnapshot, responseSnapshot, "success", "", "", apiResponse.Status, apiResponse.Message, map[string]interface{}{
+		"reference": apiResponse.Reference,
+	})
 
 	// write to database
 	if err := edu.saveTransaction(ctx, result); err != nil {
@@ -240,7 +262,7 @@ func (edu *EduConn) Ping(ctx context.Context) (*http.Response, error) {
 	return res, nil
 }
 
-func (edu *EduConn) buyPin(ctx context.Context, examType string, pinNumber string) (*http.Response, error) {
+func (edu *EduConn) buyPin(ctx context.Context, examType string, pinNumber string) (*http.Response, dbmodels.ProviderAuditRequestSnapshot, string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -252,10 +274,15 @@ func (edu *EduConn) buyPin(ctx context.Context, examType string, pinNumber strin
 	body := bytes.NewBufferString(formdata.Encode())
 
 	url := fmt.Sprintf("%s/%s_v2.php", api, examType)
+	requestSnapshot := edu.newAuditRequestSnapshot(http.MethodPost, url, map[string]string{
+		"AuthorizationToken": token,
+		"cache-control":      "no-cache",
+		"Content-Type":       "application/x-www-form-urlencoded",
+	}, formdata.Encode(), nil, edu.valuesSnapshot(formdata))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
-		return nil, err
+		return nil, requestSnapshot, "request_build_error", err
 	}
 	req.Header.Set("AuthorizationToken", token)
 	req.Header.Set("cache-control", "no-cache")
@@ -264,10 +291,10 @@ func (edu *EduConn) buyPin(ctx context.Context, examType string, pinNumber strin
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, requestSnapshot, "transport_error", err
 	}
 
-	return resp, nil
+	return resp, requestSnapshot, "", nil
 }
 
 func (edu *EduConn) saveTransaction(ctx context.Context, detail *models.EduResponse) error {
@@ -317,6 +344,122 @@ func (edu *EduConn) queryTransaction(ctx context.Context, id string) (*http.Resp
 	}
 
 	return resp, nil
+}
+
+func (edu *EduConn) newAuditRequestSnapshot(method, endpoint string, headers map[string]string, body string, query, form map[string]string) dbmodels.ProviderAuditRequestSnapshot {
+	return dbmodels.ProviderAuditRequestSnapshot{
+		Method:  method,
+		URL:     endpoint,
+		Headers: edu.sanitizeAuditHeaders(headers),
+		Query:   query,
+		Form:    form,
+		Body:    body,
+	}
+}
+
+func (edu *EduConn) sanitizeAuditHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+
+	sanitized := make(map[string]string, len(headers))
+	for key, value := range headers {
+		switch http.CanonicalHeaderKey(key) {
+		case "Authorization", "Authorizationtoken", "Api-Key", "Secret-Key", "Bearer":
+			sanitized[key] = "[REDACTED]"
+		default:
+			sanitized[key] = value
+		}
+	}
+	return sanitized
+}
+
+func (edu *EduConn) headerSnapshot(headers http.Header) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+
+	out := make(map[string]string, len(headers))
+	for key, values := range headers {
+		if len(values) == 0 {
+			continue
+		}
+		out[key] = values[0]
+	}
+	return out
+}
+
+func (edu *EduConn) valuesSnapshot(values url.Values) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	out := make(map[string]string, len(values))
+	for key, entries := range values {
+		if len(entries) == 0 {
+			continue
+		}
+		out[key] = entries[0]
+	}
+	return out
+}
+
+func (edu *EduConn) readResponse(resp *http.Response) ([]byte, map[string]string, error) {
+	if resp == nil {
+		return nil, nil, nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, edu.headerSnapshot(resp.Header), err
+	}
+
+	return body, edu.headerSnapshot(resp.Header), nil
+}
+
+func (edu *EduConn) decodeRawResponse(raw []byte, target interface{}) (map[string]interface{}, error) {
+	if len(raw) == 0 {
+		return nil, io.EOF
+	}
+
+	if err := json.Unmarshal(raw, target); err != nil {
+		return nil, err
+	}
+
+	decoded := map[string]interface{}{}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, nil
+	}
+
+	return decoded, nil
+}
+
+func (edu *EduConn) saveProviderAudit(ctx context.Context, info EduInfo, result *models.EduResponse, request dbmodels.ProviderAuditRequestSnapshot, response dbmodels.ProviderAuditResponseSnapshot, status, failureType, errorMessage, providerStatus, providerMessage string, metadata map[string]interface{}) {
+	audit := &dbmodels.ProviderRequestAudit{
+		UserID:          info.UserID,
+		Product:         "edu",
+		ProviderName:    "easyaccess",
+		Operation:       "buy",
+		Status:          status,
+		FailureType:     failureType,
+		TransactionID:   result.TransactionID,
+		OrderID:         result.OrderID,
+		ReferenceNumber: result.ReferenceNumber,
+		PhoneNumber:     info.Phone_Number,
+		ExamType:        info.Exam_Type,
+		Quantity:        info.Quantity,
+		Request:         request,
+		Response:        response,
+		ErrorMessage:    errorMessage,
+		ProviderStatus:  providerStatus,
+		ProviderMessage: providerMessage,
+		Metadata:        metadata,
+		CreatedAt:       time.Now().UTC(),
+	}
+
+	if err := edu.db.SaveProviderRequestAudit(ctx, audit); err != nil {
+		edu.logger.Warn("failed to save edu provider audit", zap.Error(err), zap.String("status", status), zap.String("failure_type", failureType))
+	}
 }
 
 func (edu *EduConn) getTransactionDetails(ctx context.Context, id string) (models.EduResponse, error) {
