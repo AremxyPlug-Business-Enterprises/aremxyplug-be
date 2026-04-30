@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
-	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aremxyplug-be/db"
@@ -20,8 +22,11 @@ import (
 )
 
 var (
-	api   = os.Getenv("SMSSERVERS_BASE_URL")
-	token = os.Getenv("SMSSERVERS_API_KEY")
+	smsServersAPI   = strings.TrimSpace(os.Getenv("SMSSERVERS_BASE_URL"))
+	smsServersToken = strings.TrimSpace(os.Getenv("SMSSERVERS_API_KEY"))
+	vtpassAPI       = strings.TrimSpace(os.Getenv("VTPASS_SANDBOX"))
+	vtpassPK        = strings.TrimSpace(os.Getenv("APIKey"))
+	vtpassSK        = strings.TrimSpace(os.Getenv("SK"))
 )
 
 type AirtimeConn struct {
@@ -41,69 +46,50 @@ func (a *AirtimeConn) BuyAirtime(ctx context.Context, airtime AirtimeInfo) (*tel
 		ctx = context.Background()
 	}
 
-	id, err := randomgen.GenerateOrderID()
+	orderID, err := randomgen.GenerateOrderID()
 	if err != nil {
-		a.logger.Error("unable to generate orderID", zap.Any("error:", "failed to generate orderID"))
+		a.logger.Error("unable to generate orderID", zap.String("error", "failed to generate orderID"))
 		return nil, err
 	}
 
-	network := ""
-
-	switch airtime.Network {
-	case "1":
-		network = "MTN"
-	case "2":
-		network = "AIRTEL"
-	case "3":
-		network = "GLO"
-	case "4":
-		network = "9MOBILE"
-
-	default:
-		network = "UNKNOWN"
+	network, err := a.networkName(airtime.Network)
+	if err != nil {
+		return nil, err
 	}
 
 	airtime.Reference = randomgen.GenerateRequestID()
-	transactionID := randomgen.GenerateTransactionID("vtu")
-	amount := airtime.Amount
-	product := network + " " + "VTU"
-	description := product
-	transactionProduct := "Airtime Top-up"
-	discountPercentage := airtime.Discount_percent
-	discountAmount := airtime.Discount_amount
-
 	result := &telcom.AirtimeResponse{
 		UserID:                 airtime.UserID,
-		OrderID:                id,
-		Amount:                 amount,
+		OrderID:                orderID,
+		Amount:                 airtime.Amount,
 		Network:                network,
-		NetworkProduct:         product,
-		TransactionProduct:     transactionProduct,
-		TransactionDescription: description,
+		NetworkProduct:         network + " VTU",
+		TransactionProduct:     "Airtime Top-up",
+		TransactionDescription: network + " VTU",
 		Phone_no:               airtime.Phone_no,
 		FullName:               airtime.FullName,
 		RecipientName:          airtime.Recipient,
-		TransactionID:          transactionID,
+		TransactionID:          randomgen.GenerateTransactionID("vtu"),
 		CreatedAt:              time.Now().UTC(),
 		UserReference:          airtime.Reference,
-		Discount_perecent:      discountPercentage,
-		Discount_amount:        discountAmount,
+		Discount_perecent:      airtime.Discount_percent,
+		Discount_amount:        airtime.Discount_amount,
 		Profit_Margin:          airtime.Profit_Margin,
 		Provider_Discount:      airtime.Provider_Discount,
 	}
 
-	resp, requestSnapshot, failureType, err := a.buy(ctx, airtime)
+	providerName, operation, resp, requestSnapshot, failureType, err := a.executeProviderPurchase(ctx, airtime)
 	if err != nil {
-		a.saveProviderAudit(ctx, airtime, result, requestSnapshot, dbmodels.ProviderAuditResponseSnapshot{}, "failed", failureType, err.Error(), "", "", nil)
-		a.logger.Error("error returned from server", zap.Any("error:", err))
+		a.saveProviderAudit(ctx, airtime, result, providerName, operation, requestSnapshot, dbmodels.ProviderAuditResponseSnapshot{}, "failed", failureType, err.Error(), "", "", nil)
+		a.logger.Error("error returned from provider", zap.String("provider", providerName), zap.Error(err))
 		return nil, err
 	}
+
 	if resp.Body == nil {
-		a.saveProviderAudit(ctx, airtime, result, requestSnapshot, dbmodels.ProviderAuditResponseSnapshot{
+		a.saveProviderAudit(ctx, airtime, result, providerName, operation, requestSnapshot, dbmodels.ProviderAuditResponseSnapshot{
 			StatusCode: resp.StatusCode,
 			Headers:    a.headerSnapshot(resp.Header),
 		}, "failed", "decode_error", "response body is nil", "", "", nil)
-		a.logger.Error("empty resp body", zap.String("error:", "response body is nil!"))
 		return nil, errors.New("empty response body")
 	}
 	defer resp.Body.Close()
@@ -115,53 +101,18 @@ func (a *AirtimeConn) BuyAirtime(ctx context.Context, airtime AirtimeInfo) (*tel
 		Body:       string(rawBody),
 	}
 	if err != nil {
-		a.saveProviderAudit(ctx, airtime, result, requestSnapshot, responseSnapshot, "failed", "decode_error", err.Error(), "", "", nil)
+		a.saveProviderAudit(ctx, airtime, result, providerName, operation, requestSnapshot, responseSnapshot, "failed", "decode_error", err.Error(), "", "", nil)
 		return nil, err
 	}
 
-	apiResponse := vendResponse{}
-	decoded, err := a.decodeRawResponse(rawBody, &apiResponse)
-	if err != nil {
-		responseSnapshot.Decoded = decoded
-		if err == io.EOF {
-			a.saveProviderAudit(ctx, airtime, result, requestSnapshot, responseSnapshot, "failed", "decode_error", "Empty response from server", "", "", nil)
-			return nil, logAndReturnError(a.logger, "Empty response from server")
-		}
-		a.saveProviderAudit(ctx, airtime, result, requestSnapshot, responseSnapshot, "failed", "decode_error", err.Error(), "", "", nil)
-		return nil, logAndReturnError(a.logger, "Error returned from server")
+	switch providerName {
+	case "smsservers":
+		return a.handleSMSServersResponse(ctx, airtime, result, providerName, operation, requestSnapshot, responseSnapshot, rawBody)
+	case "vtpass":
+		return a.handleVTPassResponse(ctx, airtime, result, providerName, operation, requestSnapshot, responseSnapshot, rawBody)
+	default:
+		return nil, fmt.Errorf("unsupported airtime provider: %s", airtime.ProviderName)
 	}
-	responseSnapshot.Decoded = decoded
-
-	log.Printf("%+v\n", apiResponse)
-	status := "success"
-
-	// check to see if the buy was successful. The response is printed to the log
-	if !apiResponse.Status {
-		status = "failed"
-	}
-
-	result.Status = status
-	result.ReferenceNumber = strconv.Itoa(apiResponse.Data.RechargeID)
-	providerStatus := strconv.FormatBool(apiResponse.Status)
-	providerMessage := apiResponse.ServerMessage
-
-	// save transaction
-	if status == "failed" {
-		a.saveProviderAudit(ctx, airtime, result, requestSnapshot, responseSnapshot, "failed", "provider_error", "provider returned unsuccessful status", providerStatus, providerMessage, map[string]interface{}{
-			"error_code":  apiResponse.ErrorCode,
-			"text_status": apiResponse.TextStatus,
-		})
-	} else {
-		a.saveProviderAudit(ctx, airtime, result, requestSnapshot, responseSnapshot, "success", "", "", providerStatus, providerMessage, map[string]interface{}{
-			"error_code":  apiResponse.ErrorCode,
-			"text_status": apiResponse.TextStatus,
-		})
-	}
-	if err := a.saveTransaction(ctx, result); err != nil {
-		return result, logAndReturnError(a.logger, "error saving transaction, an error occurred")
-	}
-
-	return result, nil
 }
 
 func (a *AirtimeConn) GetTransactionDetail(ctx context.Context, id string) (telcom.AirtimeResponse, error) {
@@ -222,28 +173,30 @@ func (a *AirtimeConn) GetAllTransactions(ctx context.Context) ([]telcom.AirtimeR
 	return result, nil
 }
 
-func (a *AirtimeConn) buy(ctx context.Context, data AirtimeInfo) (*http.Response, dbmodels.ProviderAuditRequestSnapshot, string, error) {
+func (a *AirtimeConn) executeProviderPurchase(ctx context.Context, data AirtimeInfo) (string, string, *http.Response, dbmodels.ProviderAuditRequestSnapshot, string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	productcode := ""
-
-	switch data.Network {
-	case "1":
-		productcode = "mtn_custom"
-	case "2":
-		productcode = "airtel_custom"
-	case "3":
-		productcode = "glo_custom"
-	case "4":
-		productcode = "9mobile_custom"
-
+	switch providerName := a.normalizeProviderName(data.ProviderName); providerName {
+	case "smsservers":
+		resp, requestSnapshot, failureType, err := a.buySMSServers(ctx, data)
+		return providerName, "vend", resp, requestSnapshot, failureType, err
+	case "vtpass":
+		resp, requestSnapshot, failureType, err := a.buyVTPass(ctx, data)
+		return providerName, "pay", resp, requestSnapshot, failureType, err
 	default:
-		productcode = ""
+		return providerName, "", nil, dbmodels.ProviderAuditRequestSnapshot{}, "provider_error", fmt.Errorf("unsupported airtime provider: %s", data.ProviderName)
+	}
+}
+
+func (a *AirtimeConn) buySMSServers(ctx context.Context, data AirtimeInfo) (*http.Response, dbmodels.ProviderAuditRequestSnapshot, string, error) {
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
-	if productcode == "" {
+	productCode := a.smsServersProductCode(data.Network)
+	if productCode == "" {
 		a.logger.Error("Invalid network code", zap.String("network", data.Network))
 		return nil, dbmodels.ProviderAuditRequestSnapshot{}, "request_build_error", errors.New("invalid network code")
 	}
@@ -255,7 +208,7 @@ func (a *AirtimeConn) buy(ctx context.Context, data AirtimeInfo) (*http.Response
 	}
 
 	payload := vendRequest{
-		ProductCode:   productcode,
+		ProductCode:   productCode,
 		Amount:        amount,
 		PhoneNumber:   data.Phone_no,
 		Action:        "vend",
@@ -269,17 +222,60 @@ func (a *AirtimeConn) buy(ctx context.Context, data AirtimeInfo) (*http.Response
 		return nil, dbmodels.ProviderAuditRequestSnapshot{}, "request_build_error", err
 	}
 
-	requestSnapshot := a.newAuditRequestSnapshot(http.MethodPost, api, map[string]string{
+	requestSnapshot := a.newAuditRequestSnapshot(http.MethodPost, smsServersAPI, map[string]string{
 		"Content-Type": "application/json",
-		"Bearer":       token,
+		"Bearer":       smsServersToken,
 	}, string(body), nil, nil)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", api, bytes.NewBuffer(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, smsServersAPI, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, requestSnapshot, "request_build_error", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Bearer", token)
+	req.Header.Set("Bearer", smsServersToken)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, requestSnapshot, "transport_error", err
+	}
+
+	return resp, requestSnapshot, "", nil
+}
+
+func (a *AirtimeConn) buyVTPass(ctx context.Context, data AirtimeInfo) (*http.Response, dbmodels.ProviderAuditRequestSnapshot, string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	serviceID := a.vtpassServiceID(data.Network)
+	if serviceID == "" {
+		return nil, dbmodels.ProviderAuditRequestSnapshot{}, "request_build_error", errors.New("invalid network code")
+	}
+
+	formdata := url.Values{
+		"request_id": {data.Reference},
+		"serviceID":  {serviceID},
+		"amount":     {data.Amount},
+		"phone":      {data.Phone_no},
+	}
+
+	body := bytes.NewBufferString(formdata.Encode())
+	endpoint := fmt.Sprintf("%s/%s", strings.TrimRight(vtpassAPI, "/"), "pay")
+	requestSnapshot := a.newAuditRequestSnapshot(http.MethodPost, endpoint, map[string]string{
+		"api-key":      vtpassPK,
+		"secret-key":   vtpassSK,
+		"Content-Type": "application/x-www-form-urlencoded",
+	}, formdata.Encode(), nil, a.valuesSnapshot(formdata))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, body)
+	if err != nil {
+		return nil, requestSnapshot, "request_build_error", err
+	}
+	req.Header.Set("api-key", vtpassPK)
+	req.Header.Set("secret-key", vtpassSK)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -322,6 +318,22 @@ func (a *AirtimeConn) newAuditRequestSnapshot(method, endpoint string, headers m
 		Form:    form,
 		Body:    body,
 	}
+}
+
+func (a *AirtimeConn) valuesSnapshot(values url.Values) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	out := make(map[string]string, len(values))
+	for key, entries := range values {
+		if len(entries) == 0 {
+			continue
+		}
+		out[key] = entries[0]
+	}
+
+	return out
 }
 
 func (a *AirtimeConn) sanitizeAuditHeaders(headers map[string]string) map[string]string {
@@ -386,12 +398,12 @@ func (a *AirtimeConn) decodeRawResponse(raw []byte, target interface{}) (map[str
 	return decoded, nil
 }
 
-func (a *AirtimeConn) saveProviderAudit(ctx context.Context, airtime AirtimeInfo, result *telcom.AirtimeResponse, request dbmodels.ProviderAuditRequestSnapshot, response dbmodels.ProviderAuditResponseSnapshot, status, failureType, errorMessage, providerStatus, providerMessage string, metadata map[string]interface{}) {
+func (a *AirtimeConn) saveProviderAudit(ctx context.Context, airtime AirtimeInfo, result *telcom.AirtimeResponse, providerName, operation string, request dbmodels.ProviderAuditRequestSnapshot, response dbmodels.ProviderAuditResponseSnapshot, status, failureType, errorMessage, providerStatus, providerMessage string, metadata map[string]interface{}) {
 	audit := &dbmodels.ProviderRequestAudit{
 		UserID:          airtime.UserID,
 		Product:         "airtime",
-		ProviderName:    "smsservers",
-		Operation:       "vend",
+		ProviderName:    providerName,
+		Operation:       operation,
 		Status:          status,
 		FailureType:     failureType,
 		TransactionID:   result.TransactionID,
@@ -439,6 +451,160 @@ func (a *AirtimeConn) queryTransaction(id string) (*http.Response, error) {
 func logAndReturnError(logger *zap.Logger, errorMsg string) error {
 	logger.Error(errorMsg)
 	return errors.New(errorMsg)
+}
+
+func (a *AirtimeConn) handleSMSServersResponse(ctx context.Context, airtime AirtimeInfo, result *telcom.AirtimeResponse, providerName, operation string, requestSnapshot dbmodels.ProviderAuditRequestSnapshot, responseSnapshot dbmodels.ProviderAuditResponseSnapshot, rawBody []byte) (*telcom.AirtimeResponse, error) {
+	apiResponse := vendResponse{}
+	decoded, err := a.decodeRawResponse(rawBody, &apiResponse)
+	if err != nil {
+		responseSnapshot.Decoded = decoded
+		if err == io.EOF {
+			a.saveProviderAudit(ctx, airtime, result, providerName, operation, requestSnapshot, responseSnapshot, "failed", "decode_error", "Empty response from server", "", "", nil)
+			return nil, logAndReturnError(a.logger, "Empty response from server")
+		}
+
+		a.saveProviderAudit(ctx, airtime, result, providerName, operation, requestSnapshot, responseSnapshot, "failed", "decode_error", err.Error(), "", "", nil)
+		return nil, logAndReturnError(a.logger, "Error returned from server")
+	}
+	responseSnapshot.Decoded = decoded
+
+	status := "success"
+	if !apiResponse.Status {
+		status = "failed"
+	}
+
+	result.Status = status
+	result.ReferenceNumber = strconv.Itoa(apiResponse.Data.RechargeID)
+	providerStatus := strconv.FormatBool(apiResponse.Status)
+	providerMessage := apiResponse.ServerMessage
+	metadata := map[string]interface{}{
+		"error_code":  apiResponse.ErrorCode,
+		"text_status": apiResponse.TextStatus,
+	}
+
+	if status == "failed" {
+		a.saveProviderAudit(ctx, airtime, result, providerName, operation, requestSnapshot, responseSnapshot, status, "provider_error", "provider returned unsuccessful status", providerStatus, providerMessage, metadata)
+	} else {
+		a.saveProviderAudit(ctx, airtime, result, providerName, operation, requestSnapshot, responseSnapshot, status, "", "", providerStatus, providerMessage, metadata)
+	}
+
+	if err := a.saveTransaction(ctx, result); err != nil {
+		return result, logAndReturnError(a.logger, "error saving transaction, an error occurred")
+	}
+
+	return result, nil
+}
+
+func (a *AirtimeConn) handleVTPassResponse(ctx context.Context, airtime AirtimeInfo, result *telcom.AirtimeResponse, providerName, operation string, requestSnapshot dbmodels.ProviderAuditRequestSnapshot, responseSnapshot dbmodels.ProviderAuditResponseSnapshot, rawBody []byte) (*telcom.AirtimeResponse, error) {
+	apiResponse := vtpassAirtimeResponse{}
+	decoded, err := a.decodeRawResponse(rawBody, &apiResponse)
+	if err != nil {
+		responseSnapshot.Decoded = decoded
+		if err == io.EOF {
+			a.saveProviderAudit(ctx, airtime, result, providerName, operation, requestSnapshot, responseSnapshot, "failed", "decode_error", "Empty response from server", "", "", nil)
+			return nil, logAndReturnError(a.logger, "Empty response from server")
+		}
+
+		a.saveProviderAudit(ctx, airtime, result, providerName, operation, requestSnapshot, responseSnapshot, "failed", "decode_error", err.Error(), "", "", nil)
+		return nil, logAndReturnError(a.logger, "Error returned from server")
+	}
+	responseSnapshot.Decoded = decoded
+
+	status := a.mapVTPassStatus(apiResponse.Content.Transactions.Status)
+	if apiResponse.Code != "000" {
+		status = "failed"
+	}
+
+	result.Status = status
+	result.ReferenceNumber = apiResponse.Content.Transactions.TransactionID
+	metadata := map[string]interface{}{
+		"code":                 apiResponse.Code,
+		"response_description": apiResponse.ResponseDescription,
+		"commission":           apiResponse.Content.Transactions.Commission,
+		"total_amount":         apiResponse.Content.Transactions.TotalAmount,
+		"amount":               apiResponse.Amount,
+		"transaction_date":     apiResponse.TransactionDate,
+	}
+
+	if status == "failed" {
+		a.saveProviderAudit(ctx, airtime, result, providerName, operation, requestSnapshot, responseSnapshot, status, "provider_error", "provider returned unsuccessful status", apiResponse.Content.Transactions.Status, apiResponse.ResponseDescription, metadata)
+	} else {
+		a.saveProviderAudit(ctx, airtime, result, providerName, operation, requestSnapshot, responseSnapshot, status, "", "", apiResponse.Content.Transactions.Status, apiResponse.ResponseDescription, metadata)
+	}
+
+	if err := a.saveTransaction(ctx, result); err != nil {
+		return result, logAndReturnError(a.logger, "error saving transaction, an error occurred")
+	}
+
+	return result, nil
+}
+
+func (a *AirtimeConn) normalizeProviderName(providerName string) string {
+	normalized := strings.ToLower(strings.TrimSpace(providerName))
+	switch normalized {
+	case "smsservers", "sms servers", "simservers", "sim servers":
+		return "smsservers"
+	case "vtpass", "vt pass":
+		return "vtpass"
+	default:
+		return normalized
+	}
+}
+
+func (a *AirtimeConn) networkName(network string) (string, error) {
+	switch network {
+	case "1":
+		return "MTN", nil
+	case "2":
+		return "AIRTEL", nil
+	case "3":
+		return "GLO", nil
+	case "4":
+		return "9MOBILE", nil
+	default:
+		return "", errors.New("invalid network code")
+	}
+}
+
+func (a *AirtimeConn) smsServersProductCode(network string) string {
+	switch network {
+	case "1":
+		return "mtn_custom"
+	case "2":
+		return "airtel_custom"
+	case "3":
+		return "glo_custom"
+	case "4":
+		return "9mobile_custom"
+	default:
+		return ""
+	}
+}
+
+func (a *AirtimeConn) vtpassServiceID(network string) string {
+	switch network {
+	case "1":
+		return "mtn"
+	case "2":
+		return "airtel"
+	case "3":
+		return "glo"
+	case "4":
+		return "9mobile"
+	default:
+		return ""
+	}
+}
+
+func (a *AirtimeConn) mapVTPassStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "delivered":
+		return "success"
+	case "pending":
+		return "pending"
+	default:
+		return "failed"
+	}
 }
 
 // international airtime

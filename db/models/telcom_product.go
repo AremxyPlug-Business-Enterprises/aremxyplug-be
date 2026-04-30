@@ -30,6 +30,7 @@ type AirtimeProduct struct {
 	ID                int
 	Network           string
 	ProviderID        int
+	ProviderName      string
 	Provider_Discount float64
 	Customer_Discount float64
 	Profit_Margin     float64

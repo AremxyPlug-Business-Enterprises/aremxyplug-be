@@ -43,6 +43,43 @@ type AirtimeInfo struct {
 	TXN               string
 	Profit_Margin     string
 	Provider_Discount string
+	ProviderName      string
+}
+
+type vtpassAirtimeResponse struct {
+	Code                string                `json:"code"`
+	Content             vtpassAirtimeContent  `json:"content"`
+	ResponseDescription string                `json:"response_description"`
+	RequestID           string                `json:"requestId"`
+	Amount              string                `json:"amount"`
+	TransactionDate     string                `json:"transaction_date"`
+}
+
+type vtpassAirtimeContent struct {
+	Transactions vtpassAirtimeTransaction `json:"transactions"`
+}
+
+type vtpassAirtimeTransaction struct {
+	Status          string                   `json:"status"`
+	ProductName     string                   `json:"product_name"`
+	UniqueElement   string                   `json:"unique_element"`
+	UnitPrice       string                   `json:"unit_price"`
+	Quantity        int                      `json:"quantity"`
+	Commission      float64                  `json:"commission"`
+	TotalAmount     float64                  `json:"total_amount"`
+	Amount          string                   `json:"amount"`
+	Phone           string                   `json:"phone"`
+	TransactionID   string                   `json:"transactionId"`
+	Type            string                   `json:"type"`
+	Email           string                   `json:"email"`
+	CommissionBreak vtpassCommissionDetails  `json:"commission_details"`
+}
+
+type vtpassCommissionDetails struct {
+	Amount          float64 `json:"amount"`
+	Rate            string  `json:"rate"`
+	RateType        string  `json:"rate_type"`
+	ComputationType string  `json:"computation_type"`
 }
 
 type AirtimeApiResponse struct {
