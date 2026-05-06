@@ -39,7 +39,7 @@ type Extras interface {
 	CreatePointRedeemDoc(ctx context.Context, redeem models.PointRedeem) error
 	LogPointTransaction(ctx context.Context, transaction models.PointTransaction) error
 	GetPointTransactions(ctx context.Context, userID string, page int) ([]models.PointTransaction, error)
-	UpdatePointAfterVerify(ctx context.Context, userID string) error
+	UpdatePointAfterVerify(ctx context.Context, userID string, userPoints int, referrerPoints int) error
 	GetPointRedeemDetails(ctx context.Context, orderID string) (models.PointRedeem, error)
 	GetTotalPointsRedeemed(ctx context.Context, userID string) (int, error)
 }

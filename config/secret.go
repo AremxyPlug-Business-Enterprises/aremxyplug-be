@@ -24,6 +24,12 @@ type Secrets struct {
 	ServiceID            string `json:"TWILIO_SERVICES_ID"`
 	LoginAllowedEmails   string `json:"LOGIN_ALLOWED_EMAILS"`
 	LoginAllowedFile     string `json:"LOGIN_ALLOWED_EMAILS_FILE"`
+	PurchaseRewardPoints int    `json:"PURCHASE_REWARD_POINTS"`
+	SignupRewardPoints   int    `json:"SIGNUP_REWARD_POINTS"`
+	ReferralUserPoints   int    `json:"REFERRAL_USER_VERIFICATION_REWARD_POINTS"`
+	ReferrerRewardPoints int    `json:"REFERRER_VERIFICATION_REWARD_POINTS"`
+	MinRedeemPoints      int    `json:"MIN_REDEEM_POINTS"`
+	MaxRedeemPoints      int    `json:"MAX_REDEEM_POINTS"`
 }
 
 var ss Secrets
@@ -48,6 +54,12 @@ func init() {
 	ss.AppPort = os.Getenv("PORT")
 	ss.LoginAllowedEmails = os.Getenv("LOGIN_ALLOWED_EMAILS")
 	ss.LoginAllowedFile = os.Getenv("LOGIN_ALLOWED_EMAILS_FILE")
+	ss.PurchaseRewardPoints = getenvIntWithDefault("PURCHASE_REWARD_POINTS", 2)
+	ss.SignupRewardPoints = getenvIntWithDefault("SIGNUP_REWARD_POINTS", 50)
+	ss.ReferralUserPoints = getenvIntWithDefault("REFERRAL_USER_VERIFICATION_REWARD_POINTS", 50)
+	ss.ReferrerRewardPoints = getenvIntWithDefault("REFERRER_VERIFICATION_REWARD_POINTS", 50)
+	ss.MinRedeemPoints = getenvIntWithDefault("MIN_REDEEM_POINTS", 10)
+	ss.MaxRedeemPoints = getenvIntWithDefault("MAX_REDEEM_POINTS", 100)
 
 	if ss.AppPort = os.Getenv("PORT"); ss.AppPort == "" {
 		ss.AppPort = "8080"
@@ -80,4 +92,12 @@ func getenvInt(key string) (int, error) {
 		return 0, err
 	}
 	return v, nil
+}
+
+func getenvIntWithDefault(key string, defaultValue int) int {
+	v, err := getenvInt(key)
+	if err != nil {
+		return defaultValue
+	}
+	return v
 }

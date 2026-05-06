@@ -12,25 +12,23 @@ import (
 )
 
 type PointConfig struct {
-	db db.Extras
+	db            db.Extras
+	minRedeem     int
+	maxRedeemCap  int
 }
 
-func NewPointConfig(store db.Extras) *PointConfig {
+func NewPointConfig(store db.Extras, minRedeem int, maxRedeemCap int) *PointConfig {
 	return &PointConfig{
-		db: store,
+		db:           store,
+		minRedeem:    minRedeem,
+		maxRedeemCap: maxRedeemCap,
 	}
 }
 
 func (p *PointConfig) RedeemPoints(ctx context.Context, userID string, points int) (models.PointRedeem, error) {
-
-	const (
-		MaxRedeemCap = 100
-		MinRedeem    = 10
-	)
-
 	// Validate minimum points to redeem
-	if points < MinRedeem {
-		return models.PointRedeem{}, fmt.Errorf("minimum redeem is %d points, you requested %d", MinRedeem, points)
+	if points < p.minRedeem {
+		return models.PointRedeem{}, fmt.Errorf("minimum redeem is %d points, you requested %d", p.minRedeem, points)
 	}
 
 	// Get total points already redeemed by this user
@@ -40,8 +38,8 @@ func (p *PointConfig) RedeemPoints(ctx context.Context, userID string, points in
 	}
 
 	// Check if redemption would exceed the cap
-	if totalRedeemed+points > MaxRedeemCap {
-		remainingCap := MaxRedeemCap - totalRedeemed
+	if totalRedeemed+points > p.maxRedeemCap {
+		remainingCap := p.maxRedeemCap - totalRedeemed
 		return models.PointRedeem{}, fmt.Errorf("redemption cap exceeded: you have already redeemed %d points, can only redeem up to %d more", totalRedeemed, remainingCap)
 	}
 
