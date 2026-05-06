@@ -241,6 +241,10 @@ func (handler *HttpHandler) Login(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	if err := ensureUserNotBlocked(user); err != nil {
+		writeAccountBlockedResponse(w)
+		return
+	}
 
 	allowed, allowErr := handler.isLoginEmailAllowed(user.Email)
 	if allowErr != nil {
@@ -890,9 +894,8 @@ func (handler *HttpHandler) SendOTP(w http.ResponseWriter, r *http.Request) {
 		respondWithSuccess(w, http.StatusOK, "success", "Verification email sent successfully")
 
 	case "signin":
-		user, _, err := handler.getPendingLoginUser(ctx, payload.PendingLoginToken)
-		if err != nil {
-			respondWithError(w, http.StatusUnauthorized, "login expired", err)
+		user, _, ok := handler.resolvePendingLoginUser(w, ctx, payload.PendingLoginToken)
+		if !ok {
 			return
 		}
 		if !user.IsVerified || !user.HasPin {
@@ -1014,9 +1017,8 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	action := getLastPathSegment(r.URL.Path)
 	switch action {
 	case "signin":
-		user, _, err := handler.getPendingLoginUser(ctx, payload.PendingLoginToken)
-		if err != nil {
-			respondWithError(w, http.StatusUnauthorized, "login expired", err)
+		user, _, ok := handler.resolvePendingLoginUser(w, ctx, payload.PendingLoginToken)
+		if !ok {
 			return
 		}
 		if !strings.EqualFold(user.Email, email) {
@@ -1028,6 +1030,9 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := handler.issueLoginSession(w, ctx, user); err != nil {
+			if writeBlockedErrorIfNeeded(w, err) {
+				return
+			}
 			handler.logger.Error("failed to issue login session after email otp verification", zap.Error(err))
 			respondWithError(w, http.StatusInternalServerError, "error", err)
 			return
@@ -1064,9 +1069,8 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if strings.TrimSpace(payload.PendingLoginToken) != "" {
-			pendingUser, state, err := handler.getPendingLoginUser(ctx, payload.PendingLoginToken)
-			if err != nil {
-				respondWithError(w, http.StatusUnauthorized, "login expired", err)
+			pendingUser, state, ok := handler.resolvePendingLoginUser(w, ctx, payload.PendingLoginToken)
+			if !ok {
 				return
 			}
 			if pendingUser.ID != user.ID {
@@ -1075,6 +1079,9 @@ func (handler *HttpHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 			}
 			if user.HasPin {
 				if err := handler.issueLoginSession(w, ctx, user); err != nil {
+					if writeBlockedErrorIfNeeded(w, err) {
+						return
+					}
 					handler.logger.Error("failed to issue login session after signup verification", zap.Error(err))
 					respondWithError(w, http.StatusInternalServerError, "error", err)
 					return
@@ -1140,9 +1147,8 @@ func (handler *HttpHandler) SendSMSOTP(w http.ResponseWriter, r *http.Request) {
 
 	phone := strings.TrimSpace(data.Phone)
 	if strings.TrimSpace(data.PendingLoginToken) != "" {
-		user, _, err := handler.getPendingLoginUser(ctx, data.PendingLoginToken)
-		if err != nil {
-			respondWithError(w, http.StatusUnauthorized, "login expired", err)
+		user, _, ok := handler.resolvePendingLoginUser(w, ctx, data.PendingLoginToken)
+		if !ok {
 			return
 		}
 		if phone != "" && phone != strings.TrimSpace(user.PhoneNumber) {
@@ -1207,9 +1213,8 @@ func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request)
 	action := getLastPathSegment(r.URL.Path)
 	switch action {
 	case "signin":
-		user, _, err := handler.getPendingLoginUser(ctx, data.PendingLoginToken)
-		if err != nil {
-			respondWithError(w, http.StatusUnauthorized, "login expired", err)
+		user, _, ok := handler.resolvePendingLoginUser(w, ctx, data.PendingLoginToken)
+		if !ok {
 			return
 		}
 		if strings.TrimSpace(user.PhoneNumber) != strings.TrimSpace(phone) {
@@ -1221,6 +1226,9 @@ func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		if err := handler.issueLoginSession(w, ctx, user); err != nil {
+			if writeBlockedErrorIfNeeded(w, err) {
+				return
+			}
 			handler.logger.Error("failed to issue login session after sms otp verification", zap.Error(err))
 			respondWithError(w, http.StatusInternalServerError, "error", err)
 			return
@@ -1237,9 +1245,8 @@ func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request)
 		}
 
 		if strings.TrimSpace(data.PendingLoginToken) != "" {
-			pendingUser, state, err := handler.getPendingLoginUser(ctx, data.PendingLoginToken)
-			if err != nil {
-				respondWithError(w, http.StatusUnauthorized, "login expired", err)
+			pendingUser, state, ok := handler.resolvePendingLoginUser(w, ctx, data.PendingLoginToken)
+			if !ok {
 				return
 			}
 			if pendingUser.ID != user.ID {
@@ -1248,6 +1255,9 @@ func (handler *HttpHandler) VerifySMSOTP(w http.ResponseWriter, r *http.Request)
 			}
 			if user.HasPin {
 				if err := handler.issueLoginSession(w, ctx, user); err != nil {
+					if writeBlockedErrorIfNeeded(w, err) {
+						return
+					}
 					handler.logger.Error("failed to issue login session after sms signup verification", zap.Error(err))
 					respondWithError(w, http.StatusInternalServerError, "error", err)
 					return
@@ -1308,9 +1318,8 @@ func (handler *HttpHandler) SendWhatsAppOTP(w http.ResponseWriter, r *http.Reque
 
 	phone := strings.TrimSpace(data.Phone)
 	if strings.TrimSpace(data.PendingLoginToken) != "" {
-		user, _, err := handler.getPendingLoginUser(ctx, data.PendingLoginToken)
-		if err != nil {
-			respondWithError(w, http.StatusUnauthorized, "login expired", err)
+		user, _, ok := handler.resolvePendingLoginUser(w, ctx, data.PendingLoginToken)
+		if !ok {
 			return
 		}
 		if phone != "" && phone != strings.TrimSpace(user.PhoneNumber) {
@@ -1365,9 +1374,8 @@ func (handler *HttpHandler) VerifyWhatsAppOTP(w http.ResponseWriter, r *http.Req
 	action := getLastPathSegment(r.URL.Path)
 	switch action {
 	case "signin":
-		user, _, err := handler.getPendingLoginUser(ctx, data.PendingLoginToken)
-		if err != nil {
-			respondWithError(w, http.StatusUnauthorized, "login expired", err)
+		user, _, ok := handler.resolvePendingLoginUser(w, ctx, data.PendingLoginToken)
+		if !ok {
 			return
 		}
 		if strings.TrimSpace(user.PhoneNumber) != strings.TrimSpace(phone) {
@@ -1379,6 +1387,9 @@ func (handler *HttpHandler) VerifyWhatsAppOTP(w http.ResponseWriter, r *http.Req
 			return
 		}
 		if err := handler.issueLoginSession(w, ctx, user); err != nil {
+			if writeBlockedErrorIfNeeded(w, err) {
+				return
+			}
 			handler.logger.Error("failed to issue login session after whatsapp otp verification", zap.Error(err))
 			respondWithError(w, http.StatusInternalServerError, "error", err)
 			return
@@ -1395,9 +1406,8 @@ func (handler *HttpHandler) VerifyWhatsAppOTP(w http.ResponseWriter, r *http.Req
 		}
 
 		if strings.TrimSpace(data.PendingLoginToken) != "" {
-			pendingUser, state, err := handler.getPendingLoginUser(ctx, data.PendingLoginToken)
-			if err != nil {
-				respondWithError(w, http.StatusUnauthorized, "login expired", err)
+			pendingUser, state, ok := handler.resolvePendingLoginUser(w, ctx, data.PendingLoginToken)
+			if !ok {
 				return
 			}
 			if pendingUser.ID != user.ID {
@@ -1406,6 +1416,9 @@ func (handler *HttpHandler) VerifyWhatsAppOTP(w http.ResponseWriter, r *http.Req
 			}
 			if user.HasPin {
 				if err := handler.issueLoginSession(w, ctx, user); err != nil {
+					if writeBlockedErrorIfNeeded(w, err) {
+						return
+					}
 					handler.logger.Error("failed to issue login session after whatsapp signup verification", zap.Error(err))
 					respondWithError(w, http.StatusInternalServerError, "error", err)
 					return
@@ -1682,6 +1695,18 @@ func (handler *HttpHandler) RefreshToken(w http.ResponseWriter, r *http.Request)
 
 	userID := claims.ID
 	sessionKey := fmt.Sprintf("session:%s", userID)
+	user, err := handler.store.GetUserByID(ctx, userID)
+	if err != nil {
+		http.Error(w, "session unavailable", http.StatusUnauthorized)
+		return
+	}
+	if err := ensureUserNotBlocked(user); err != nil {
+		_ = handler.redisClient.Del(ctx, sessionKey)
+		http.SetCookie(w, &http.Cookie{Name: "access_token", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteNoneMode, Domain: "aremxyplug.com"})
+		http.SetCookie(w, &http.Cookie{Name: "refresh_token", Value: "", Path: "/api/v1/refresh-token", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteNoneMode, Domain: "aremxyplug.com"})
+		writeAccountBlockedResponse(w)
+		return
+	}
 
 	storedRefresh, err := handler.redisClient.Get(ctx, sessionKey)
 	if err != nil || storedRefresh == nil {

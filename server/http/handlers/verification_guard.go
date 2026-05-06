@@ -18,6 +18,10 @@ func ensureSignupVerified(w http.ResponseWriter, user *models.User) bool {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return false
 	}
+	if err := ensureUserNotBlocked(user); err != nil {
+		writeAccountBlockedResponse(w)
+		return false
+	}
 
 	if user.IsVerified {
 		return true

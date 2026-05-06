@@ -40,6 +40,9 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(response)
 			return
 		}
+		if !handler.ensureWalletUnlocked(ctx, w, userDetails.ID) {
+			return
+		}
 
 		_, userBalance, _, err := handler.getBalance(ctx, userDetails.ID)
 		if err != nil {
@@ -320,6 +323,9 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 			},
 		}
 		json.NewEncoder(w).Encode(response)
+		return
+	}
+	if !handler.ensureWalletUnlocked(ctx, w, userDetails.ID) {
 		return
 	}
 

@@ -299,7 +299,13 @@ func (s *SqlStore) GetPlanByIDWithContext(ctx context.Context, planID int) (*mod
 			pr.plan_type
 		FROM plans p
 		INNER JOIN products pr ON p.product_id = pr.product_id
-		WHERE p.id = $1`, planID).Scan(
+		INNER JOIN api_providers ap ON p.provider_id = ap.id
+		WHERE 
+			p.id = $1 AND
+			p.available = TRUE AND
+			LOWER(p.status) = 'active' AND
+			LOWER(ap.status) = 'active' AND
+			ap.available = TRUE`, planID).Scan(
 		&plan.PlanID,
 		&plan.ProductID,
 		&plan.Amount,

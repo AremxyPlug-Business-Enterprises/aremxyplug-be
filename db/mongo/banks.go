@@ -114,6 +114,9 @@ func (m *mongoStore) GetBankDetail(ctx context.Context, name string) (models.Ban
 
 func (m *mongoStore) SaveVirtualAccount(ctx context.Context, account models.AccountDetails) error {
 	ctx = m.ensureCtx(ctx)
+	if strings.TrimSpace(account.Status) == "" {
+		account.Status = "active"
+	}
 	// Start session
 	session, err := m.mongoClient.StartSession()
 	if err != nil {

@@ -285,9 +285,8 @@ func (handler *HttpHandler) CreateFirstLoginPIN(w http.ResponseWriter, r *http.R
 	}
 
 	ctx := r.Context()
-	user, _, err := handler.getPendingLoginUser(ctx, payload.PendingLoginToken)
-	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, "login expired", err)
+	user, _, ok := handler.resolvePendingLoginUser(w, ctx, payload.PendingLoginToken)
+	if !ok {
 		return
 	}
 
@@ -320,6 +319,9 @@ func (handler *HttpHandler) CreateFirstLoginPIN(w http.ResponseWriter, r *http.R
 
 	user.HasPin = true
 	if err := handler.issueLoginSession(w, ctx, user); err != nil {
+		if writeBlockedErrorIfNeeded(w, err) {
+			return
+		}
 		handler.logger.Error("Failed to issue login session after first-login pin creation", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
@@ -344,7 +346,7 @@ func (handler *HttpHandler) finalizePinCreation(ctx context.Context, w http.Resp
 	}
 
 	if user.InvitationCode != "" {
-		if err := handler.store.FinalizeSignupReferral(ctx, user.ID, user.InvitationCode, pointsEarned); err != nil {
+		if err := handler.store.FinalizeSignupReferral(ctx, user.ID, user.InvitationCode); err != nil {
 			handler.logger.Warn("failed to finalize deferred signup referral", zap.String("user_id", user.ID), zap.Error(err))
 		}
 	}

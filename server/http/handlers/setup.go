@@ -21,6 +21,7 @@ import (
 	pointredeem "github.com/aremxyplug-be/lib/point-redeem"
 	"github.com/aremxyplug-be/lib/services"
 	eduservice "github.com/aremxyplug-be/lib/services/edu"
+	electricservice "github.com/aremxyplug-be/lib/services/electric"
 	telecomservice "github.com/aremxyplug-be/lib/services/telcom"
 	tvservice "github.com/aremxyplug-be/lib/services/tvsub"
 	"github.com/aremxyplug-be/lib/smsclient/termii"
@@ -143,11 +144,13 @@ func NewHttpHandler(opt *HandlerOptions) *HttpHandler {
 	tvSubService := tvservice.NewTVSubService(opt.Logger, opt.SqlStore)
 	telecomService := telecomservice.NewTelecomService(opt.SqlStore, opt.Logger)
 	eduService := eduservice.NewEduService(opt.SqlStore, opt.Logger)
+	electricService := electricservice.NewElectricService(opt.SqlStore, opt.Logger)
 
 	productService := &services.ProductServiceImpl{
 		TVSubService:    tvSubService,
 		TelecomProducts: telecomService,
 		Edurecords:      eduService,
+		ElectricProducts: electricService,
 	}
 
 	return &HttpHandler{

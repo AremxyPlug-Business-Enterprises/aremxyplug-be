@@ -30,7 +30,7 @@ type Extras interface {
 	UpdatePin(ctx context.Context, data models.UserPin) error
 	SavePin(ctx context.Context, data models.UserPin) error
 	CreateUserReferral(ctx context.Context, newUserID, referralCode string) error
-	FinalizeSignupReferral(ctx context.Context, newUserID, referralCode string, points int) error
+	FinalizeSignupReferral(ctx context.Context, newUserID, referralCode string) error
 	GetReferredUsers(ctx context.Context, referrerID string) ([]models.ReferredUserInfo, error)
 	CreatePointDoc(ctx context.Context, userID string) error
 	RedeemPoints(ctx context.Context, userID string, pointsToRedeem int, redeemRate int) (amountRedeemed int, e error)
