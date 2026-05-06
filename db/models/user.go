@@ -21,6 +21,7 @@ type User struct {
 	NINHash         string    `json:"-" bson:"nin_hash,omitempty"`
 	DOB             time.Time `json:"birth_date" bson:"birth_date"`
 	IsVerified      bool      `json:"is_verified" bson:"is_verified"`
+	IsBlocked       bool      `json:"is_blocked" bson:"is_blocked"`
 	HasPin          bool      `json:"has_Pin" bson:"has_Pin"`
 	HasBVN          bool      `json:"has_bvn" bson:"has_bvn"`
 	HasNIN          bool      `json:"has_nin" bson:"has_nin"`

@@ -123,6 +123,9 @@ func (handler *HttpHandler) getPendingLoginUser(ctx context.Context, token strin
 	if state.Phone != "" && strings.TrimSpace(state.Phone) != strings.TrimSpace(user.PhoneNumber) {
 		return nil, nil, errors.New("login session no longer matches this user")
 	}
+	if err := ensureUserNotBlocked(user); err != nil {
+		return nil, nil, err
+	}
 
 	return user, state, nil
 }
@@ -146,6 +149,9 @@ func (handler *HttpHandler) writeLoginFlowResponse(w http.ResponseWriter, status
 }
 
 func (handler *HttpHandler) issueLoginSession(w http.ResponseWriter, ctx context.Context, user *models.User) error {
+	if err := ensureUserNotBlocked(user); err != nil {
+		return err
+	}
 	refreshTokenClaims := dto.Claims{
 		PersonId: user.ID,
 	}

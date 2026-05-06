@@ -52,6 +52,7 @@ type AccountDetails struct {
 	Account_Name     string    `json:"account_name" bson:"account_name"`
 	Account_No       string    `json:"account_no" bson:"account_no"`
 	VirtualAccountID string    `json:"virtualaccountid" bson:"virtualaccountid"`
+	Status           string    `json:"status" bson:"status"`
 	CreatedAt        time.Time `json:"created_at" bson:"created_at"`
 }
 

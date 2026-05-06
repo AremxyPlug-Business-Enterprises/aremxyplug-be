@@ -89,18 +89,18 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 		case "4":
 			network = "9MOBILE"
 		}
+		if !handler.ensureWalletUnlocked(ctx, w, id) {
+			return
+		}
+		if !handler.ensureProductCategoryUnlocked(ctx, w, models.AirtimePurchasesEnabled, "Airtime products") {
+			return
+		}
 		// Get product details from database
 		airtimeProduct, err := handler.productClient.GetAirtimeProduct(ctx, network)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				handler.logger.Warn("No active airtime product available", zap.String("network", network))
-				w.WriteHeader(http.StatusNotFound)
-				response := responseFormat.CustomResponse{
-					Status:  http.StatusNotFound,
-					Message: "error",
-					Data:    map[string]interface{}{"data": "No active airtime product available for this network"},
-				}
-				json.NewEncoder(w).Encode(response)
+				writeItemUnavailableResponse(w, "The selected airtime product is currently unavailable.")
 				return
 			}
 			handler.logger.Error("Failed to get airtime product details", zap.String("network", network), zap.Error(err))
@@ -466,6 +466,12 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(response)
 			return
 		}
+		if !handler.ensureWalletUnlocked(ctx, w, userDetails.ID) {
+			return
+		}
+		if !handler.ensureProductCategoryUnlocked(ctx, w, models.DataPurchasesEnabled, "Data products") {
+			return
+		}
 
 		_, userBalance, _, err := handler.getBalance(ctx, userDetails.ID)
 		if err != nil {
@@ -482,6 +488,10 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 
 		plan, err := handler.productClient.GetPlanByID(ctx, data.Plan)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeItemUnavailableResponse(w, "The selected data plan is currently unavailable.")
+				return
+			}
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to get plan amount", zap.Error(err))
 			response := responseFormat.CustomResponse{
@@ -711,6 +721,12 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			json.NewEncoder(w).Encode(response)
 			return
 		}
+		if !handler.ensureWalletUnlocked(ctx, w, userDetails.ID) {
+			return
+		}
+		if !handler.ensureProductCategoryUnlocked(ctx, w, models.DataPurchasesEnabled, "Data products") {
+			return
+		}
 
 		_, userBalance, _, err := handler.getBalance(ctx, userDetails.ID)
 		if err != nil {
@@ -887,6 +903,12 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(response)
 			return
 		}
+		if !handler.ensureWalletUnlocked(ctx, w, userDetails.ID) {
+			return
+		}
+		if !handler.ensureProductCategoryUnlocked(ctx, w, models.DataPurchasesEnabled, "Data products") {
+			return
+		}
 
 		// bal, err := handler.getBalance(id)
 		// if err != nil {
@@ -1013,6 +1035,9 @@ func (handler *HttpHandler) GetSmileTransactions(w http.ResponseWriter, r *http.
 
 func (handler *HttpHandler) TelcomProducts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	if !handler.ensureProductCategoryUnlocked(ctx, w, models.DataPurchasesEnabled, "Data products") {
+		return
+	}
 
 	id := chi.URLParam(r, "networkID")
 
@@ -1084,6 +1109,9 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 	}
 
 	if r.Method == "GET" {
+		if !handler.ensureProductCategoryUnlocked(ctx, w, models.DataPurchasesEnabled, "Data products") {
+			return
+		}
 		id := chi.URLParam(r, "productID")
 
 		productID, _ := strconv.Atoi(id)
@@ -1193,6 +1221,9 @@ func (handler *HttpHandler) TelecomPlans(w http.ResponseWriter, r *http.Request)
 
 func (handler *HttpHandler) AirtimeDiscount(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	if !handler.ensureProductCategoryUnlocked(ctx, w, models.AirtimePurchasesEnabled, "Airtime products") {
+		return
+	}
 
 	network := chi.URLParam(r, "network")
 

@@ -86,7 +86,7 @@ func (m *mongoStore) CreateUserReferral(ctx context.Context, newUserID, referral
 	return nil
 }
 
-func (m *mongoStore) FinalizeSignupReferral(ctx context.Context, newUserID, referralCode string, points int) error {
+func (m *mongoStore) FinalizeSignupReferral(ctx context.Context, newUserID, referralCode string) error {
 	ctx = m.ensureCtx(ctx)
 	if referralCode == "" {
 		return nil
@@ -129,26 +129,6 @@ func (m *mongoStore) FinalizeSignupReferral(ctx context.Context, newUserID, refe
 		}
 		if updateResult.MatchedCount == 0 {
 			return nil, ErrMatchedCount
-		}
-
-		pointUpdate := bson.D{
-			{Key: "$inc", Value: bson.D{{Key: "balance", Value: points}}},
-			{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: time.Now().UTC()}}},
-		}
-		opts := options.Update().SetUpsert(true)
-		if _, err := m.col(pointColl).UpdateOne(sc, bson.M{"user_id": referrer.ID}, pointUpdate, opts); err != nil {
-			return nil, fmt.Errorf("failed to update referrer points: %w", err)
-		}
-
-		transaction := models.PointTransaction{
-			UserID:          referrer.ID,
-			TransactionType: "Referral Points",
-			PointEarned:     points,
-			Source:          "referral",
-			CreatedAt:       time.Now().UTC(),
-		}
-		if _, err := m.col(pointTransactionColl).InsertOne(sc, transaction); err != nil {
-			return nil, fmt.Errorf("failed to create referrer point transaction: %w", err)
 		}
 
 		return nil, nil
@@ -478,76 +458,62 @@ func (m *mongoStore) UpdatePointAfterVerify(ctx context.Context, userID string) 
 	defer session.EndSession(ctx)
 
 	_, err = session.WithTransaction(ctx, func(sc mongo.SessionContext) (interface{}, error) {
-		// 1. Fetch referral + referrer in single aggregation
-		pipeline := mongo.Pipeline{
-			{{Key: "$match", Value: bson.D{{Key: "user_id", Value: userID}}}},
-			{{Key: "$lookup", Value: bson.D{
-				{Key: "from", Value: "user"},
-				{Key: "localField", Value: "referrer_id"},
-				{Key: "foreignField", Value: "username"},
-				{Key: "as", Value: "referrer_user"},
-			}}},
-			{{Key: "$unwind", Value: bson.D{{Key: "path", Value: "$referrer_user"}, {Key: "preserveNullAndEmptyArrays", Value: true}}}},
-		}
-		cursor, err := m.col(referralColl).Aggregate(sc, pipeline)
-		if err != nil {
+		now := time.Now().UTC()
+
+		var referral models.Referral
+		err := m.col(referralColl).FindOne(sc, bson.M{"user_id": userID}).Decode(&referral)
+		if err != nil && err != mongo.ErrNoDocuments {
 			return nil, err
 		}
-		defer cursor.Close(sc)
 
-		var referral struct {
-			ReferrerUser *models.User `bson:"referrer_user"`
-		}
-		if cursor.Next(sc) {
-			if err := cursor.Decode(&referral); err != nil {
-				return nil, err
-			}
-		}
-
-		// 2. Prepare bulk operations
 		var pointWrites []mongo.WriteModel
 		var txnWrites []mongo.WriteModel
 
-		// User point update
 		userPointUpdate := mongo.NewUpdateOneModel().
 			SetFilter(bson.M{"user_id": userID}).
 			SetUpdate(bson.D{
 				{Key: "$inc", Value: bson.D{{Key: "balance", Value: 100}}},
-				{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: time.Now()}}},
+				{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: now}}},
 			}).
 			SetUpsert(true)
 		pointWrites = append(pointWrites, userPointUpdate)
 
-		// User transaction
 		userTxn := models.PointTransaction{
 			UserID:          userID,
 			TransactionType: "Referral Verification",
 			PointEarned:     100,
 			Source:          "referral",
-			CreatedAt:       time.Now().UTC(),
+			CreatedAt:       now,
 		}
 		txnWrites = append(txnWrites, mongo.NewInsertOneModel().SetDocument(userTxn))
 
-		// Referrer operations (if exists)
-		if referral.ReferrerUser != nil {
-			// Referrer point update
+		if referral.ReferrerID != "" && !referral.IsVerified {
 			referrerPointUpdate := mongo.NewUpdateOneModel().
-				SetFilter(bson.M{"user_id": referral.ReferrerUser.ID}).
-				SetUpdate(bson.M{"$inc": bson.M{"balance": 100}})
+				SetFilter(bson.M{"user_id": referral.ReferrerID}).
+				SetUpdate(bson.D{
+					{Key: "$inc", Value: bson.D{{Key: "balance", Value: 100}}},
+					{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: now}}},
+				}).
+				SetUpsert(true)
 			pointWrites = append(pointWrites, referrerPointUpdate)
 
-			// Referrer transaction
 			referrerTxn := models.PointTransaction{
-				UserID:          referral.ReferrerUser.ID,
+				UserID:          referral.ReferrerID,
 				TransactionType: "Referral Verification",
 				PointEarned:     100,
 				Source:          "referral",
-				CreatedAt:       time.Now().UTC(),
+				CreatedAt:       now,
 			}
 			txnWrites = append(txnWrites, mongo.NewInsertOneModel().SetDocument(referrerTxn))
+
+			if _, err := m.col(referralColl).UpdateOne(sc, bson.M{"user_id": userID}, bson.M{"$set": bson.M{"is_verified": true}}); err != nil {
+				return nil, fmt.Errorf("failed to mark referral as verified: %w", err)
+			}
+			if _, err := m.col("user").UpdateOne(sc, bson.M{"id": referral.ReferrerID}, bson.M{"$set": bson.M{"last_transaction": now}}); err != nil {
+				return nil, fmt.Errorf("failed to update referrer last transaction: %w", err)
+			}
 		}
 
-		// 3. Execute bulk writes
 		if len(pointWrites) > 0 {
 			if _, err := m.col(pointColl).BulkWrite(sc, pointWrites); err != nil {
 				return nil, err

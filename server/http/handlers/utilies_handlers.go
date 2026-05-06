@@ -46,6 +46,12 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(response)
 			return
 		}
+		if !handler.ensureWalletUnlocked(ctx, w, userDetails.ID) {
+			return
+		}
+		if !handler.ensureProductCategoryUnlocked(ctx, w, models.EduPinsPurchasesEnabled, "Education pin products") {
+			return
+		}
 
 		if data.Quantity >= 5 && data.Quantity < 10 {
 			w.WriteHeader(http.StatusBadRequest)
@@ -330,6 +336,12 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 
 		}
+		if !handler.ensureWalletUnlocked(ctx, w, userDetails.ID) {
+			return
+		}
+		if !handler.ensureProductCategoryUnlocked(ctx, w, models.TVPurchasesEnabled, "TV subscription products") {
+			return
+		}
 		data.Name = userDetails.FullName
 
 		if data.Amount == 0 {
@@ -383,14 +395,8 @@ func (handler *HttpHandler) TVSubscriptions(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		if tvDetails == nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			handler.logger.Warn("Tv Plan details not found", zap.String("decoderType", data.DecoderType), zap.String("package", data.Package), zap.Error(err))
-			response := responseFormat.CustomResponse{
-				Status:  http.StatusInternalServerError,
-				Message: "error",
-				Data:    map[string]interface{}{"data": "Did not find TV Plan details"},
-			}
-			json.NewEncoder(w).Encode(response)
+			handler.logger.Warn("Tv Plan details not found", zap.String("decoderType", data.DecoderType), zap.String("package", data.Package))
+			writeItemUnavailableResponse(w, "The selected TV package is currently unavailable.")
 			return
 		}
 
@@ -606,6 +612,12 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 				Data:    map[string]interface{}{"data": "Invalid request format"},
 			}
 			json.NewEncoder(w).Encode(response)
+			return
+		}
+		if !handler.ensureWalletUnlocked(ctx, w, userDetails.ID) {
+			return
+		}
+		if !handler.ensureProductCategoryUnlocked(ctx, w, models.ElectricityPurchasesEnabled, "Electricity products") {
 			return
 		}
 		data.FullName = userDetails.Username
@@ -965,6 +977,9 @@ func (handler *HttpHandler) handleCreateTVSub(w http.ResponseWriter, r *http.Req
 }
 
 func (handler *HttpHandler) handleGetTVSubs(ctx context.Context, w http.ResponseWriter, product string) {
+	if !handler.ensureProductCategoryUnlocked(ctx, w, models.TVPurchasesEnabled, "TV subscription products") {
+		return
+	}
 	res, err := handler.productClient.GetTVSubs(ctx, product)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -1283,6 +1298,9 @@ func (handler *HttpHandler) EduProduct(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 
 	case "GET":
+		if !handler.ensureProductCategoryUnlocked(ctx, w, models.EduPinsPurchasesEnabled, "Education pin products") {
+			return
+		}
 		id := chi.URLParam(r, "id")
 
 		productID, err := strconv.Atoi(id)

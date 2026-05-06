@@ -17,6 +17,7 @@ type TelecomProducts interface {
 	GetPlanByID(ctx context.Context, planID int) (*models.Plan, error)
 	GetAirtimeProduct(ctx context.Context, network string) (models.AirtimeProduct, error)
 	GetEduRecord(ctx context.Context, id int) (models.EduRecord, error)
+	GetProductLock(ctx context.Context, key string) (models.ProductLock, error)
 }
 
 type TelecomServiceImpl struct {
@@ -117,4 +118,14 @@ func (s *TelecomServiceImpl) GetEduRecord(ctx context.Context, id int) (models.E
 	}
 	s.logger.Info("Fetched records successfully", zap.Int("count", 1))
 	return record, nil
+}
+
+func (s *TelecomServiceImpl) GetProductLock(ctx context.Context, key string) (models.ProductLock, error) {
+	s.logger.Info("Fetching product lock", zap.String("key", key))
+	lock, err := s.store.GetProductLock(ctx, key)
+	if err != nil {
+		s.logger.Error("Error fetching product lock", zap.String("key", key), zap.Error(err))
+		return models.ProductLock{}, err
+	}
+	return lock, nil
 }
