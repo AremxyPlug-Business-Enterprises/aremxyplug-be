@@ -74,7 +74,7 @@ func main() {
 	electSub := elect.NewElectricConn(store, logger)
 	virtualAcc := bankacc.NewBankConfig(store, logger)
 	bankTransc := transactions.NewTransaction(store)
-	point := pointredeem.NewPointConfig(store)
+	point := pointredeem.NewPointConfig(store, secrets.MinRedeemPoints, secrets.MaxRedeemPoints)
 	pin := auth_pin.NewPinConfig(logger, store)
 	sms := termii.NewSMSConn(store, logger)
 	whatsApp := termii.NewWhatsAppClient(logger)

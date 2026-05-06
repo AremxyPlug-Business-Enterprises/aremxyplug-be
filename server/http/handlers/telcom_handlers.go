@@ -210,7 +210,7 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 				json.NewEncoder(w).Encode(response)
 				return
 			}
-			pointsEarned := 2
+			pointsEarned := handler.secrets.PurchaseRewardPoints
 			if err := handler.addPoints(ctx, w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 			}
@@ -568,7 +568,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			pointsEarned := 2
+			pointsEarned := handler.secrets.PurchaseRewardPoints
 
 			if err := handler.addPoints(ctx, w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 				handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
@@ -784,7 +784,7 @@ func (handler *HttpHandler) SpectranetData(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		pointsEarned := 2
+		pointsEarned := handler.secrets.PurchaseRewardPoints
 
 		if err := handler.addPoints(ctx, w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
@@ -962,7 +962,7 @@ func (handler *HttpHandler) SmileData(w http.ResponseWriter, r *http.Request) {
 		// 	return
 		// }
 
-		pointsEarned := 2
+		pointsEarned := handler.secrets.PurchaseRewardPoints
 
 		if err := handler.addPoints(ctx, w, id, pointsEarned, res.TransactionProduct, res.TransactionID, "transaction"); err != nil {
 			handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))

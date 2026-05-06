@@ -449,7 +449,7 @@ func (m *mongoStore) UpdatePointAndTransactionTime(ctx context.Context, userID s
 	return nil
 }
 
-func (m *mongoStore) UpdatePointAfterVerify(ctx context.Context, userID string) error {
+func (m *mongoStore) UpdatePointAfterVerify(ctx context.Context, userID string, userPoints int, referrerPoints int) error {
 	ctx = m.ensureCtx(ctx)
 	session, err := m.mongoClient.StartSession()
 	if err != nil {
@@ -472,7 +472,7 @@ func (m *mongoStore) UpdatePointAfterVerify(ctx context.Context, userID string) 
 		userPointUpdate := mongo.NewUpdateOneModel().
 			SetFilter(bson.M{"user_id": userID}).
 			SetUpdate(bson.D{
-				{Key: "$inc", Value: bson.D{{Key: "balance", Value: 100}}},
+				{Key: "$inc", Value: bson.D{{Key: "balance", Value: userPoints}}},
 				{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: now}}},
 			}).
 			SetUpsert(true)
@@ -481,7 +481,7 @@ func (m *mongoStore) UpdatePointAfterVerify(ctx context.Context, userID string) 
 		userTxn := models.PointTransaction{
 			UserID:          userID,
 			TransactionType: "Referral Verification",
-			PointEarned:     100,
+			PointEarned:     userPoints,
 			Source:          "referral",
 			CreatedAt:       now,
 		}
@@ -491,7 +491,7 @@ func (m *mongoStore) UpdatePointAfterVerify(ctx context.Context, userID string) 
 			referrerPointUpdate := mongo.NewUpdateOneModel().
 				SetFilter(bson.M{"user_id": referral.ReferrerID}).
 				SetUpdate(bson.D{
-					{Key: "$inc", Value: bson.D{{Key: "balance", Value: 100}}},
+					{Key: "$inc", Value: bson.D{{Key: "balance", Value: referrerPoints}}},
 					{Key: "$setOnInsert", Value: bson.D{{Key: "created_at", Value: now}}},
 				}).
 				SetUpsert(true)
@@ -500,7 +500,7 @@ func (m *mongoStore) UpdatePointAfterVerify(ctx context.Context, userID string) 
 			referrerTxn := models.PointTransaction{
 				UserID:          referral.ReferrerID,
 				TransactionType: "Referral Verification",
-				PointEarned:     100,
+				PointEarned:     referrerPoints,
 				Source:          "referral",
 				CreatedAt:       now,
 			}

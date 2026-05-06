@@ -340,7 +340,7 @@ func (handler *HttpHandler) finalizePinCreation(ctx context.Context, w http.Resp
 		return err
 	}
 
-	pointsEarned := 100
+	pointsEarned := handler.secrets.SignupRewardPoints
 	if err := handler.addPoints(ctx, w, user.ID, pointsEarned, "Sign-Up Points", "", "referral"); err != nil {
 		handler.logger.Warn("failed to add points and update transaction time", zap.Error(err))
 	}
@@ -678,7 +678,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		if err := handler.store.UpdatePointAfterVerify(ctx, user.ID); err != nil {
+		if err := handler.store.UpdatePointAfterVerify(ctx, user.ID, handler.secrets.ReferralUserPoints, handler.secrets.ReferrerRewardPoints); err != nil {
 			handler.logger.Warn("Failed to update points after BVN verification", zap.Error(err))
 		}
 
@@ -776,7 +776,7 @@ func (handler *HttpHandler) VerifyIdentity(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		if err := handler.store.UpdatePointAfterVerify(ctx, user.ID); err != nil {
+		if err := handler.store.UpdatePointAfterVerify(ctx, user.ID, handler.secrets.ReferralUserPoints, handler.secrets.ReferrerRewardPoints); err != nil {
 			handler.logger.Warn("Failed to update points after NIN verification", zap.Error(err))
 		}
 
