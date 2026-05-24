@@ -177,8 +177,13 @@ func (handler *HttpHandler) Airtime(w http.ResponseWriter, r *http.Request) {
 
 		res, err := handler.vtuClient.BuyAirtime(ctx, data)
 		if err != nil {
-			// Release hold on error
-			handler.redisClient.ReleaseHold(ctx, id, txnID)
+			// Release the hold in Redis on error
+			if ok, releaseErr := handler.redisClient.ReleaseHold(ctx, id, txnID); releaseErr != nil {
+				handler.logger.Error("Failed to release hold on BuyAirtime error", zap.Error(releaseErr))
+			} else if !ok {
+				handler.logger.Warn("Hold not found on BuyAirtime error", zap.String("txnID", txnID))
+			}
+
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to purchase airtime", zap.Error(err))
 			response := responseFormat.CustomResponse{
@@ -503,7 +508,7 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		newBal, valid, err := handler.checkPayment(userBalance, decimal.NewFromFloat(plan.Amount))
+		newBal, valid, err := handler.checkPayment(userBalance, decimal.NewFromFloatWithExponent(plan.Amount, -2))
 		if !valid || err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			handler.logger.Error("Payment validation failed", zap.Error(err))
@@ -533,6 +538,13 @@ func (handler *HttpHandler) Data(w http.ResponseWriter, r *http.Request) {
 
 		res, err := handler.dataClient.BuyData(ctx, data)
 		if err != nil {
+			// Release the hold in Redis on error
+			if ok, releaseErr := handler.redisClient.ReleaseHold(ctx, userDetails.ID, txnID); releaseErr != nil {
+				handler.logger.Error("Failed to release hold on BuyData error", zap.Error(releaseErr))
+			} else if !ok {
+				handler.logger.Warn("Hold not found on BuyData error", zap.String("txnID", txnID))
+			}
+
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to purchase data", zap.Error(err))
 			response := responseFormat.CustomResponse{

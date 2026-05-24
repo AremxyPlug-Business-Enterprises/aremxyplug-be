@@ -95,6 +95,13 @@ func (handler *HttpHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 
 		resp, err := handler.bankTrf.TransferToBank(ctx, info)
 		if err != nil {
+			// Release the hold in Redis on error
+			if ok, releaseErr := handler.redisClient.ReleaseHold(ctx, userDetails.ID, txID); releaseErr != nil {
+				handler.logger.Error("Failed to release hold on TransferToBank error", zap.Error(releaseErr))
+			} else if !ok {
+				handler.logger.Warn("Hold not found on TransferToBank error", zap.String("txID", txID))
+			}
+
 			w.WriteHeader(http.StatusInternalServerError)
 			response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 			json.NewEncoder(w).Encode(response)
@@ -374,6 +381,13 @@ func (handler *HttpHandler) TransferToAremxyPlug(w http.ResponseWriter, r *http.
 
 	resp, err := handler.bankTrf.TransferToAremxyPlug(ctx, info)
 	if err != nil {
+		// Release the hold in Redis on error
+		if ok, releaseErr := handler.redisClient.ReleaseHold(ctx, userDetails.ID, txnID); releaseErr != nil {
+			handler.logger.Error("Failed to release hold on TransferToAremxyPlug error", zap.Error(releaseErr))
+		} else if !ok {
+			handler.logger.Warn("Hold not found on TransferToAremxyPlug error", zap.String("txnID", txnID))
+		}
+
 		w.WriteHeader(http.StatusInternalServerError)
 		response := responseFormat.CustomResponse{Status: http.StatusInternalServerError, Message: "error", Data: map[string]interface{}{"data": err.Error()}}
 		json.NewEncoder(w).Encode(response)

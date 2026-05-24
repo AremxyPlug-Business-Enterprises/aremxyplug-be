@@ -147,6 +147,13 @@ func (handler *HttpHandler) EduPins(w http.ResponseWriter, r *http.Request) {
 		data.TXN = txnID
 		res, err := handler.eduClient.BuyEduPin(ctx, data)
 		if err != nil {
+			// Release the hold in Redis on error
+			if ok, releaseErr := handler.redisClient.ReleaseHold(ctx, userDetails.ID, txnID); releaseErr != nil {
+				handler.logger.Error("Failed to release hold on BuyEduPin error", zap.Error(releaseErr))
+			} else if !ok {
+				handler.logger.Warn("Hold not found on BuyEduPin error", zap.String("txnID", txnID))
+			}
+
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to buy EduPin", zap.Error(err))
 			response := responseFormat.CustomResponse{
@@ -687,6 +694,13 @@ func (handler *HttpHandler) ElectricBill(w http.ResponseWriter, r *http.Request)
 		data.UserID = userDetails.ID
 		res, err := handler.electClient.PayBill(ctx, data)
 		if err != nil {
+			// Release the hold in Redis on error
+			if ok, releaseErr := handler.redisClient.ReleaseHold(ctx, userDetails.ID, txnID); releaseErr != nil {
+				handler.logger.Error("Failed to release hold on PayBill error", zap.Error(releaseErr))
+			} else if !ok {
+				handler.logger.Warn("Hold not found on PayBill error", zap.String("txnID", txnID))
+			}
+
 			w.WriteHeader(http.StatusInternalServerError)
 			handler.logger.Error("Failed to buy Electricity subscription", zap.Error(err))
 			response := responseFormat.CustomResponse{
