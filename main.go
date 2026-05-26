@@ -77,7 +77,7 @@ func main() {
 	point := pointredeem.NewPointConfig(store, secrets.MinRedeemPoints, secrets.MaxRedeemPoints)
 	pin := auth_pin.NewPinConfig(logger, store)
 	sms := termii.NewSMSConn(store, logger)
-	whatsApp := termii.NewWhatsAppClient(logger)
+	whatsApp := termii.NewWhatsAppClient(redisClient, logger)
 	auth := auth.NewAuthConn(secrets, redisClient)
 	scheduler := scheduler.NewScheduler(redisClient, store, logger)
 	taskService := tasks.NewService(store)
