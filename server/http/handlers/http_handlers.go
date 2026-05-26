@@ -1566,7 +1566,8 @@ func (handler *HttpHandler) sendWhatsAppOTP(ctx context.Context, phone string) e
 		return err
 	}
 
-	return handler.whatsAppClient.SendWhatsAppToken(ctx, otp, phone)
+	// Use KudiSMS WhatsApp sender
+	return handler.whatsAppClient.SendWhatsAppTokenKudiSMS(ctx, otp, phone)
 }
 
 func (handler *HttpHandler) validateWhatsAppOTP(ctx context.Context, otp, phone string) error {

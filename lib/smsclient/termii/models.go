@@ -88,3 +88,12 @@ type whatsAppResponse struct {
 	User         string  `json:"user"`
 	MessageIDStr string  `json:"message_id_str"`
 }
+
+type kudiSMSWhatsAppResponse struct {
+	Status    string  `json:"status"`
+	ErrorCode string  `json:"error_code"`
+	Cost      float64 `json:"cost"`
+	Data      string  `json:"data"`
+	Msg       string  `json:"msg"`
+	Balance   float64 `json:"balance"`
+}
